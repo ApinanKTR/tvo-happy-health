@@ -40,7 +40,7 @@
 const { useState, useEffect, useCallback } = React;
 
 // ── Supabase Config ──────────────────────────────────────────
-// ⚠️ ใส่ค่าเดียวกับ Calapp.html
+// ⚠️ ใส่ค่าเดียวกับ index.html
 const SUPABASE_URL      = 'https://lnqtszvqglqdsdvzncbe.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxucXRzenZxZ2xxZHNkdnpuY2JlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA0NTAyODcsImV4cCI6MjA5NjAyNjI4N30.vhsbuZYK_lfnZEWbmCPmskWUk64ya1jxllRbc2_078w';
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -308,7 +308,7 @@ function AdminApp() {
             {loginLoading ? "กำลังเข้าสู่ระบบ..." : "เข้าสู่ระบบ"}
           </button>
           <div style={{ marginTop: 16, textAlign: "center" }}>
-            <a href="CalApp.html" style={{ color: "#9CA3AF", fontSize: 12, textDecoration: "none" }}>← กลับสู่แอพหลัก</a>
+            <a href="index.html" style={{ color: "#9CA3AF", fontSize: 12, textDecoration: "none" }}>← กลับสู่แอพหลัก</a>
           </div>
         </div>
       </div>
@@ -349,7 +349,7 @@ function AdminApp() {
             🧑 {authUser.displayName}
           </div>
           <button onClick={handleLogout} style={{ background: "#ffffff25", border: "1px solid #ffffff50", borderRadius: 8, padding: "5px 12px", cursor: "pointer", fontSize: 12, color: "#fff", fontFamily: "'Sarabun'" }}>ออก</button>
-          <a href="CalApp.html" style={{ background: "#ffffff25", border: "1px solid #ffffff50", borderRadius: 8, padding: "5px 12px", cursor: "pointer", fontSize: 12, color: "#fff", fontFamily: "'Sarabun'", textDecoration: "none" }}>← แอพ</a>
+          <a href="index.html" style={{ background: "#ffffff25", border: "1px solid #ffffff50", borderRadius: 8, padding: "5px 12px", cursor: "pointer", fontSize: 12, color: "#fff", fontFamily: "'Sarabun'", textDecoration: "none" }}>← แอพ</a>
         </div>
       </div>
 
