@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>TVO Calories Challenge — Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;600;700;900&family=Sarabun:wght@400;600&display=swap" rel="stylesheet" />
+<script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#F0FDF4;font-family:'Sarabun',sans-serif;min-height:100vh}
+  .card{background:#fff;border:1px solid #D1FAE5;border-radius:16px;box-shadow:0 2px 12px #16A34A0D}
+  .btn-g{background:linear-gradient(135deg,#16A34A,#22C55E);color:#fff;border:none;border-radius:10px;padding:9px 18px;cursor:pointer;font-family:'Prompt';font-weight:700;font-size:13px;transition:all .2s}
+  .btn-g:hover{opacity:.88}
+  .btn-r{background:#FEE2E2;color:#DC2626;border:1px solid #FECACA;border-radius:10px;padding:7px 14px;cursor:pointer;font-family:'Sarabun';font-size:12px;transition:all .2s}
+  .btn-r:hover{background:#FECACA}
+  .inp{border:1.5px solid #D1FAE5;border-radius:10px;padding:10px 13px;font-family:'Sarabun';font-size:13px;width:100%;outline:none;transition:border .2s;background:#F8FAFF}
+  .inp:focus{border-color:#16A34A}
+  .tb-wrap{display:flex;gap:6px;background:#ECFDF5;border-radius:12px;padding:5px;margin-bottom:20px;border:1px solid #D1FAE5}
+  .tb-btn{flex:1;padding:9px 6px;border:none;border-radius:9px;cursor:pointer;font-family:'Prompt';font-size:12px;font-weight:600;background:transparent;color:#6B7280;transition:all .2s}
+  .tb-btn.on{background:#fff;color:#16A34A;box-shadow:0 2px 8px #16A34A18}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{background:#F0FDF4;color:#16A34A;font-family:'Prompt';font-weight:700;padding:10px 12px;text-align:left;border-bottom:2px solid #D1FAE5}
+  td{padding:9px 12px;border-bottom:1px solid #F3F4F6;color:#374151}
+  tr:hover td{background:#F9FFF9}
+  .badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700}
+  .badge-admin{background:#FEF3C7;color:#D97706}
+  .badge-user{background:#DCFCE7;color:#16A34A}
+  label{font-size:12px;color:#6B7280;font-weight:600;display:block;margin-bottom:5px}
+  .form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media(max-width:480px){.form-row{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-presets="env,react">
+const { useState, useEffect, useCallback } = React;
+
+// ── Supabase Config ──────────────────────────────────────────
+// ⚠️ ใส่ค่าเดียวกับ Calapp.html
+const SUPABASE_URL      = 'https://lnqtszvqglqdsdvzncbe.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxucXRzenZxZ2xxZHNkdnpuY2JlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA0NTAyODcsImV4cCI6MjA5NjAyNjI4N30.vhsbuZYK_lfnZEWbmCPmskWUk64ya1jxllRbc2_078w';
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const GREEN = "#16A34A";
+
+// ── Helpers ──────────────────────────────────────────────────
+const lsGet = (k, d) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+
+// บีบรูป base64 ให้ไม่เกิน maxBytes
+const compressBase64 = (b64, maxBytes = 20000) => new Promise(resolve => {
+  if (!b64 || !b64.startsWith("data:image")) { resolve(b64); return; }
+  const img = new Image();
+  img.onload = () => {
+    const maxPx = 300;
+    const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
+    const c = document.createElement("canvas");
+    c.width = Math.round(img.width * scale);
+    c.height = Math.round(img.height * scale);
+    c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+    let q = 0.8, out = c.toDataURL("image/jpeg", q);
+    while (out.length * 0.75 > maxBytes && q > 0.1) { q = Math.max(0.1, q - 0.1); out = c.toDataURL("image/jpeg", q); }
+    resolve(out);
+  };
+  img.onerror = () => resolve(b64);
+  img.src = b64;
+});
+
+
+// ── Supabase API Helpers ──────────────────────────────────────
+async function sbGetUsers() {
+  const { data, error } = await supabase.from('user_profiles')
+    .select('employee_id,display_name,group_name,role,photo');
+  if (error) throw new Error(error.message);
+  return (data || []).map(u => ({
+    EmployeeID: u.employee_id, DisplayName: u.display_name,
+    GroupName: u.group_name || '', Role: u.role || 'user', Photo: u.photo || '',
+  }));
+}
+
+async function sbGetLogs() {
+  const { data, error } = await supabase.from('exercise_logs')
+    .select('*').order('log_date', { ascending: false }).limit(1000);
+  if (error) throw new Error(error.message);
+  return (data || []).map(i => ({
+    id: i.id, spId: i.id, user: i.user_name || '', group: i.group_name || '',
+    exercise: i.exercise || '', duration: Number(i.duration)||0,
+    calories: Number(i.calories)||0, date: i.log_date||'',
+    note: i.note||'', likes: Number(i.likes)||0,
+  }));
+}
+
+async function sbDeleteLog(id) {
+  const { error } = await supabase.from('exercise_logs').delete().eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
+async function sbDeleteUser(empId, displayName) {
+  // ลบ logs ของ user ก่อน
+  await supabase.from('exercise_logs').delete().eq('user_name', displayName);
+  const { error } = await supabase.from('user_profiles').delete().eq('employee_id', empId);
+  if (error) throw new Error(error.message);
+}
+
+async function sbRegisterUser(empId, displayName, group, password, role = 'user') {
+  const { data: existing } = await supabase.from('user_profiles').select('employee_id').eq('employee_id', empId).single();
+  if (existing) throw new Error('รหัสพนักงานนี้มีอยู่แล้ว');
+const { error } = await supabase.from('user_profiles').insert({
+    employee_id: empId,
+    display_name: displayName,
+    group_name: group,
+    password_hash: password, // เก็บตรง ๆ ไม่ต้องแฮช
+    role,
+    photo: null,
+  });
+  if (error) throw new Error(error.message || 'เพิ่ม User ไม่สำเร็จ');
+}
+
+async function sbLoginUser(empId, password) {
+  const { data, error } = await supabase.from('user_profiles').select('*').eq('employee_id', empId).single();
+  if (error || !data) throw new Error('รหัสพนักงานหรือรหัสผ่านไม่ถูกต้อง');
+if (password !== data.password_hash) throw new Error('รหัสพนักงานหรือรหัสผ่านไม่ถูกต้อง');
+  
+  return { EmployeeID: data.employee_id, DisplayName: data.display_name, GroupName: data.group_name || '', Role: data.role || 'user', role: data.role || 'user' };
+}
+
+async function sbUpdateUserPhoto(empId, photo) {
+  const { error } = await supabase.from('user_profiles').update({ photo }).eq('employee_id', empId);
+  if (error) throw new Error(error.message);
+}
+
+// ── Main App ─────────────────────────────────────────────────
+function AdminApp() {
+  const [authUser, setAuthUser] = useState(() => lsGet("tvohh_admin_session", null));
+  const [loginForm, setLoginForm] = useState({ empId: "", password: "" });
+  const [loginErr, setLoginErr]   = useState("");
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState("users");
+  const [toast, setToast]         = useState("");
+
+  // Data
+  const [users, setUsers]   = useState([]);
+  const [logs, setLogs]     = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  const showToast = msg => { setToast(msg); setTimeout(() => setToast(""), 3000); };
+
+  // ── Login ──────────────────────────────────────────────────
+  // ดึงค่าจาก SharePoint Choice field (อาจเป็น object, JSON string, หรือ string ปกติ)
+  const parseChoice = (v, fallback) => {
+    if (!v) return fallback;
+    if (typeof v === "object") return v?.Value ?? fallback;
+    if (typeof v === "string" && v.trim().startsWith("{")) {
+      try { const p = JSON.parse(v); return p?.Value ?? fallback; } catch {}
+    }
+    return v;
+  };
+
+  const handleLogin = async () => {
+    setLoginErr("");
+    if (!loginForm.empId || !loginForm.password) return setLoginErr("กรุณากรอกรหัสพนักงานและรหัสผ่าน");
+    setLoginLoading(true);
+    try {
+      const raw  = await sbLoginUser(loginForm.empId.trim(), loginForm.password);
+      const role  = raw.role || raw.Role || "user";
+      const group = raw.GroupName || raw.group || "";
+      const user  = { ...raw, role, group };
+      if (role !== "admin") { setLoginErr("บัญชีนี้ไม่มีสิทธิ์ Admin"); return; }
+      lsSet("tvohh_admin_session", user);
+      setAuthUser(user);
+      showToast("เข้าสู่ระบบ Admin สำเร็จ 🔐");
+    } catch { setLoginErr("รหัสพนักงานหรือรหัสผ่านไม่ถูกต้อง"); }
+    finally { setLoginLoading(false); }
+  };
+
+  const handleLogout = () => { localStorage.removeItem("tvohh_admin_session"); setAuthUser(null); };
+
+  // ── Load Users ─────────────────────────────────────────────
+  const loadUsers = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await sbGetUsers();
+      setUsers(data);
+    }
+    catch(e) { console.error("[GET_USERS] error:", e); showToast("โหลด Users ไม่สำเร็จ"); }
+    finally { setLoading(false); }
+  }, []);
+
+  // ── Load Logs ──────────────────────────────────────────────
+  const loadLogs = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await sbGetLogs();
+      setLogs(data);
+    }
+    catch(e) { console.error("[GET_LOGS]", e); showToast("โหลด Logs ไม่สำเร็จ"); }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => {
+    if (!authUser) return;
+    if (activeTab === "users") loadUsers();
+    if (activeTab === "logs")  loadLogs();
+  }, [authUser, activeTab]);
+
+  // ── Delete User + ดึง logs สด แล้วลบทั้งหมดของ user ──────────
+  const deleteUser = async (empId, displayName) => {
+    if (!window.confirm(`ลบ User "${displayName}" และ Log กิจกรรมทั้งหมดของ user นี้?\nการกระทำนี้ไม่สามารถย้อนกลับได้`)) return;
+    try {
+      showToast("กำลังลบ...");
+      await sbDeleteUser(empId, displayName);
+      showToast(`ลบ User "${displayName}" และ Log ทั้งหมดสำเร็จ ✅`);
+      loadUsers();
+      loadLogs();
+    } catch(e) { console.error("[DELETE_USER] error:", e); showToast("❌ ลบไม่สำเร็จ: " + e.message); }
+  };
+
+  // ── Compress all profile photos ────────────────────────────
+  const [compressing, setCompressing] = useState(false);
+  const compressAllPhotos = async () => {
+    if (!window.confirm(`บีบรูปโปรไฟล์ทั้งหมด ${users.length} คน?\nอาจใช้เวลา 1-2 นาที`)) return;
+    setCompressing(true);
+    let ok = 0, skip = 0, fail = 0;
+    for (const u of users) {
+      try {
+        const photo = u.Photo || "";
+        if (!photo || photo.length * 0.75 <= 20000) { skip++; continue; }
+        const compressed = await compressBase64(photo);
+        if (compressed === photo) { skip++; continue; }
+        await sbUpdateUserPhoto(u.EmployeeID, compressed);
+        ok++;
+        showToast(`บีบรูป ${u.DisplayName} ✅ (${ok}/${users.length})`);
+      } catch(e) { fail++; console.error("compress fail:", u.DisplayName, e); }
+    }
+    setCompressing(false);
+    showToast(`เสร็จแล้ว ✅ บีบสำเร็จ ${ok} | ข้าม ${skip} | ผิดพลาด ${fail}`);
+  };
+
+  // ── Delete Log ─────────────────────────────────────────────
+  const deleteLog = async (id) => {
+    if (!window.confirm("ลบ Log นี้จริงหรือ?")) return;
+    if (!id) { showToast("❌ ID ไม่ถูกต้อง"); return; }
+    try {
+      showToast("กำลังลบ...");
+      await sbDeleteLog(id);
+      showToast("✅ ลบ Log สำเร็จ"); loadLogs();
+    } catch(e) { console.error("[DELETE_LOG] error:", e); showToast("❌ ลบ Log ไม่สำเร็จ: " + e.message); }
+  };
+
+  // ── Add User (Admin can add) ───────────────────────────────
+  const TEAM_NAMES = ["A : ใส่ใจลูกค้า", "B : ร่วมแรงร่วมใจ", "C : ยืดหยุ่นคล่องตัว", "D : ว่องไวเป็นเลิศ"];
+  const [addForm, setAddForm] = useState({ empId: "", displayName: "", group: "A : ใส่ใจลูกค้า", password: "", role: "user" });
+  const [addErr, setAddErr]   = useState("");
+
+  // ── Goals Management ──────────────────────────────────────
+  const [adminGoals, setAdminGoals] = useState(() => lsGet("tvohh_goals", {}));
+  const [goalUser, setGoalUser]     = useState("");
+  const [goalValue, setGoalValue]   = useState(5000);
+  const saveGoal = () => {
+    if (!goalUser) return;
+    const next = { ...adminGoals, [goalUser]: { weekly: goalValue } };
+    setAdminGoals(next); lsSet("tvohh_goals", next);
+    showToast(`ตั้งเป้าหมายให้ ${goalUser} แล้ว! 🎯`);
+  };
+  const deleteGoal = (user) => {
+    const next = { ...adminGoals }; delete next[user];
+    setAdminGoals(next); lsSet("tvohh_goals", next);
+    showToast("ลบเป้าหมายแล้ว");
+  };
+
+  const handleAddUser = async () => {
+    setAddErr("");
+    if (!addForm.empId || !addForm.displayName || !addForm.password) return setAddErr("กรุณากรอกให้ครบ");
+    try {
+      await sbRegisterUser(addForm.empId.trim(), addForm.displayName.trim(), addForm.group, addForm.password, addForm.role);
+      showToast("เพิ่ม User สำเร็จ ✅");
+      setAddForm({ empId: "", displayName: "", group: "A : ใส่ใจลูกค้า", password: "", role: "user" });
+      loadUsers();
+    } catch(e) { setAddErr("เพิ่ม User ไม่สำเร็จ: " + e.message); }
+  };
+
+  // ════════════════════════════════════════════════════════════
+  // LOGIN SCREEN
+  // ════════════════════════════════════════════════════════════
+  if (!authUser) return (
+    <div style={{ minHeight: "100vh", background: "linear-gradient(135deg,#F0FDF4,#DCFCE7)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div style={{ width: "100%", maxWidth: 380 }}>
+        <div style={{ textAlign: "center", marginBottom: 28 }}>
+          <div style={{ fontSize: 48, marginBottom: 8 }}>🔐</div>
+          <h1 style={{ fontFamily: "'Prompt'", fontWeight: 900, fontSize: 22, color: GREEN }}>TVO Calories Challenge</h1>
+          <p style={{ color: "#6B7280", fontSize: 13, marginTop: 4 }}>Admin Management</p>
+        </div>
+        <div className="card" style={{ padding: 28 }}>
+          <h3 style={{ fontFamily: "'Prompt'", fontWeight: 700, marginBottom: 18, color: "#1F2937", fontSize: 15 }}>เข้าสู่ระบบ Admin</h3>
+          <label>รหัสพนักงาน</label>
+          <input className="inp" style={{ marginBottom: 12 }} placeholder="เช่น 1234" value={loginForm.empId}
+            onChange={e => setLoginForm(p => ({ ...p, empId: e.target.value }))}
+            onKeyDown={e => e.key === "Enter" && handleLogin()} />
+          <label>รหัสผ่าน</label>
+          <input className="inp" style={{ marginBottom: 16 }} type="password" placeholder="••••••••" value={loginForm.password}
+            onChange={e => setLoginForm(p => ({ ...p, password: e.target.value }))}
+            onKeyDown={e => e.key === "Enter" && handleLogin()} />
+          {loginErr && <div style={{ color: "#DC2626", fontSize: 12, marginBottom: 12, background: "#FEF2F2", padding: "8px 12px", borderRadius: 8 }}>{loginErr}</div>}
+          <button className="btn-g" style={{ width: "100%", padding: 12, fontSize: 14 }} onClick={handleLogin} disabled={loginLoading}>
+            {loginLoading ? "กำลังเข้าสู่ระบบ..." : "เข้าสู่ระบบ"}
+          </button>
+          <div style={{ marginTop: 16, textAlign: "center" }}>
+            <a href="CalApp.html" style={{ color: "#9CA3AF", fontSize: 12, textDecoration: "none" }}>← กลับสู่แอพหลัก</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  // ════════════════════════════════════════════════════════════
+  // ADMIN DASHBOARD
+  // ════════════════════════════════════════════════════════════
+  const tabs = [
+    { id: "users",  icon: "👥", label: "จัดการ Users" },
+    { id: "adduser",icon: "➕", label: "เพิ่ม User" },
+    { id: "logs",   icon: "📋", label: "Logs ทั้งหมด" },
+    { id: "goals",     icon: "🎯",  label: "เป้าหมาย" },
+    { id: "stats",  icon: "📊", label: "สถิติ" },
+  ];
+
+  return (
+    <div style={{ minHeight: "100vh", background: "#F0FDF4" }}>
+      {/* Toast */}
+      {toast && (
+        <div style={{ position: "fixed", top: 20, left: "50%", transform: "translateX(-50%)", zIndex: 999, background: "#ECFDF5", border: "1px solid #6EE7B7", borderRadius: 12, padding: "12px 22px", fontFamily: "'Prompt'", color: GREEN, boxShadow: "0 8px 30px #00000040", whiteSpace: "nowrap" }}>
+          {toast}
+        </div>
+      )}
+
+      {/* Header */}
+      <div style={{ background: "linear-gradient(135deg,#16A34A,#22C55E)", padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", boxShadow: "0 2px 16px #16A34A30" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontSize: 22 }}>🔐</span>
+          <div>
+            <div style={{ fontFamily: "'Prompt'", fontWeight: 700, fontSize: 16, color: "#fff" }}>Admin Panel</div>
+            <div style={{ fontSize: 10, color: "#DCFCE7" }}>TVO Calories Challenge</div>
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ background: "#ffffff25", borderRadius: 20, padding: "4px 12px", fontSize: 12, color: "#fff", fontFamily: "'Sarabun'" }}>
+            🧑 {authUser.displayName}
+          </div>
+          <button onClick={handleLogout} style={{ background: "#ffffff25", border: "1px solid #ffffff50", borderRadius: 8, padding: "5px 12px", cursor: "pointer", fontSize: 12, color: "#fff", fontFamily: "'Sarabun'" }}>ออก</button>
+          <a href="CalApp.html" style={{ background: "#ffffff25", border: "1px solid #ffffff50", borderRadius: 8, padding: "5px 12px", cursor: "pointer", fontSize: 12, color: "#fff", fontFamily: "'Sarabun'", textDecoration: "none" }}>← แอพ</a>
+        </div>
+      </div>
+
+      <div style={{ maxWidth: 900, margin: "0 auto", padding: "24px 16px 60px" }}>
+        {/* Tab nav */}
+        <div className="tb-wrap">
+          {tabs.map(t => (
+            <button key={t.id} className={`tb-btn ${activeTab === t.id ? "on" : ""}`} onClick={() => setActiveTab(t.id)}>
+              {t.icon} {t.label}
+            </button>
+          ))}
+        </div>
+
+        {/* ── USERS TAB ── */}
+        {activeTab === "users" && (
+          <div className="card" style={{ padding: 22 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
+              <h3 style={{ fontFamily: "'Prompt'", fontWeight: 700, color: GREEN, fontSize: 15 }}>👥 รายชื่อ Users ทั้งหมด</h3>
+              <div style={{ display:"flex", gap:8 }}>
+                <button className="btn-g" onClick={loadUsers} disabled={loading}>{loading ? "กำลังโหลด..." : "🔄 รีเฟรช"}</button>
+                <button className="btn-g" onClick={compressAllPhotos} disabled={compressing || users.length===0}
+                  style={{ background:"linear-gradient(135deg,#0891B2,#06B6D4)" }}>
+                  {compressing ? "⏳ กำลังบีบ..." : "🗜️ บีบรูปโปรไฟล์ทั้งหมด"}
+                </button>
+              </div>
+            </div>
+            {users.length === 0 ? (
+              <div style={{ textAlign: "center", color: "#9CA3AF", padding: "30px 0", fontSize: 13 }}>
+                {loading ? "กำลังโหลด..." : "ไม่พบข้อมูล User — กด รีเฟรช"}
+              </div>
+            ) : (
+              <div style={{ overflowX: "auto" }}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>รหัสพนักงาน</th>
+                      <th>ชื่อ</th>
+                      <th>กลุ่ม</th>
+                      <th>Role</th>
+                      <th>จัดการ</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {users.map((u, i) => (
+                      <tr key={i}>
+                        <td style={{ fontFamily: "'Prompt'", fontWeight: 600 }}>{u.EmployeeID}</td>
+                        <td>{u.DisplayName}</td>
+                        <td>{u.GroupName}</td>
+                        <td>
+                          <span className={`badge ${u.Role === "admin" ? "badge-admin" : "badge-user"}`}>
+                            {u.Role === "admin" ? "🔐 Admin" : "👤 User"}
+                          </span>
+                        </td>
+                        <td>
+                          {u.Role !== "admin" && (
+                            <button className="btn-r" onClick={() => deleteUser(u.EmployeeID, u.DisplayName)}>🗑 ลบ</button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div style={{ marginTop: 12, fontSize: 12, color: "#9CA3AF" }}>รวม {users.length} Users</div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── ADD USER TAB ── */}
+        {activeTab === "adduser" && (
+          <div className="card" style={{ padding: 22 }}>
+            <h3 style={{ fontFamily: "'Prompt'", fontWeight: 700, color: GREEN, fontSize: 15, marginBottom: 20 }}>➕ เพิ่ม User ใหม่</h3>
+            <div className="form-row" style={{ marginBottom: 12 }}>
+              <div>
+                <label>รหัสพนักงาน *</label>
+                <input className="inp" placeholder="เช่น 1234" value={addForm.empId} onChange={e => setAddForm(p => ({ ...p, empId: e.target.value }))} />
+              </div>
+              <div>
+                <label>ชื่อ-นามสกุล *</label>
+                <input className="inp" placeholder="เช่น สมชาย ใจดี" value={addForm.displayName} onChange={e => setAddForm(p => ({ ...p, displayName: e.target.value }))} />
+              </div>
+            </div>
+            <div className="form-row" style={{ marginBottom: 12 }}>
+              <div>
+                <label>รหัสผ่าน *</label>
+                <input className="inp" type="password" placeholder="••••••••" value={addForm.password} onChange={e => setAddForm(p => ({ ...p, password: e.target.value }))} />
+              </div>
+              <div>
+                <label>กลุ่ม</label>
+                <select className="inp" value={addForm.group} onChange={e => setAddForm(p => ({ ...p, group: e.target.value }))}>
+                  {TEAM_NAMES.map(g => <option key={g}>{g}</option>)}
+                </select>
+              </div>
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <label>Role</label>
+              <select className="inp" style={{ maxWidth: 200 }} value={addForm.role} onChange={e => setAddForm(p => ({ ...p, role: e.target.value }))}>
+                <option value="user">👤 User (ทั่วไป)</option>
+                <option value="admin">🔐 Admin</option>
+              </select>
+            </div>
+            {addErr && <div style={{ color: "#DC2626", fontSize: 12, marginBottom: 12, background: "#FEF2F2", padding: "8px 12px", borderRadius: 8 }}>{addErr}</div>}
+            <button className="btn-g" onClick={handleAddUser} style={{ padding: "11px 28px" }}>
+              ➕ เพิ่ม User
+            </button>
+          </div>
+        )}
+
+        {/* ── LOGS TAB ── */}
+        {activeTab === "logs" && (
+          <div className="card" style={{ padding: 22 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
+              <h3 style={{ fontFamily: "'Prompt'", fontWeight: 700, color: GREEN, fontSize: 15 }}>📋 Log ทั้งหมด</h3>
+              <button className="btn-g" onClick={loadLogs} disabled={loading}>{loading ? "กำลังโหลด..." : "🔄 รีเฟรช"}</button>
+            </div>
+            {logs.length === 0 ? (
+              <div style={{ textAlign: "center", color: "#9CA3AF", padding: "30px 0", fontSize: 13 }}>
+                {loading ? "กำลังโหลด..." : "ไม่พบ Log — กด รีเฟรช"}
+              </div>
+            ) : (
+              <div style={{ overflowX: "auto" }}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>วันที่</th>
+                      <th>ชื่อ</th>
+                      <th>กลุ่ม</th>
+                      <th>กิจกรรม</th>
+                      <th>เวลา</th>
+                      <th>Cal</th>
+                      <th>จัดการ</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {logs.map((l, i) => (
+                      <tr key={i}>
+                        <td style={{ fontSize: 11, color: "#9CA3AF" }}>{l.date || "-"}</td>
+                        <td style={{ fontWeight: 600 }}>{l.user}</td>
+                        <td>{l.group}</td>
+                        <td>{l.exercise}</td>
+                        <td>{l.duration} น.</td>
+                        <td style={{ color: GREEN, fontWeight: 700 }}>{l.calories?.toLocaleString()}</td>
+                        <td>
+                          <button className="btn-r" onClick={() => deleteLog(l.id || l.spId)}>🗑 ลบ</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div style={{ marginTop: 12, fontSize: 12, color: "#9CA3AF" }}>รวม {logs.length} Logs · {logs.reduce((s, l) => s + (l.calories || 0), 0).toLocaleString()} kcal</div>
+              </div>
+            )}
+          </div>
+        )}
+
+
+        {/* ── GOALS TAB ── */}
+        {activeTab === "goals" && (
+          <div>
+            {/* ฟอร์มตั้งเป้าหมาย */}
+            <div className="card" style={{ padding: 22, marginBottom: 16 }}>
+              <h3 style={{ fontFamily: "'Prompt'", fontWeight: 700, fontSize: 15, color: GREEN, marginBottom: 6 }}>🎯 ตั้งเป้าหมายให้พนักงาน</h3>
+              <p style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 18 }}>เป้าหมายแคลอรี่ต่อสัปดาห์ จะแสดงใน Profile ของแต่ละคน</p>
+              <label>เลือกพนักงาน</label>
+              <select className="inp" style={{ marginBottom: 14 }} value={goalUser}
+                onChange={e => { setGoalUser(e.target.value); setGoalValue(adminGoals[e.target.value]?.weekly || 5000); }}>
+                <option value="">-- เลือกพนักงาน --</option>
+                {users.map(u => <option key={u.EmployeeID} value={u.DisplayName}>{u.DisplayName} ({u.GroupName})</option>)}
+              </select>
+              <label>เป้าหมาย: <span style={{ color: GREEN, fontWeight: 700 }}>{goalValue.toLocaleString()} kcal / สัปดาห์</span></label>
+              <input type="range" min={500} max={10000} step={250} value={goalValue}
+                onChange={e => setGoalValue(+e.target.value)}
+                style={{ width: "100%", accentColor: GREEN, marginBottom: 14 }} />
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#9CA3AF", marginBottom: 16, marginTop: -10 }}>
+                <span>500</span><span>2,500</span><span>5,000</span><span>7,500</span><span>10,000</span>
+              </div>
+              <button className="btn-g" onClick={saveGoal} disabled={!goalUser} style={{ width: "100%", padding: 12, fontSize: 14, opacity: goalUser ? 1 : 0.4 }}>
+                💾 บันทึกเป้าหมาย
+              </button>
+              {!users.length && <div style={{ marginTop: 12, fontSize: 12, color: "#F59E0B" }}>⚠️ โหลด Users ก่อน — ไปที่แท็บ "จัดการ Users" แล้วกด รีเฟรช</div>}
+            </div>
+
+            {/* รายการเป้าหมายที่ตั้งไว้ */}
+            <div className="card" style={{ padding: 22 }}>
+              <h4 style={{ fontFamily: "'Prompt'", fontWeight: 700, fontSize: 14, color: GREEN, marginBottom: 14 }}>📋 เป้าหมายที่ตั้งไว้</h4>
+              {Object.keys(adminGoals).length === 0
+                ? <div style={{ color: "#9CA3AF", fontSize: 13, textAlign: "center", padding: 20 }}>ยังไม่มีเป้าหมาย</div>
+                : Object.entries(adminGoals).map(([name, g]) => (
+                  <div key={name} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 0", borderBottom: "1px solid #F3F4F6" }}>
+                     
+<div style={{ width: 36, height: 36, borderRadius: "50%", background: "#DCFCE7", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>👤</div>; })()}
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 700, fontSize: 14 }}>{name}</div>
+                      <div style={{ fontSize: 12, color: "#16A34A", fontWeight: 600 }}>{(g.weekly || 0).toLocaleString()} kcal / สัปดาห์</div>
+                    </div>
+                    <button onClick={() => { setGoalUser(name); setGoalValue(g.weekly || 5000); setActiveTab("goals"); }}
+                      style={{ background: "#DCFCE7", border: "none", borderRadius: 8, padding: "5px 12px", cursor: "pointer", color: GREEN, fontSize: 12, fontFamily: "'Sarabun'" }}>✏️ แก้ไข</button>
+                    <button className="btn-r" onClick={() => deleteGoal(name)} style={{ padding: "5px 10px", fontSize: 12 }}>🗑️</button>
+                  </div>
+                ))
+              }
+            </div>
+          </div>
+        )}
+
+
+        {/* ── STATS TAB ── */}
+        {activeTab === "stats" && (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 16 }}>
+            {[
+              { icon: "👥", label: "Users ทั้งหมด", value: users.length || "-", color: GREEN },
+              { icon: "📋", label: "Logs ทั้งหมด", value: logs.length || "-", color: "#4ADE80" },
+              { icon: "🔥", label: "Cal สะสมรวม", value: logs.reduce((s, l) => s + (l.calories || 0), 0).toLocaleString() || "-", color: GREEN },
+              { icon: "🏃", label: "นาทีรวม", value: logs.reduce((s, l) => s + (l.duration || 0), 0).toLocaleString() || "-", color: "#059669" },
+            ].map(s => (
+              <div key={s.label} className="card" style={{ padding: 22, textAlign: "center" }}>
+                <div style={{ fontSize: 32, marginBottom: 8 }}>{s.icon}</div>
+                <div style={{ fontFamily: "'Prompt'", fontSize: 28, fontWeight: 900, color: s.color }}>{s.value}</div>
+                <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 4 }}>{s.label}</div>
+              </div>
+            ))}
+            <div className="card" style={{ padding: 16, gridColumn: "1/-1" }}>
+              <h4 style={{ fontFamily: "'Prompt'", fontWeight: 700, color: GREEN, marginBottom: 12, fontSize: 14 }}>📊 Cal ตามกลุ่ม</h4>
+              {Object.entries(logs.reduce((acc, l) => { acc[l.group] = (acc[l.group] || 0) + (l.calories || 0); return acc; }, {}))
+                .sort((a, b) => b[1] - a[1])
+                .map(([group, cal], i) => (
+                  <div key={group} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                    <span style={{ fontSize: 12, color: "#6B7280", width: 60 }}>{group}</span>
+                    <div style={{ flex: 1, background: "#F3F4F6", borderRadius: 6, height: 18, overflow: "hidden" }}>
+                      <div style={{ height: "100%", background: `linear-gradient(90deg,${GREEN},#4ADE80)`, width: `${Math.round(cal / Math.max(...Object.values(logs.reduce((acc, l) => { acc[l.group] = (acc[l.group] || 0) + (l.calories || 0); return acc; }, {}))) * 100)}%`, borderRadius: 6, transition: "width .5s" }} />
+                    </div>
+                    <span style={{ fontSize: 12, color: GREEN, fontWeight: 700, width: 70, textAlign: "right" }}>{cal.toLocaleString()} kcal</span>
+                  </div>
+              ))}
+              {logs.length === 0 && <div style={{ color: "#9CA3AF", fontSize: 12 }}>ยังไม่มีข้อมูล — ไปที่แท็บ Logs แล้วกด รีเฟรช</div>}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<AdminApp />);
+</script>
+</body>
+</html>
+  
