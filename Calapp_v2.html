@@ -655,16 +655,6 @@ const handleRegister = async () => {
   const weeklyTotal = profileUser ? profileChart.reduce((s, d) => s + d.cal, 0) : 0;
 
   const tabs = [
-    { id: "dashboard", icon: "📊", label: "หน้าหลัก" },
-    { id: "add",       icon: "➕", label: "บันทึก" },
-    { id: "profile",   icon: "👤", label: "โปรไฟล์" },
-    { id: "group",     icon: "👥", label: "กลุ่ม" },
-    { id: "members",   icon: "🏅", label: "สมาชิก" },
-    { id: "ranking",   icon: "🏆", label: "อันดับ" },
-    { id: "share",     icon: "📤", label: "แชร์" },
-  ];
-
-  const tabs = [
     { id: "dashboard", icon: "🏠", label: "หน้าหลัก" },
     { id: "add",       icon: "➕", label: "บันทึก" },
     { id: "profile",   icon: "👤", label: "โปรไฟล์" },
@@ -679,6 +669,7 @@ const handleRegister = async () => {
 
   const myLogs = authUser ? logs.filter(l => l.user === authUser.displayName) : [];
   const myStats = userStats.find(u => u.user === authUser?.displayName);
+
 
   // ─── AUTH SCREEN v2 ──────────────────────────────────────────
   if (!authUser) return (
