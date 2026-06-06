@@ -671,6 +671,7 @@ const handleRegister = async () => {
     { id: "group",     icon: "👥", label: "กลุ่ม" },
     { id: "members",   icon: "🏅", label: "สมาชิก" },
     { id: "ranking",   icon: "🏆", label: "อันดับ" },
+    { id: "rules",     icon: "💡", label: "กติกา" },
     { id: "share",     icon: "📤", label: "แชร์" },
   ];
 
@@ -1180,9 +1181,13 @@ const handleRegister = async () => {
 
               {/* Duration */}
               <div style={{ marginBottom:20 }}>
-                <div style={{ display:"flex", justifyContent:"space-between", marginBottom:8 }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
                   <label style={{ fontSize:12, color:"#374151", fontWeight:700 }}>⏱️ ระยะเวลา</label>
-                  <span style={{ fontSize:15, fontFamily:"'Prompt'", fontWeight:700, color:"#16A34A" }}>{form.duration} นาที</span>
+                  <input
+                    type="number" min={15} max={480} value={form.duration}
+                    onChange={e => { const v = Math.max(15, Math.min(480, +e.target.value||15)); setForm(p=>({...p,duration:v})); }}
+                    style={{ width:72, padding:"4px 8px", borderRadius:10, border:"1.5px solid #D1FAE5", fontFamily:"'Prompt'", fontWeight:700, fontSize:15, color:"#16A34A", textAlign:"center", outline:"none", background:"#F0FDF4" }}
+                  />
                 </div>
                 <input type="range" min={15} max={480} step={1} value={form.duration} onChange={e=>setForm(p=>({...p,duration:+e.target.value}))} style={{ width:"100%", accentColor:"#16A34A", borderRadius:999, border:"none", background:"transparent" }} />
                 <div style={{ display:"flex", justifyContent:"space-between", fontSize:10, color:"#9CA3AF", marginTop:4 }}><span>15 น.</span><span>480 น.</span></div>
@@ -1573,6 +1578,95 @@ const handleRegister = async () => {
                   </div>
                 );
               })}
+            </div>
+          </div>
+        )}
+
+        {/* ───── RULES ───── */}
+        {activeTab==="rules" && (
+          <div className="v2-in-anim">
+            <h2 className="v2-section-title">💡 กติกาและแนวทางการส่งข้อมูล</h2>
+
+            {/* ── ระยะเวลา ── */}
+            <div style={{ background:"#fff", border:"1px solid #D1FAE5", borderRadius:16, padding:"18px 20px", marginBottom:14 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:12 }}>
+                <span style={{ fontSize:20 }}>✅</span>
+                <span style={{ fontFamily:"'Prompt'", fontWeight:700, fontSize:15, color:"#16A34A" }}>ระยะเวลาโครงการ</span>
+              </div>
+              <div style={{ fontSize:13, lineHeight:1.8, color:"#374151" }}>
+                <div>📅 เริ่มส่งข้อมูล: <strong>11 มิถุนายน 2569</strong> เวลา 00.00 น.</div>
+                <div>📅 สิ้นสุด: <strong>31 ตุลาคม 2569</strong> เวลา 23.59 น.</div>
+              </div>
+            </div>
+
+            {/* ── การนับ Cal ── */}
+            <div style={{ background:"#fff", border:"1px solid #D1FAE5", borderRadius:16, padding:"18px 20px", marginBottom:14 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:12 }}>
+                <span style={{ fontSize:20 }}>✅</span>
+                <span style={{ fontFamily:"'Prompt'", fontWeight:700, fontSize:15, color:"#16A34A" }}>การนับ Calories</span>
+              </div>
+              <div style={{ fontSize:13, lineHeight:1.9, color:"#374151" }}>
+                <div>🏃 ออกกำลังกายได้ทุกประเภทที่เป็นการตั้งใจออกกำลังกายจริงๆ</div>
+                <div>⏱️ กิจกรรมต้องมีระยะเวลา <strong>15 – 480 นาที</strong></div>
+                <div style={{ marginTop:8, paddingLeft:12, borderLeft:"3px solid #FCA5A5", color:"#DC2626" }}>
+                  <div>❌ ไม่นับการเดินประจำวัน (Daily Walking)</div>
+                  <div>❌ ไม่นับกิจกรรมที่ใช้เวลาน้อยกว่า 15 นาที</div>
+                </div>
+              </div>
+            </div>
+
+            {/* ── การส่งข้อมูล ── */}
+            <div style={{ background:"#fff", border:"1px solid #D1FAE5", borderRadius:16, padding:"18px 20px", marginBottom:14 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:12 }}>
+                <span style={{ fontSize:20 }}>✅</span>
+                <span style={{ fontFamily:"'Prompt'", fontWeight:700, fontSize:15, color:"#16A34A" }}>การส่งข้อมูล</span>
+              </div>
+              <div style={{ fontSize:13, lineHeight:1.9, color:"#374151" }}>
+                <div>🔒 ส่งข้อมูลได้ไม่เกิน <strong>วันละ 4 ครั้ง</strong> (ระบบจะล็อคอัตโนมัติ)</div>
+                <div style={{ marginTop:8 }}>📸 แนบภาพหน้าจอจากแอปที่ใช้บันทึก โดยต้องแสดง:</div>
+                <div style={{ paddingLeft:16, marginTop:4, lineHeight:2 }}>
+                  <div>• ประเภทกิจกรรม</div>
+                  <div>• ระยะเวลาออกกำลังกาย</div>
+                  <div>• จำนวน Calories</div>
+                  <div>• ข้อมูลในภาพต้องตรงกับข้อมูลที่บันทึกในระบบ</div>
+                </div>
+                <div style={{ marginTop:8, color:"#D97706", fontSize:12 }}>⚠️ หากข้อมูลไม่ครบถ้วน ผู้ดูแลจะแจ้งลบรายการและให้บันทึกใหม่</div>
+              </div>
+            </div>
+
+            {/* ── ข้อสำคัญ ── */}
+            <div style={{ background:"#FFF7ED", border:"1px solid #FED7AA", borderRadius:16, padding:"18px 20px", marginBottom:14 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:12 }}>
+                <span style={{ fontSize:20 }}>✅</span>
+                <span style={{ fontFamily:"'Prompt'", fontWeight:700, fontSize:15, color:"#EA580C" }}>ข้อสำคัญ</span>
+              </div>
+              <div style={{ fontSize:13, lineHeight:1.9, color:"#374151" }}>
+                <div>👤 ต้องเป็นข้อมูลการออกกำลังกายจริงของผู้เข้าร่วมเท่านั้น</div>
+                <div style={{ color:"#DC2626" }}>🚫 หากตรวจพบข้อมูลไม่เป็นความจริง จะถูกตัดสิทธิ์และลบแคลออกจากระบบ</div>
+              </div>
+            </div>
+
+            {/* ── รางวัล ── */}
+            <div style={{ background:"#FFFBEB", border:"1px solid #FDE68A", borderRadius:16, padding:"18px 20px", marginBottom:14 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:12 }}>
+                <span style={{ fontSize:20 }}>🏆</span>
+                <span style={{ fontFamily:"'Prompt'", fontWeight:700, fontSize:15, color:"#D97706" }}>รางวัล</span>
+              </div>
+              <div style={{ fontSize:13, lineHeight:1.9, color:"#374151" }}>
+                <div>🥇 มีรางวัลทั้ง<strong>รายบุคคล</strong>และ<strong>รางวัลทีม</strong> — มีโอกาสได้รับมากกว่า 1 ประเภท</div>
+                <div>👫 แยกรางวัลตาม<strong>เพศ</strong>และ<strong>สังกัดแผนก</strong></div>
+                <div style={{ marginTop:8, color:"#16A34A" }}>💚 นับเฉพาะ Calories จากกิจกรรมที่ส่งเข้าร่วมโครงการเท่านั้น</div>
+              </div>
+            </div>
+
+            {/* ── footer note ── */}
+            <div style={{ background:"#F0FDF4", border:"1px solid #BBF7D0", borderRadius:12, padding:"14px 18px", textAlign:"center" }}>
+              <div style={{ fontSize:13, fontWeight:700, color:"#16A34A", marginBottom:4 }}>
+                📌 "คำตัดสินของคณะกรรมการ/ผู้ดูแลโครงการถือเป็นที่สิ้นสุด"
+              </div>
+              <div style={{ fontSize:12, color:"#6B7280" }}>
+                หากมีข้อสงสัย สามารถสอบถามทีมงานโครงการได้ เพื่อร่วมกิจกรรมได้อย่างสนุกและเป็นธรรม 😊
+              </div>
             </div>
           </div>
         )}
