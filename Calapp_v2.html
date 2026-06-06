@@ -1805,4 +1805,37 @@ const handleRegister = async () => {
                           <div style={{ color:"#9CA3AF", fontSize:10 }}>{log.exercise} · {log.duration}น. · {log.date}</div>
                         </div>
                         <div style={{ fontFamily:"'Prompt'", fontWeight:700, fontSize:13, color:"#16A34A", flexShrink:0 }}>{log.calories}</div>
-                        <button onClick={()=>{ if(log.spId)sbRemoveLog(log.spId
+                        <button onClick={()=>{ if(log.spId)sbRemoveLog(log.spId).catch(()=>{}); setLogs(p=>p.filter(l=>l.id!==log.id)); }} style={{ background:"none", border:"none", color:"#9CA3AF", cursor:"pointer", fontSize:14, padding:"3px 6px", borderRadius:6, transition:"color .2s" }}>✕</button>
+                      </div>
+                    );
+                  })}
+                  {logs.length===0&&<div style={{ textAlign:"center", padding:40, color:"#9CA3AF", fontSize:13 }}>ยังไม่มีข้อมูล</div>}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+      </div>
+
+      {/* ── BOTTOM NAV v2 ── */}
+      <div style={{ position:"fixed", bottom:0, left:0, right:0, zIndex:50, background:"rgba(255,255,255,0.92)", backdropFilter:"blur(20px)", WebkitBackdropFilter:"blur(20px)", borderTop:"1px solid rgba(0,0,0,0.06)", paddingBottom:"env(safe-area-inset-bottom,0px)" }}>
+        <div style={{ display:"flex", justifyContent:"space-around", maxWidth:680, margin:"0 auto", padding:"8px 8px 10px" }}>
+          {tabs.map(tab=>(
+            <button key={tab.id} onClick={()=>setActiveTab(tab.id)} className={`v2-nav-btn ${activeTab===tab.id?"v2-nav-on":""}`}>
+              <span style={{ fontSize:19 }}>{tab.icon}</span>
+              <span style={{ fontWeight:activeTab===tab.id?700:500 }}>{tab.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<CalorieTracker />);
+  </script>
+</body>
+</html>
