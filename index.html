@@ -973,7 +973,7 @@ const handleRegister = async () => {
       )}
 
       {/* ── MAIN CONTENT ── */}
-      <div style={{ position:"relative", zIndex:1, maxWidth:680, width:"100%", margin:"0 auto", padding:"16px 14px calc(100px + env(safe-area-inset-bottom,0px))" }}>
+      <div style={{ position:"relative", zIndex:1, maxWidth:680, width:"100%", margin:"0 auto", padding:"calc(env(safe-area-inset-top,0px) + 16px) 14px calc(100px + env(safe-area-inset-bottom,0px))" }}>
 
         {/* ── HEADER v2 ── */}
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:20, opacity:animateIn?1:0, transform:animateIn?"none":"translateY(-16px)", transition:"all .5s ease" }}>
