@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>TVO Happy Health 2026 — สมาชิก</title>
+<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;600;700;900&family=Sarabun:wght@400;600&display=swap" rel="stylesheet" />
+<script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#F0FDF4;font-family:'Sarabun',sans-serif;min-height:100vh}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-presets="env,react">
+const { useState, useEffect } = React;
+
+const SUPABASE_URL      = 'https://lnqtszvqglqdsdvzncbe.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxucXRzenZxZ2xxZHNkdnpuY2JlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA0NTAyODcsImV4cCI6MjA5NjAyNjI4N30.vhsbuZYK_lfnZEWbmCPmskWUk64ya1jxllRbc2_078w';
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const TEAM_META = {
+  "A : ใส่ใจลูกค้า":      { color:"#16A34A", bg:"#F0FDF4", border:"#86EFAC", icon:"🤝" },
+  "B : ร่วมแรงร่วมใจ":    { color:"#0EA5E9", bg:"#F0F9FF", border:"#7DD3FC", icon:"💙" },
+  "C : ยืดหยุ่นคล่องตัว": { color:"#8B5CF6", bg:"#F5F3FF", border:"#C4B5FD", icon:"⚡" },
+  "D : ว่องไวเป็นเลิศ":   { color:"#F59E0B", bg:"#FFFBEB", border:"#FCD34D", icon:"🚀" },
+};
+
+function MemberPage() {
+  const [users, setUsers]   = useState([]);
+  const [logs,  setLogs]    = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr]       = useState("");
+  const [search, setSearch] = useState("");
+  const [activeTeam, setActiveTeam] = useState("all");
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const [{ data: uData, error: uErr }, { data: lData, error: lErr }] = await Promise.all([
+          supabase.from('user_profiles').select('employee_id,display_name,group_name,photo'),
+          supabase.from('exercise_logs').select('user_name,group_name,calories,duration,log_date'),
+        ]);
+        if (uErr) throw new Error(uErr.message);
+        if (lErr) throw new Error(lErr.message);
+        setUsers(uData || []);
+        setLogs(lData  || []);
+      } catch(e) { setErr(e.message); }
+      finally    { setLoading(false); }
+    })();
+  }, []);
+
+  // รวม user จาก user_profiles + user ที่มีใน logs แต่ไม่มีใน profiles (เหมือน index.html)
+  const combined = [...users];
+  const profileNames = new Set(users.map(u => u.display_name));
+  logs.forEach(l => {
+    if (l.user_name && !profileNames.has(l.user_name)) {
+      profileNames.add(l.user_name);
+      combined.push({ display_name: l.user_name, group_name: l.group_name||'', employee_id: null, photo: null });
+    }
+  });
+
+  // คำนวณ stats ต่อ user
+  const userStats = combined.map(u => {
+    const ul = logs.filter(l => l.user_name === u.display_name);
+    return {
+      ...u,
+      totalCal: ul.reduce((s, l) => s + (Number(l.calories)||0), 0),
+      sessions: ul.length,
+      totalMin: ul.reduce((s, l) => s + (Number(l.duration)||0), 0),
+    };
+  });
+
+  // สรุปต่อทีม
+  const teamSummary = Object.entries(TEAM_META).map(([name, meta]) => {
+    const members = userStats.filter(u => (u.group_name||"").trim() === name.trim());
+    return {
+      name, meta,
+      count:    members.length,
+      totalCal: members.reduce((s, m) => s + m.totalCal, 0),
+      active:   members.filter(m => m.sessions > 0).length,
+    };
+  });
+
+  // filter
+  const filtered = userStats
+    .filter(u => activeTeam === "all" || (u.group_name||"").trim() === activeTeam.trim())
+    .filter(u => !search || u.display_name?.toLowerCase().includes(search.toLowerCase()))
+    .sort((a, b) => b.totalCal - a.totalCal);
+
+  if (loading) return (
+    <div style={{ minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center", flexDirection:"column", gap:16 }}>
+      <div style={{ fontSize:40 }}>⏳</div>
+      <div style={{ fontFamily:"'Prompt'", color:"#16A34A", fontWeight:700 }}>กำลังโหลดข้อมูล...</div>
+    </div>
+  );
+
+  if (err) return (
+    <div style={{ minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center", flexDirection:"column", gap:12, padding:20 }}>
+      <div style={{ fontSize:40 }}>❌</div>
+      <div style={{ color:"#DC2626", fontFamily:"'Prompt'", fontWeight:700 }}>โหลดข้อมูลไม่สำเร็จ</div>
+      <div style={{ color:"#9CA3AF", fontSize:13 }}>{err}</div>
+    </div>
+  );
+
+  return (
+    <div style={{ minHeight:"100vh", background:"#F0FDF4" }}>
+
+      {/* Header */}
+      <div style={{ background:"linear-gradient(135deg,#16A34A,#22C55E)", padding:"16px 20px", boxShadow:"0 2px 16px #16A34A30" }}>
+        <div style={{ maxWidth:900, margin:"0 auto", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+            <span style={{ fontSize:26 }}>👥</span>
+            <div>
+              <div style={{ fontFamily:"'Prompt'", fontWeight:900, fontSize:18, color:"#fff" }}>สมาชิก TVO Happy Health</div>
+              <div style={{ fontSize:11, color:"#DCFCE7" }}>2026 · รายชื่อและสถิติรายทีม</div>
+            </div>
+          </div>
+          <a href="index.html" style={{ background:"#ffffff25", border:"1px solid #ffffff50", borderRadius:8, padding:"6px 14px", color:"#fff", fontSize:12, textDecoration:"none", fontFamily:"'Sarabun'" }}>← แอพหลัก</a>
+        </div>
+      </div>
+
+      <div style={{ maxWidth:900, margin:"0 auto", padding:"20px 16px 60px" }}>
+
+        {/* Team summary cards */}
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(190px,1fr))", gap:12, marginBottom:24 }}>
+          {/* all card */}
+          <div
+            onClick={() => setActiveTeam("all")}
+            style={{ background: activeTeam==="all"?"#16A34A":"#fff", border:`2px solid ${activeTeam==="all"?"#16A34A":"#D1FAE5"}`, borderRadius:14, padding:"14px 16px", cursor:"pointer", transition:"all .2s" }}
+          >
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
+              <div style={{ fontSize:24 }}>🌿</div>
+              <span style={{ fontSize:11, fontWeight:700, background: activeTeam==="all"?"#ffffff30":"#DCFCE7", color: activeTeam==="all"?"#fff":"#16A34A", borderRadius:20, padding:"2px 8px" }}>ทั้งหมด</span>
+            </div>
+            <div style={{ fontFamily:"'Prompt'", fontWeight:900, fontSize:22, color: activeTeam==="all"?"#fff":"#16A34A", marginTop:8 }}>
+              {combined.length} <span style={{ fontSize:13, fontWeight:600 }}>คน</span>
+            </div>
+            <div style={{ fontSize:11, color: activeTeam==="all"?"#dcfce7":"#9CA3AF", marginTop:2 }}>
+              {logs.reduce((s,l)=>s+(Number(l.calories)||0),0).toLocaleString()} kcal สะสม
+            </div>
+          </div>
+
+          {teamSummary.map(t => (
+            <div
+              key={t.name}
+              onClick={() => setActiveTeam(activeTeam===t.name ? "all" : t.name)}
+              style={{ background: activeTeam===t.name ? t.meta.color : "#fff", border:`2px solid ${activeTeam===t.name ? t.meta.color : t.meta.border}`, borderRadius:14, padding:"14px 16px", cursor:"pointer", transition:"all .2s" }}
+            >
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
+                <div style={{ fontSize:24 }}>{t.meta.icon}</div>
+                <span style={{ fontSize:11, fontWeight:700, background: activeTeam===t.name?"#ffffff30":t.meta.bg, color: activeTeam===t.name?"#fff":t.meta.color, borderRadius:20, padding:"2px 8px", border:`1px solid ${t.meta.border}` }}>
+                  {t.name.split(":")[0].trim()}
+                </span>
+              </div>
+              <div style={{ fontFamily:"'Prompt'", fontWeight:900, fontSize:22, color: activeTeam===t.name?"#fff":t.meta.color, marginTop:8 }}>
+                {t.count} <span style={{ fontSize:13, fontWeight:600 }}>คน</span>
+              </div>
+              <div style={{ fontSize:11, color: activeTeam===t.name?"#ffffff99":"#9CA3AF", marginTop:2 }}>
+                {t.totalCal.toLocaleString()} kcal · active {t.active}/{t.count}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Search + count */}
+        <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:16 }}>
+          <input
+            type="text"
+            placeholder="🔍 ค้นหาชื่อสมาชิก..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            style={{ flex:1, padding:"10px 14px", borderRadius:12, border:"1.5px solid #D1FAE5", fontFamily:"'Sarabun'", fontSize:13, outline:"none", background:"#fff" }}
+          />
+          <span style={{ fontSize:12, color:"#9CA3AF", whiteSpace:"nowrap" }}>{filtered.length} คน</span>
+        </div>
+
+        {/* Member list */}
+        {filtered.length === 0 ? (
+          <div style={{ textAlign:"center", color:"#9CA3AF", padding:"40px 0", fontSize:13 }}>ไม่พบสมาชิก</div>
+        ) : (
+          <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+            {filtered.map((u, i) => {
+              const tm = Object.entries(TEAM_META).find(([k]) => (u.group_name||"").trim() === k.trim());
+              const meta = tm ? tm[1] : { color:"#6B7280", bg:"#F3F4F6", border:"#E5E7EB", icon:"👤" };
+              const avgCal = u.sessions > 0 ? Math.round(u.totalCal / u.sessions) : 0;
+              return (
+                <div key={u.employee_id} style={{ background:"#fff", border:`1px solid ${meta.border}`, borderRadius:14, padding:"14px 16px", display:"flex", alignItems:"center", gap:14 }}>
+                  {/* rank */}
+                  <div style={{ width:26, textAlign:"center", fontFamily:"'Prompt'", fontWeight:700, fontSize:13, color: i===0?"#F59E0B":i===1?"#9CA3AF":i===2?"#B45309":"#D1D5DB", flexShrink:0 }}>
+                    {i===0?"🥇":i===1?"🥈":i===2?"🥉":`${i+1}`}
+                  </div>
+                  {/* avatar */}
+                  {u.photo ? (
+                    <img src={u.photo} alt="" style={{ width:46, height:46, borderRadius:"50%", objectFit:"cover", border:`2px solid ${meta.border}`, flexShrink:0 }} />
+                  ) : (
+                    <div style={{ width:46, height:46, borderRadius:"50%", background:meta.bg, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, border:`2px solid ${meta.border}`, flexShrink:0 }}>
+                      {meta.icon}
+                    </div>
+                  )}
+                  {/* name + team */}
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontWeight:700, fontSize:14, color:"#1F2937", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{u.display_name}</div>
+                    <div style={{ fontSize:11, color:meta.color, marginTop:2, fontWeight:600 }}>{u.group_name || "—"}</div>
+                  </div>
+                  {/* stats */}
+                  <div style={{ display:"flex", gap:14, flexShrink:0, textAlign:"center" }}>
+                    <div>
+                      <div style={{ fontFamily:"'Prompt'", fontWeight:700, fontSize:15, color:meta.color }}>{u.totalCal.toLocaleString()}</div>
+                      <div style={{ fontSize:10, color:"#9CA3AF" }}>kcal</div>
+                    </div>
+                    <div>
+                      <div style={{ fontFamily:"'Prompt'", fontWeight:700, fontSize:15, color:"#374151" }}>{u.sessions}</div>
+                      <div style={{ fontSize:10, color:"#9CA3AF" }}>ครั้ง</div>
+                    </div>
+                    <div style={{ display:"none" }} className="hide-sm">
+                      <div style={{ fontFamily:"'Prompt'", fontWeight:700, fontSize:15, color:"#374151" }}>{avgCal}</div>
+                      <div style={{ fontSize:10, color:"#9CA3AF" }}>avg</div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Footer note */}
+        <div style={{ marginTop:24, textAlign:"center", fontSize:11, color:"#9CA3AF" }}>
+          อัปเดตข้อมูล ณ เวลาโหลดหน้า · {combined.length} สมาชิก · {logs.length} รายการ
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<MemberPage />);
+</script>
+</body>
+</html>

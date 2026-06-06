@@ -115,7 +115,9 @@ async function sbGetLogs() {
     .select('*').order('created_at', { ascending: false }).limit(1000);
   if (error) throw new Error(error.message);
   return (data || []).map(i => ({
-    id: i.id, spId: i.id, user: i.user_name || '', group: i.group_name || '',
+    id: i.id, spId: i.id,
+    empId: i.employee_id || null,
+    user: i.user_name || '', group: i.group_name || '',
     exercise: i.exercise || '', duration: Number(i.duration)||0,
     calories: Number(i.calories)||0, date: i.log_date||'',
     note: i.note||'', photo: i.photo||'', likes: Number(i.likes)||0,

@@ -110,6 +110,7 @@ const sbFetchLogs = async () => {
   if (error) throw new Error(error.message);
   return (data || []).map(i => ({
     id: i.id, spId: i.id,
+    empId: i.employee_id || null,
     user: i.user_name || '', group: i.group_name || '',
     exercise: i.exercise || '', duration: Number(i.duration) || 0,
     calories: Number(i.calories) || 0, date: i.log_date || '',
@@ -121,16 +122,17 @@ const sbPostLog = async (log) => {
     // บันทึกค่า photo ที่ส่งมาจาก handleAdd ซึ่งถูกแปลงเป็น URL เรียบร้อยแล้ว
     const { data, error } = await supabase
       .from('exercise_logs')
-      .insert({ 
-        user_name: log.user, 
-        group_name: log.group, 
+      .insert({
+        employee_id: log.empId || null,
+        user_name: log.user,
+        group_name: log.group,
         exercise: log.exercise,
-        duration: log.duration, 
-        calories: log.calories, 
+        duration: log.duration,
+        calories: log.calories,
         log_date: log.date,
-        note: log.note || '', 
-        likes: 0, 
-        photo: log.photo // ตรวจสอบว่าตรงนี้เป็น log.photo
+        note: log.note || '',
+        likes: 0,
+        photo: log.photo
       })
       .select().single();
       
@@ -434,18 +436,19 @@ const handleAdd = async () => {
     }
 
     const calories = form.customCal || 0;
-    const newLog = { 
-      id: String(Date.now()), 
-      spId: "", 
-      user: form.user, 
-      group: form.group, 
-      exercise: form.exercise, 
-      duration: form.duration, 
-      note: form.note, 
-      photo: finalPhotoUrl, // นำ URL ที่แปลงแล้วใส่เข้าไป
-      calories, 
-      date: form.date || new Date().toISOString().split("T")[0], 
-      likes: 0 
+    const newLog = {
+      id: String(Date.now()),
+      spId: "",
+      empId: authUser?.empId || null,
+      user: form.user,
+      group: form.group,
+      exercise: form.exercise,
+      duration: form.duration,
+      note: form.note,
+      photo: finalPhotoUrl,
+      calories,
+      date: form.date || new Date().toISOString().split("T")[0],
+      likes: 0
     };
 
     // อัปเดตข้อมูลขึ้นหน้าจอ UI ทันที
@@ -1743,7 +1746,7 @@ const handleRegister = async () => {
             {shareSection==="leaderboard"&&(
               <div>
                 <div style={{ background:"linear-gradient(135deg,#14532D,#15803D,#16A34A)", borderRadius:22, padding:20, marginBottom:14 }}>
-                  <div style={{ fontFamily:"'Prompt'", fontWeight:900, fontSize:17, color:"#4ADE80", marginBottom:4, textAlign:"center" }}>🏆 TVO Cal 2026</div>
+                  <div style={{ fontFamily:"'Prompt'", fontWeight:900, fontSize:17, color:"#4ADE80", marginBottom:4, textAlign:"center" }}>🏆 TVO Calories Challenge</div>
                   <div style={{ fontSize:12, color:"#A7F3D0", marginBottom:16, textAlign:"center" }}>Top {Math.min(3,userStats.length)} พนักงาน</div>
                   <div style={{ display:"flex", flexDirection:"column", gap:9, marginBottom:4 }}>
                     {userStats.slice(0,3).map((u,i)=>(
