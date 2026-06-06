@@ -40,11 +40,40 @@
 const { useState, useEffect, useCallback } = React;
 
 // ── Supabase Config ──────────────────────────────────────────
-// ⚠️ ใส่ค่าเดียวกับ index.html
+// ⚠️ ใส่ค่าเดียวกับ Calapp.html
 const SUPABASE_URL      = 'https://lnqtszvqglqdsdvzncbe.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxucXRzenZxZ2xxZHNkdnpuY2JlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA0NTAyODcsImV4cCI6MjA5NjAyNjI4N30.vhsbuZYK_lfnZEWbmCPmskWUk64ya1jxllRbc2_078w';
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const GREEN = "#16A34A";
+
+// ── Exercise Cal Ranges (เดียวกับ Calapp_v2) ─────────────────
+const EXERCISES = [
+  { name: "วิ่ง",         calMin: 7,  calMax: 14 },
+  { name: "ว่ายน้ำ",      calMin: 6,  calMax: 12 },
+  { name: "ปั่นจักรยาน",  calMin: 5,  calMax: 10 },
+  { name: "เดิน",          calMin: 3,  calMax: 6  },
+  { name: "โยคะ",          calMin: 2,  calMax: 5  },
+  { name: "ยกเวท",         calMin: 4,  calMax: 9  },
+  { name: "HIIT",          calMin: 9,  calMax: 16 },
+  { name: "กระโดดเชือก",  calMin: 8,  calMax: 14 },
+  { name: "แบดมินตัน",    calMin: 5,  calMax: 10 },
+  { name: "ฟุตบอล",        calMin: 6,  calMax: 11 },
+  { name: "พายเรือ",       calMin: 5,  calMax: 10 },
+  { name: "เข้ายิม",       calMin: 4,  calMax: 9  },
+  { name: "มวย",           calMin: 7,  calMax: 13 },
+  { name: "กอล์ฟ",         calMin: 2,  calMax: 5  },
+  { name: "อื่นๆ",         calMin: 3,  calMax: 8  },
+];
+const calcCalRange = (name, duration) => {
+  const ex = EXERCISES.find(e => e.name === name);
+  if (!ex) return null;
+  return { min: ex.calMin * duration, max: ex.calMax * duration };
+};
+const isCalAnomaly = (name, duration, cal) => {
+  const r = calcCalRange(name, duration);
+  if (!r) return false;
+  return cal > r.max * 1.5;
+};
 
 // ── Helpers ──────────────────────────────────────────────────
 const lsGet = (k, d) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } };
@@ -83,13 +112,14 @@ async function sbGetUsers() {
 
 async function sbGetLogs() {
   const { data, error } = await supabase.from('exercise_logs')
-    .select('*').order('log_date', { ascending: false }).limit(1000);
+    .select('*').order('created_at', { ascending: false }).limit(1000);
   if (error) throw new Error(error.message);
   return (data || []).map(i => ({
     id: i.id, spId: i.id, user: i.user_name || '', group: i.group_name || '',
     exercise: i.exercise || '', duration: Number(i.duration)||0,
     calories: Number(i.calories)||0, date: i.log_date||'',
-    note: i.note||'', likes: Number(i.likes)||0,
+    note: i.note||'', photo: i.photo||'', likes: Number(i.likes)||0,
+    createdAt: i.created_at||'',
   }));
 }
 
@@ -148,21 +178,14 @@ function AdminApp() {
 
   const showToast = msg => { setToast(msg); setTimeout(() => setToast(""), 3000); };
 
-  // ── Verify Session กับ Supabase จริงทุกครั้งที่โหลดหน้า ──────
+  // ── Verify Session: ตรวจ role จาก cache ──────────────────────
   useEffect(() => {
     const stored = lsGet("tvohh_admin_session", null);
-    if (!stored || !stored.EmployeeID || !stored.password_hash) return;
-    sbLoginUser(stored.EmployeeID, stored.password_hash)
-      .then(user => {
-        if ((user.role || user.Role || "user") !== "admin") {
-          localStorage.removeItem("tvohh_admin_session");
-          setAuthUser(null);
-        }
-      })
-      .catch(() => {
-        localStorage.removeItem("tvohh_admin_session");
-        setAuthUser(null);
-      });
+    if (!stored || !stored.EmployeeID) return;
+    if ((stored.role || stored.Role || "user") !== "admin") {
+      localStorage.removeItem("tvohh_admin_session");
+      setAuthUser(null);
+    }
   }, []);
 
   // ── Login ──────────────────────────────────────────────────
@@ -219,8 +242,8 @@ function AdminApp() {
 
   useEffect(() => {
     if (!authUser) return;
-    if (activeTab === "users") loadUsers();
-    if (activeTab === "logs")  loadLogs();
+    if (activeTab === "users")   loadUsers();
+    if (activeTab === "logs" || activeTab === "anomaly") loadLogs();
   }, [authUser, activeTab]);
 
   // ── Delete User + ดึง logs สด แล้วลบทั้งหมดของ user ──────────
@@ -336,11 +359,11 @@ function AdminApp() {
   // ADMIN DASHBOARD
   // ════════════════════════════════════════════════════════════
   const tabs = [
-    { id: "users",  icon: "👥", label: "จัดการ Users" },
-    { id: "adduser",icon: "➕", label: "เพิ่ม User" },
-    { id: "logs",   icon: "📋", label: "Logs ทั้งหมด" },
-    { id: "goals",     icon: "🎯",  label: "เป้าหมาย" },
-    { id: "stats",  icon: "📊", label: "สถิติ" },
+    { id: "users",   icon: "👥", label: "จัดการ Users" },
+    { id: "adduser", icon: "➕", label: "เพิ่ม User" },
+    { id: "logs",    icon: "📋", label: "Logs ทั้งหมด" },
+    { id: "anomaly", icon: "🔍", label: "ตรวจสอบ" },
+    { id: "stats",   icon: "📊", label: "สถิติ" },
   ];
 
   return (
@@ -363,7 +386,7 @@ function AdminApp() {
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{ background: "#ffffff25", borderRadius: 20, padding: "4px 12px", fontSize: 12, color: "#fff", fontFamily: "'Sarabun'" }}>
-            🧑 {authUser.displayName}
+            🧑 {authUser.DisplayName}
           </div>
           <button onClick={handleLogout} style={{ background: "#ffffff25", border: "1px solid #ffffff50", borderRadius: 8, padding: "5px 12px", cursor: "pointer", fontSize: 12, color: "#fff", fontFamily: "'Sarabun'" }}>ออก</button>
           <a href="index.html" style={{ background: "#ffffff25", border: "1px solid #ffffff50", borderRadius: 8, padding: "5px 12px", cursor: "pointer", fontSize: 12, color: "#fff", fontFamily: "'Sarabun'", textDecoration: "none" }}>← แอพ</a>
@@ -523,55 +546,80 @@ function AdminApp() {
         )}
 
 
-        {/* ── GOALS TAB ── */}
-        {activeTab === "goals" && (
-          <div>
-            {/* ฟอร์มตั้งเป้าหมาย */}
-            <div className="card" style={{ padding: 22, marginBottom: 16 }}>
-              <h3 style={{ fontFamily: "'Prompt'", fontWeight: 700, fontSize: 15, color: GREEN, marginBottom: 6 }}>🎯 ตั้งเป้าหมายให้พนักงาน</h3>
-              <p style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 18 }}>เป้าหมายแคลอรี่ต่อสัปดาห์ จะแสดงใน Profile ของแต่ละคน</p>
-              <label>เลือกพนักงาน</label>
-              <select className="inp" style={{ marginBottom: 14 }} value={goalUser}
-                onChange={e => { setGoalUser(e.target.value); setGoalValue(adminGoals[e.target.value]?.weekly || 5000); }}>
-                <option value="">-- เลือกพนักงาน --</option>
-                {users.map(u => <option key={u.EmployeeID} value={u.DisplayName}>{u.DisplayName} ({u.GroupName})</option>)}
-              </select>
-              <label>เป้าหมาย: <span style={{ color: GREEN, fontWeight: 700 }}>{goalValue.toLocaleString()} kcal / สัปดาห์</span></label>
-              <input type="range" min={500} max={10000} step={250} value={goalValue}
-                onChange={e => setGoalValue(+e.target.value)}
-                style={{ width: "100%", accentColor: GREEN, marginBottom: 14 }} />
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#9CA3AF", marginBottom: 16, marginTop: -10 }}>
-                <span>500</span><span>2,500</span><span>5,000</span><span>7,500</span><span>10,000</span>
-              </div>
-              <button className="btn-g" onClick={saveGoal} disabled={!goalUser} style={{ width: "100%", padding: 12, fontSize: 14, opacity: goalUser ? 1 : 0.4 }}>
-                💾 บันทึกเป้าหมาย
-              </button>
-              {!users.length && <div style={{ marginTop: 12, fontSize: 12, color: "#F59E0B" }}>⚠️ โหลด Users ก่อน — ไปที่แท็บ "จัดการ Users" แล้วกด รีเฟรช</div>}
-            </div>
 
-            {/* รายการเป้าหมายที่ตั้งไว้ */}
+        {/* ── ANOMALY TAB ── */}
+        {activeTab === "anomaly" && (() => {
+          const anomalies = logs.filter(l => isCalAnomaly(l.exercise, l.duration, l.calories));
+          return (
             <div className="card" style={{ padding: 22 }}>
-              <h4 style={{ fontFamily: "'Prompt'", fontWeight: 700, fontSize: 14, color: GREEN, marginBottom: 14 }}>📋 เป้าหมายที่ตั้งไว้</h4>
-              {Object.keys(adminGoals).length === 0
-                ? <div style={{ color: "#9CA3AF", fontSize: 13, textAlign: "center", padding: 20 }}>ยังไม่มีเป้าหมาย</div>
-                : Object.entries(adminGoals).map(([name, g]) => (
-                  <div key={name} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 0", borderBottom: "1px solid #F3F4F6" }}>
-                     
-<div style={{ width: 36, height: 36, borderRadius: "50%", background: "#DCFCE7", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>👤</div>; })()}
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 700, fontSize: 14 }}>{name}</div>
-                      <div style={{ fontSize: 12, color: "#16A34A", fontWeight: 600 }}>{(g.weekly || 0).toLocaleString()} kcal / สัปดาห์</div>
-                    </div>
-                    <button onClick={() => { setGoalUser(name); setGoalValue(g.weekly || 5000); setActiveTab("goals"); }}
-                      style={{ background: "#DCFCE7", border: "none", borderRadius: 8, padding: "5px 12px", cursor: "pointer", color: GREEN, fontSize: 12, fontFamily: "'Sarabun'" }}>✏️ แก้ไข</button>
-                    <button className="btn-r" onClick={() => deleteGoal(name)} style={{ padding: "5px 10px", fontSize: 12 }}>🗑️</button>
-                  </div>
-                ))
-              }
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
+                <div>
+                  <h3 style={{ fontFamily: "'Prompt'", fontWeight: 700, color: "#D97706", fontSize: 15 }}>🔍 Log ที่มีแคลผิดปกติ</h3>
+                  <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 3 }}>แคลที่บันทึก &gt; ค่าสูงสุดมาตรฐาน × 1.5</div>
+                </div>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  {anomalies.length > 0 && (
+                    <span style={{ background: "#FEF3C7", color: "#D97706", borderRadius: 20, padding: "3px 12px", fontSize: 12, fontWeight: 700 }}>
+                      ⚠️ {anomalies.length} รายการ
+                    </span>
+                  )}
+                  <button className="btn-g" onClick={loadLogs} disabled={loading}>{loading ? "..." : "🔄"}</button>
+                </div>
+              </div>
+              {loading ? (
+                <div style={{ textAlign: "center", color: "#9CA3AF", padding: "30px 0", fontSize: 13 }}>กำลังโหลด...</div>
+              ) : anomalies.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "40px 0" }}>
+                  <div style={{ fontSize: 40, marginBottom: 8 }}>✅</div>
+                  <div style={{ color: "#16A34A", fontWeight: 700, fontSize: 14 }}>ไม่พบ Log ที่ผิดปกติ</div>
+                  <div style={{ color: "#9CA3AF", fontSize: 12, marginTop: 4 }}>ค่าแคลทุก Log อยู่ในช่วงมาตรฐาน</div>
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  {anomalies.map((l, i) => {
+                    const range = calcCalRange(l.exercise, l.duration);
+                    const overPct = range ? Math.round((l.calories / range.max - 1) * 100) : 0;
+                    return (
+                      <div key={i} style={{ background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 12, padding: "14px 16px", display: "flex", gap: 12, alignItems: "flex-start" }}>
+                        {l.photo && (
+                          <img src={l.photo} alt="" style={{ width: 56, height: 56, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />
+                        )}
+                        {!l.photo && (
+                          <div style={{ width: 56, height: 56, borderRadius: 8, background: "#FEF3C7", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, flexShrink: 0 }}>📷</div>
+                        )}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 4 }}>
+                            <div>
+                              <span style={{ fontWeight: 700, fontSize: 14 }}>{l.user}</span>
+                              <span style={{ color: "#6B7280", fontSize: 12, marginLeft: 8 }}>{l.group}</span>
+                            </div>
+                            <span style={{ background: "#FEE2E2", color: "#DC2626", borderRadius: 20, padding: "2px 10px", fontSize: 11, fontWeight: 700 }}>
+                              +{overPct}% เกินมาตรฐาน
+                            </span>
+                          </div>
+                          <div style={{ fontSize: 13, marginTop: 6 }}>
+                            <span style={{ marginRight: 10 }}>{l.exercise} · {l.duration} นาที</span>
+                            <span style={{ color: "#D97706", fontWeight: 700 }}>{l.calories.toLocaleString()} kcal</span>
+                            {range && (
+                              <span style={{ color: "#9CA3AF", fontSize: 11, marginLeft: 8 }}>
+                                (มาตรฐาน {range.min.toLocaleString()}–{range.max.toLocaleString()} kcal)
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 4 }}>
+                            {l.date} · {l.createdAt ? new Date(l.createdAt).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) : ''}
+                          </div>
+                          {l.note && <div style={{ fontSize: 12, color: "#6B7280", marginTop: 4, fontStyle: "italic" }}>"{l.note}"</div>}
+                        </div>
+                        <button className="btn-r" onClick={() => deleteLog(l.id)} style={{ flexShrink: 0, fontSize: 12 }}>🗑</button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-          </div>
-        )}
-
+          );
+        })()}
 
         {/* ── STATS TAB ── */}
         {activeTab === "stats" && (
