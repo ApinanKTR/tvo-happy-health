@@ -27,7 +27,7 @@ const lsGet = (key, fallback) => { try { const v = localStorage.getItem(key); re
 const lsSet = (key, val) => { try { localStorage.setItem(key, JSON.stringify(val)); } catch(_e) {} };
 
 // บีบอัดรูปให้ไม่เกิน 100KB — ลด quality ซ้ำจนถึงขนาดที่กำหนด
-const resizeImage = (file, maxPx = 500, maxBytes = 100000) => new Promise(resolve => {
+const resizeImage = (file, maxPx = 500, maxBytes = 150000) => new Promise(resolve => {
   const img = new Image();
   const blobUrl = URL.createObjectURL(file);
   img.onload = () => {
@@ -577,7 +577,7 @@ const handleRegister = async () => {
     }
   };
   const fbShare = (text) => {
-    const fbText = text + "\n\n#TVOCal2026 #สุขภาพดีทีมTVO #TVOHealthChallenge2026";
+    const fbText = text + "\n\n#TVOCaloriesChallenge #สุขภาพดีทีมTVO #TVOHappyHealth2026";
     // copy ข้อความก่อน แล้วเปิด Facebook (paste ได้ทันที)
     navigator.clipboard.writeText(fbText).catch(() => {});
     const fbUrl = "https://www.facebook.com/";
@@ -700,7 +700,7 @@ const handleRegister = async () => {
           <div style={{ width:88, height:88, borderRadius:28, background:"#FFFFFF", boxShadow:"0 12px 40px #16A34A35", margin:"0 auto 18px", display:"flex", alignItems:"center", justifyContent:"center", overflow:"hidden" }}>
             <img src="logo.png" alt="TVO" style={{ width:72, height:72, objectFit:"contain" }} />
           </div>
-          <h1 style={{ fontFamily:"'Prompt'", fontWeight:900, fontSize:26, background:"linear-gradient(135deg,#15803D,#22C55E)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent", marginBottom:6 }}>TVO Cal</h1>
+          <h1 style={{ fontFamily:"'Prompt'", fontWeight:900, fontSize:26, background:"linear-gradient(135deg,#15803D,#22C55E)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent", marginBottom:6 }}>TVO Calories Challenge</h1>
           <p style={{ fontSize:13, color:"#4B5563" }}>ร่วมพิชิตเป้าหมายสุขภาพปี 2026 💪</p>
         </div>
 
@@ -913,13 +913,16 @@ const handleRegister = async () => {
               <div style={{ width:64, height:64, borderRadius:20, background:"linear-gradient(135deg,#F0FDF4,#DCFCE7)", margin:"0 auto 12px", display:"flex", alignItems:"center", justifyContent:"center", fontSize:32, boxShadow:"0 4px 16px #16A34A20" }}>✅</div>
               <div style={{ fontFamily:"'Prompt'", fontWeight:700, fontSize:18, color:"#111827" }}>ยืนยันการบันทึก?</div>
             </div>
-            <div style={{ background:"#F0FDF4", borderRadius:14, padding:"14px 16px", marginBottom:20, fontSize:13 }}>
+            <div style={{ background:"#F0FDF4", borderRadius:14, padding:"14px 16px", marginBottom:14, fontSize:13 }}>
               {[["กิจกรรม",form.exercise],["ระยะเวลา",`${form.duration} นาที`],["แคลอรี่",`${form.customCal} kcal 🔥`],["วันที่",form.date?new Date(form.date+"T00:00:00").toLocaleDateString("th-TH"):new Date().toLocaleDateString("th-TH")]].map(([k,v])=>(
                 <div key={k} style={{ display:"flex", justifyContent:"space-between", marginBottom:8 }}>
                   <span style={{ color:"#6B7280" }}>{k}</span>
                   <span style={{ fontWeight:700, color: k==="แคลอรี่"?"#16A34A":"#111827", fontSize: k==="แคลอรี่"?15:13 }}>{v}</span>
                 </div>
               ))}
+            </div>
+            <div style={{ background:"#FFF7ED", border:"1px solid #FED7AA", borderRadius:12, padding:"11px 14px", marginBottom:20, fontSize:12, color:"#92400E", lineHeight:1.6 }}>
+              📋 ข้าพเจ้าขอรับรองว่าสถิติดังกล่าวเป็นสถิติที่ออกกำลังกายด้วยตนเองจริง และยินดีให้ตรวจสอบความถูกต้องได้
             </div>
             <div style={{ display:"flex", gap:10 }}>
               <button className="v2-btn-ghost" onClick={()=>setShowSaveConfirm(false)} style={{ flex:1, padding:13, fontSize:14 }}>ยกเลิก</button>
@@ -979,7 +982,7 @@ const handleRegister = async () => {
               <img src="logo.png" alt="TVO" style={{ width:32, height:32, objectFit:"contain" }} />
             </div>
             <div>
-              <div style={{ fontFamily:"'Prompt'", fontWeight:900, fontSize:17, background:"linear-gradient(135deg,#15803D,#22C55E)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent", lineHeight:1.2 }}>TVO Cal</div>
+              <div style={{ fontFamily:"'Prompt'", fontWeight:900, fontSize:17, background:"linear-gradient(135deg,#15803D,#22C55E)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent", lineHeight:1.2 }}>TVO Calories Challenge</div>
               <div style={{ fontSize:9.5, color:"#9CA3AF", letterSpacing:1.5, textTransform:"uppercase" }}>Happy Health 2026</div>
             </div>
           </div>
@@ -1005,9 +1008,7 @@ const handleRegister = async () => {
           const totalCal = logs.reduce((s,l)=>s+l.calories,0);
           const TARGET = 1000000;
           const pct = Math.min(100, (totalCal / TARGET) * 100);
-          const calDisplay = totalCal >= 1000
-            ? (totalCal / 1000).toFixed(1) + "K"
-            : totalCal.toLocaleString();
+          const calDisplay = totalCal.toLocaleString();
           return (
             <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:10, marginBottom:22, opacity:animateIn?1:0, transition:"all .5s ease .15s" }}>
               {/* Calorie card — special with progress */}
@@ -1154,8 +1155,8 @@ const handleRegister = async () => {
                   <label style={{ fontSize:12, color:"#374151", fontWeight:700 }}>⏱️ ระยะเวลา</label>
                   <span style={{ fontSize:15, fontFamily:"'Prompt'", fontWeight:700, color:"#16A34A" }}>{form.duration} นาที</span>
                 </div>
-                <input type="range" min={15} max={240} step={1} value={form.duration} onChange={e=>setForm(p=>({...p,duration:+e.target.value}))} style={{ width:"100%", accentColor:"#16A34A", borderRadius:999, border:"none", background:"transparent" }} />
-                <div style={{ display:"flex", justifyContent:"space-between", fontSize:10, color:"#9CA3AF", marginTop:4 }}><span>15 น.</span><span>240 น.</span></div>
+                <input type="range" min={15} max={480} step={1} value={form.duration} onChange={e=>setForm(p=>({...p,duration:+e.target.value}))} style={{ width:"100%", accentColor:"#16A34A", borderRadius:999, border:"none", background:"transparent" }} />
+                <div style={{ display:"flex", justifyContent:"space-between", fontSize:10, color:"#9CA3AF", marginTop:4 }}><span>15 น.</span><span>480 น.</span></div>
               </div>
 
               {/* Note */}
@@ -1473,23 +1474,29 @@ const handleRegister = async () => {
 
             {/* Podium top 3 */}
             {userStats.length>=3&&(
-              <div style={{ display:"flex", alignItems:"flex-end", justifyContent:"center", gap:8, marginBottom:26, height:150 }}>
-                {[1,0,2].map(idx=>{
-                  const u=userStats[idx]; if(!u) return null;
-                  const h=[115,145,92][[1,0,2].indexOf(idx)];
-                  const mc=medalColors[idx];
-                  const rankAv=avatars[u.user];
-                  return (
-                    <div key={u.user} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center" }}>
-                      {rankAv?<img src={rankAv} style={{ width:36, height:36, borderRadius:"50%", objectFit:"cover", border:`2.5px solid ${mc}`, marginBottom:3, cursor:"pointer" }} onClick={()=>{ setProfileUser(u.user); setProfileFilter("all"); setActiveTab("profile"); }} alt="av" />:null}
-                      <div onClick={()=>{ setProfileUser(u.user); setProfileFilter("all"); setActiveTab("profile"); }} style={{ fontSize:11, fontFamily:"'Prompt'", fontWeight:700, color:mc, marginBottom:2, textAlign:"center", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:"100%", padding:"0 4px", cursor:"pointer" }}>{u.user}</div>
-                      <div style={{ fontSize:10, color:"#9CA3AF", marginBottom:4, textAlign:"center" }}>{u.totalCal.toLocaleString()} kcal</div>
-                      <div style={{ width:"100%", height:h, background:`linear-gradient(180deg,${mc}22,${mc}0e)`, border:`1.5px solid ${mc}33`, borderRadius:"10px 10px 0 0", display:"flex", alignItems:"flex-start", justifyContent:"center", paddingTop:8 }}>
-                        <span style={{ fontSize:24 }}>{["🥇","🥈","🥉"][idx]}</span>
+              <div className="v2-card" style={{ padding:"16px 12px 0", marginBottom:20 }}>
+                <div style={{ display:"flex", alignItems:"flex-end", justifyContent:"center", gap:6 }}>
+                  {[1,0,2].map(idx=>{
+                    const u=userStats[idx]; if(!u) return null;
+                    const posIdx=[1,0,2].indexOf(idx);
+                    const barH=[100,130,80][posIdx];
+                    const mc=medalColors[idx];
+                    const rankAv=avatars[u.user];
+                    return (
+                      <div key={u.user} onClick={()=>{ setProfileUser(u.user); setProfileFilter("all"); setActiveTab("profile"); }}
+                        style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", cursor:"pointer" }}>
+                        {rankAv
+                          ?<img src={rankAv} style={{ width:40, height:40, borderRadius:"50%", objectFit:"cover", border:`2.5px solid ${mc}`, marginBottom:4, flexShrink:0 }} alt="av" />
+                          :<div style={{ width:40, height:40, borderRadius:"50%", background:mc+"22", border:`2.5px solid ${mc}`, marginBottom:4, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18 }}>👤</div>}
+                        <div style={{ fontSize:11, fontFamily:"'Prompt'", fontWeight:700, color:mc, marginBottom:2, textAlign:"center", width:"100%", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", padding:"0 4px" }}>{u.user}</div>
+                        <div style={{ fontSize:10, color:"#6B7280", marginBottom:6, textAlign:"center", fontWeight:600 }}>{u.totalCal.toLocaleString()}</div>
+                        <div style={{ width:"100%", height:barH, background:`linear-gradient(180deg,${mc}30,${mc}10)`, border:`1.5px solid ${mc}44`, borderRadius:"10px 10px 0 0", display:"flex", alignItems:"flex-start", justifyContent:"center", paddingTop:10 }}>
+                          <span style={{ fontSize:26 }}>{["🥇","🥈","🥉"][idx]}</span>
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
             )}
 
@@ -1530,7 +1537,7 @@ const handleRegister = async () => {
         {activeTab==="share" && (
           <div className="v2-in-anim">
             <h2 className="v2-section-title">📤 แชร์ผลลัพธ์</h2>
-            <div style={{ display:"flex", gap:8, marginBottom:20 }}>
+            <div style={{ display:"flex", gap:8, marginBottom:20, flexWrap:"wrap" }}>
               {[{id:"myActivity",label:"📱 กิจกรรมฉัน"},{id:"totalCal",label:"🔥 Cal สะสม"},{id:"leaderboard",label:"🏆 อันดับ"}].map(s=>(
                 <button key={s.id} onClick={()=>setShareSection(s.id)} className={`v2-share-tab ${shareSection===s.id?"v2-share-on":""}`}>{s.label}</button>
               ))}
@@ -1564,7 +1571,7 @@ const handleRegister = async () => {
                 <button className="v2-btn-primary" onClick={()=>{ const lines=myLogs.slice(0,5).map(l=>`• ${l.exercise} ${l.duration} นาที 🔥 ${l.calories} kcal`).join("\n"); const total=myLogs.reduce((s,l)=>s+l.calories,0); fbShare(`🌿 ${authUser?.displayName} ออกกำลังกายวันนี้!\n${lines}\n\n💪 รวม ${total.toLocaleString()} kcal จาก ${myLogs.length} กิจกรรม`); }} style={{ width:"100%", padding:13, fontSize:14, display:"flex", alignItems:"center", justifyContent:"center", gap:8, marginBottom:8 }}>
                   <span style={{ fontSize:18 }}>👍</span> แชร์บน Facebook
                 </button>
-                {myLogs.length>0&&<button className="v2-btn-ghost" onClick={()=>{ const lines=myLogs.slice(0,5).map(l=>`• ${l.exercise} ${l.duration} นาที 🔥 ${l.calories} kcal`).join("\n"); const total=myLogs.reduce((s,l)=>s+l.calories,0); navigator.clipboard.writeText(`🌿 ${authUser?.displayName} ออกกำลังกายวันนี้!\n${lines}\n\n💪 รวม ${total.toLocaleString()} kcal\n#TVOCal2026`).then(()=>toast("คัดลอกแล้ว! 📋")); }} style={{ width:"100%", padding:12, fontSize:13 }}>📋 คัดลอกข้อความ</button>}
+                {myLogs.length>0&&<button className="v2-btn-ghost" onClick={()=>{ const lines=myLogs.slice(0,5).map(l=>`• ${l.exercise} ${l.duration} นาที 🔥 ${l.calories} kcal`).join("\n"); const total=myLogs.reduce((s,l)=>s+l.calories,0); navigator.clipboard.writeText(`🌿 ${authUser?.displayName} ออกกำลังกายวันนี้!\n${lines}\n\n💪 รวม ${total.toLocaleString()} kcal\n#TVOCaloriesChallenge #สุขภาพดีทีมTVO #TVOHappyHealth2026`).then(()=>toast("คัดลอกแล้ว! 📋")); }} style={{ width:"100%", padding:12, fontSize:13 }}>📋 คัดลอกข้อความ</button>}
               </div>
             )}
 
@@ -1590,7 +1597,7 @@ const handleRegister = async () => {
                   <button className="v2-btn-primary" onClick={()=>fbShare(`🔥 ${authUser?.displayName} สะสมแคลอรี่แล้ว ${(myStats?.totalCal||0).toLocaleString()} kcal!\nออกกำลังกาย ${myStats?.sessions||0} ครั้ง · ทีม ${authUser?.group}\n🏅 อันดับที่ ${userStats.findIndex(u=>u.user===authUser?.displayName)+1}`)} style={{ flex:1, padding:13, fontSize:13, display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
                     <span>👍</span> Facebook
                   </button>
-                  <button className="v2-btn-ghost" onClick={()=>{ const text=`🔥 ${authUser?.displayName} สะสม ${(myStats?.totalCal||0).toLocaleString()} kcal!\n${myStats?.sessions||0} ครั้ง · ทีม ${authUser?.group} · #${userStats.findIndex(u=>u.user===authUser?.displayName)+1}\n#TVOCal2026`; navigator.clipboard.writeText(text).then(()=>toast("คัดลอกแล้ว! 📋")); }} style={{ flex:1, padding:13, fontSize:13 }}>📋 คัดลอก</button>
+                  <button className="v2-btn-ghost" onClick={()=>{ const text=`🔥 ${authUser?.displayName} สะสม ${(myStats?.totalCal||0).toLocaleString()} kcal!\n${myStats?.sessions||0} ครั้ง · ทีม ${authUser?.group} · #${userStats.findIndex(u=>u.user===authUser?.displayName)+1}\n#TVOCaloriesChallenge`; navigator.clipboard.writeText(text).then(()=>toast("คัดลอกแล้ว! 📋")); }} style={{ flex:1, padding:13, fontSize:13 }}>📋 คัดลอก</button>
                 </div>
               </div>
             )}
@@ -1614,10 +1621,10 @@ const handleRegister = async () => {
                   </div>
                 </div>
                 <div style={{ display:"flex", gap:9, marginBottom:16 }}>
-                  <button className="v2-btn-primary" onClick={()=>{ const lines=userStats.slice(0,3).map((u,i)=>`${["🥇","🥈","🥉"][i]} ${u.user} - ${u.totalCal.toLocaleString()} kcal`).join("\n"); fbShare(`🏆 TVO Cal 2026!\n${lines}\n💪 ร่วมพิชิตเป้าหมายสุขภาพ TVO!`); }} style={{ flex:1, padding:13, fontSize:13, display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
+                  <button className="v2-btn-primary" onClick={()=>{ const lines=userStats.slice(0,3).map((u,i)=>`${["🥇","🥈","🥉"][i]} ${u.user} - ${u.totalCal.toLocaleString()} kcal`).join("\n"); fbShare(`🏆 TVO Calories Challenge 2026!\n${lines}\n💪 ร่วมพิชิตเป้าหมายสุขภาพ TVO!`); }} style={{ flex:1, padding:13, fontSize:13, display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
                     <span>👍</span> Facebook
                   </button>
-                  <button className="v2-btn-ghost" onClick={()=>{ const lines=userStats.slice(0,3).map((u,i)=>`${["🥇","🥈","🥉"][i]} ${u.user} - ${u.totalCal.toLocaleString()} kcal`).join("\n"); navigator.clipboard.writeText(`🏆 TVO Cal 2026!\n${lines}\n💪 ร่วมพิชิตเป้าหมายสุขภาพ TVO!\n#TVOCal2026`).then(()=>toast("คัดลอกแล้ว! 📋")); }} style={{ flex:1, padding:13, fontSize:13 }}>📋 คัดลอก</button>
+                  <button className="v2-btn-ghost" onClick={()=>{ const lines=userStats.slice(0,3).map((u,i)=>`${["🥇","🥈","🥉"][i]} ${u.user} - ${u.totalCal.toLocaleString()} kcal`).join("\n"); navigator.clipboard.writeText(`🏆 TVO Calories Challenge 2026!\n${lines}\n💪 ร่วมพิชิตเป้าหมายสุขภาพ TVO!\n#TVOCaloriesChallenge #สุขภาพดีทีมTVO #TVOHappyHealth2026`).then(()=>toast("คัดลอกแล้ว! 📋")); }} style={{ flex:1, padding:13, fontSize:13 }}>📋 คัดลอก</button>
                 </div>
                 <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
                   {userStats.map((u,i)=>{
@@ -1649,7 +1656,7 @@ const handleRegister = async () => {
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:18 }}>
               <div>
                 <div style={{ fontFamily:"'Prompt'", fontWeight:800, fontSize:18, background:"linear-gradient(135deg,#16A34A,#4ADE80)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>⚙️ Admin Panel</div>
-                <div style={{ fontSize:11, color:"#9CA3AF", marginTop:2 }}>จัดการระบบ TVO Cal</div>
+                <div style={{ fontSize:11, color:"#9CA3AF", marginTop:2 }}>จัดการระบบ TVO Calories Challenge</div>
               </div>
               <button className="v2-btn-ghost" onClick={()=>{ setAdminAuthed(false); setActiveTab("dashboard"); }} style={{ padding:"8px 14px", fontSize:11 }}>🔓 ออก</button>
             </div>
