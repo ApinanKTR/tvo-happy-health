@@ -6,11 +6,11 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="TVO Cal" />
+  <meta name="apple-mobile-web-app-title" content="TVO Calories Challenge" />
   <meta name="theme-color" content="#16A34A" />
   <link rel="apple-touch-icon" href="logo.png" />
   <link rel="icon" type="image/png" href="logo.png" />
-  <title>TVO Cal 🏃</title>
+  <title>TVO Calories Challenge 🏃</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
@@ -26,8 +26,8 @@
 const lsGet = (key, fallback) => { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch(_e) { return fallback; } };
 const lsSet = (key, val) => { try { localStorage.setItem(key, JSON.stringify(val)); } catch(_e) {} };
 
-// บีบอัดรูปให้ไม่เกิน 100KB — ลด quality ซ้ำจนถึงขนาดที่กำหนด
-const resizeImage = (file, maxPx = 500, maxBytes = 150000) => new Promise(resolve => {
+// บีบอัดรูปให้ไม่เกิน 300KB — ลด quality ซ้ำจนถึงขนาดที่กำหนด
+const resizeImage = (file, maxPx = 800, maxBytes = 300000) => new Promise(resolve => {
   const img = new Image();
   const blobUrl = URL.createObjectURL(file);
   img.onload = () => {
@@ -639,13 +639,18 @@ const handleRegister = async () => {
     navigator.clipboard.writeText(url).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
   };
 
+  // ใช้ทีมปัจจุบันจาก user_profiles เสมอ (ไม่ใช้ทีมที่เก็บใน log เก่า)
+  const userGroupMap = Object.fromEntries(allUsers.map(u => [u.user, u.group]));
+  const currentGroup = (log) => userGroupMap[log.user] || log.group;
+
   const groupStats = groups.map(g => {
-    const gl = logs.filter(l => l.group === g.name);
+    const gl = logs.filter(l => currentGroup(l) === g.name);
     return { ...g, totalCal: gl.reduce((s, l) => s + l.calories, 0), totalMin: gl.reduce((s, l) => s + l.duration, 0), memberCount: [...new Set(gl.map(l => l.user))].length };
   }).sort((a, b) => b.totalCal - a.totalCal);
 
   const userStats = Object.values(logs.reduce((acc, l) => {
-    if (!acc[l.user]) acc[l.user] = { user: l.user, group: l.group, totalCal: 0, sessions: 0 };
+    const grp = currentGroup(l);
+    if (!acc[l.user]) acc[l.user] = { user: l.user, group: grp, totalCal: 0, sessions: 0 };
     acc[l.user].totalCal += l.calories; acc[l.user].sessions++; return acc;
   }, {})).sort((a, b) => b.totalCal - a.totalCal);
 
