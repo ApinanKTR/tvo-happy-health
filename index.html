@@ -435,7 +435,7 @@ const handleAdd = async () => {
       finalPhotoUrl = uploadedUrl || null; // null ถ้า upload ล้มเหลว
     }
 
-    const calories = form.customCal || 0;
+    const calories = Math.min(9999, form.customCal || 0);
     const newLog = {
       id: String(Date.now()),
       spId: "",
@@ -1250,7 +1250,7 @@ const handleRegister = async () => {
                 </div>
                 <label style={{ fontSize:12, color:"#374151", display:"block", marginBottom:10, fontWeight:700 }}>🔥 กรอก kcal</label>
                 <div style={{ display:"flex", alignItems:"center", gap:12, background:"#F0FDF4", borderRadius:18, padding:"8px 16px", border:"1.5px solid #D1FAE5" }}>
-                  <input type="number" min={1} max={9999} value={form.customCal} onChange={e=>setForm(p=>({...p,customCal:+e.target.value}))}
+                  <input type="number" min={1} max={9999} value={form.customCal} onChange={e=>setForm(p=>({...p,customCal:Math.min(9999,Math.max(1,+e.target.value||1))}))}
                     style={{ flex:1, padding:"8px 4px", background:"transparent", border:"none", fontSize:28, fontWeight:800, color:"#16A34A", textAlign:"center", boxShadow:"none" }} />
                   <span style={{ fontSize:14, color:"#6B7280", fontWeight:700 }}>kcal</span>
                 </div>
