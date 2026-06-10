@@ -307,24 +307,6 @@ function CalorieTracker() {
   const [spLastSync, setSpLastSync] = useState(null);
   const [dashSort, setDashSort] = useState("newest");
 
-  // ── Countdown ก่อนเปิดรับข้อมูล ──────────────────────────────
-  const OPEN_TIME = new Date('2026-06-11T00:15:00+07:00');
-  const [now, setNow] = useState(() => new Date());
-  useEffect(() => {
-    if (new Date() >= OPEN_TIME) return;
-    const t = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(t);
-  }, []);
-  const isOpen = now >= OPEN_TIME;
-  const countdown = (() => {
-    if (isOpen) return null;
-    const diff = OPEN_TIME - now;
-    const h = Math.floor(diff / 3600000);
-    const m = Math.floor((diff % 3600000) / 60000);
-    const s = Math.floor((diff % 60000) / 1000);
-    return { h, m, s, total: diff };
-  })();
-
   // Add form
   const [form, setForm] = useState(() => { const s = lsGet("tvohh_session", null); const sg = s?.group; const cleanGrp = sg?.Value ?? (typeof sg === "string" && !sg.trim().startsWith("{") ? sg : "A : ใส่ใจลูกค้า"); return { user: s?.displayName || "", group: cleanGrp, exercise: "วิ่ง", duration: 30, date: new Date().toISOString().split("T")[0], note: "", photo: null, customCal: 300 }; });
   const [showAppLinks, setShowAppLinks] = useState(false);
@@ -385,6 +367,13 @@ function CalorieTracker() {
   }, []);
   // (ลบ useEffect ที่ fetch ซ้ำตอน connected — mount ครั้งแรกดึงไปแล้ว ไม่ต้องซ้ำ)
 
+  // เมื่อ allUsers อัปเดต → remap group ใน logs ทั้งหมดให้ตรงกับทีมปัจจุบัน
+  useEffect(() => {
+    if (!allUsers.length) return;
+    const map = Object.fromEntries(allUsers.map(u => [u.user, u.group]));
+    setLogs(prev => prev.map(l => ({ ...l, group: map[l.user] || l.group })));
+  }, [allUsers]);
+
   // ดึง allUsers ใหม่เมื่อเปิด tab สมาชิก — แต่ cooldown 30 วิ ไม่ fetch ซ้ำถี่เกินไป
   const lastMembersFetchRef = useRef(0);
   useEffect(() => {
@@ -405,7 +394,15 @@ function CalorieTracker() {
     setSpStatus("connecting");
     const t = setTimeout(() => {
       sbFetchLogs()
-        .then(d => { if(d.length>0)setLogs(d); setSpStatus("connected"); setSpLastSync(new Date().toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit"})); })
+        .then(d => {
+          if (d.length > 0) {
+            // remap group จาก allUsers ที่โหลดไว้ (ป้องกันทีมเก่าค้างใน log)
+            const map = Object.fromEntries((lsGet("tvohh_allusers",[]) || []).map(u => [u.user, u.group]));
+            setLogs(d.map(l => ({ ...l, group: map[l.user] || l.group })));
+          }
+          setSpStatus("connected");
+          setSpLastSync(new Date().toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit"}));
+        })
         .catch(() => setSpStatus("error"));
     }, 500);
     return () => clearTimeout(t);
@@ -692,7 +689,7 @@ const handleRegister = async () => {
 
   const tabs = [
     { id: "dashboard", icon: "🏠", label: "หน้าหลัก" },
-    { id: "add",       icon: !isOpen ? "⏳" : dailyFull ? "🔒" : "➕", label: "บันทึก" },
+    { id: "add",       icon: dailyFull ? "🔒" : "➕", label: "บันทึก" },
     { id: "profile",   icon: "👤", label: "โปรไฟล์" },
     { id: "group",     icon: "👥", label: "กลุ่ม" },
     { id: "members",   icon: "🏅", label: "สมาชิก" },
@@ -1146,7 +1143,9 @@ const handleRegister = async () => {
                         <div style={{ width:28, height:28, borderRadius:8, background:`${color}22`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, margin:"0 auto 4px", overflow:"hidden" }}>
                           {ex?.image?<img src={ex.image} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} />:(ex?.icon||"🏃")}
                         </div>
-                        <div style={{ fontFamily:"'Prompt'", fontWeight:800, fontSize:18, color, lineHeight:1 }}>{log.calories}</div>
+                        <div style={{ fontFamily:"'Prompt'", fontWeight:800, fontSize:18, color, lineHeight:1 }}>
+                          {log.calories}{isCalAnomaly(log.exercise,log.duration,log.calories)&&<span style={{ fontSize:14, marginLeft:2 }} title="แคลสูงกว่ามาตรฐาน">👀</span>}
+                        </div>
                         <div style={{ fontSize:9.5, color:"#9CA3AF", marginTop:2 }}>kcal</div>
                       </div>
                     </div>
@@ -1159,32 +1158,7 @@ const handleRegister = async () => {
         )}
 
         {/* ───── ADD ───── */}
-        {activeTab==="add" && !isOpen && (
-          <div className="v2-in-anim">
-            <div className="v2-card" style={{ padding:28, textAlign:"center" }}>
-              <div style={{ fontSize:52, marginBottom:12 }}>⏳</div>
-              <div style={{ fontFamily:"'Prompt'", fontWeight:900, fontSize:18, color:"#16A34A", marginBottom:6 }}>
-                เปิดรับข้อมูลในอีก...
-              </div>
-              <div style={{ fontFamily:"'Prompt'", fontWeight:900, fontSize:48, color:"#111827", letterSpacing:2, marginBottom:4 }}>
-                {String(countdown.h).padStart(2,"0")}
-                <span style={{ color:"#9CA3AF", fontSize:32 }}>:</span>
-                {String(countdown.m).padStart(2,"0")}
-                <span style={{ color:"#9CA3AF", fontSize:32 }}>:</span>
-                {String(countdown.s).padStart(2,"0")}
-              </div>
-              <div style={{ fontSize:12, color:"#9CA3AF", marginBottom:20 }}>ชั่วโมง : นาที : วินาที</div>
-              <div style={{ background:"#F0FDF4", border:"1px solid #BBF7D0", borderRadius:14, padding:"14px 18px", fontSize:13, color:"#374151", lineHeight:1.8 }}>
-                <div style={{ fontFamily:"'Prompt'", fontWeight:700, color:"#16A34A", marginBottom:6 }}>📢 TVO Happy Health 2026</div>
-                <div>เริ่มส่งข้อมูลแคลอรี่ได้ตั้งแต่</div>
-                <div style={{ fontWeight:700, color:"#16A34A" }}>วันที่ 11 มิถุนายน 2569 เวลา 00:15 น.</div>
-                <div style={{ marginTop:6, fontSize:12, color:"#9CA3AF" }}>กรุณารอจนครบเวลาเพื่อเริ่มบันทึกกิจกรรม</div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {activeTab==="add" && isOpen && (
+        {activeTab==="add" && (
           <div className="v2-in-anim">
             <div className="v2-card" style={{ padding:22 }}>
               <h2 className="v2-section-title">🏃 บันทึกการออกกำลังกาย</h2>
@@ -1454,7 +1428,9 @@ const handleRegister = async () => {
                               {log.photo&&<div className="v2-pthumb" onClick={()=>setZoomPhoto(log.photo)} style={{ width:30, height:30 }}><img src={log.photo} alt="" style={{ width:"100%", height:"100%", objectFit:"cover", borderRadius:8 }} /></div>}
                             </div>
                           </div>
-                          <div style={{ fontFamily:"'Prompt'", fontWeight:800, fontSize:16, color, flexShrink:0 }}>{log.calories} <span style={{ fontSize:10, color:"#9CA3AF", fontWeight:400 }}>kcal</span></div>
+                          <div style={{ fontFamily:"'Prompt'", fontWeight:800, fontSize:16, color, flexShrink:0 }}>
+                            {log.calories}{isCalAnomaly(log.exercise,log.duration,log.calories)&&<span style={{ fontSize:13, marginLeft:2 }}>👀</span>} <span style={{ fontSize:10, color:"#9CA3AF", fontWeight:400 }}>kcal</span>
+                          </div>
                         </div>
                       </div>
                     );
