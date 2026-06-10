@@ -1,0 +1,2065 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="TVO Calories Challenge" />
+  <meta name="theme-color" content="#16A34A" />
+  <link rel="apple-touch-icon" href="logo.png" />
+  <link rel="icon" type="image/png" href="logo.png" />
+  <title>TVO Calories Challenge 🏃</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>body{margin:0;padding:0;background:#F0FDF4}</style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel" data-presets="env,react">
+    const { useState, useEffect, useRef, useCallback } = React;
+
+// localStorage helpers
+const lsGet = (key, fallback) => { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch(_e) { return fallback; } };
+const lsSet = (key, val) => { try { localStorage.setItem(key, JSON.stringify(val)); } catch(_e) {} };
+
+// บีบอัดรูปให้ไม่เกิน 300KB — ลด quality ซ้ำจนถึงขนาดที่กำหนด
+const resizeImage = (file, maxPx = 800, maxBytes = 300000) => new Promise(resolve => {
+  const img = new Image();
+  const blobUrl = URL.createObjectURL(file);
+  img.onload = () => {
+    const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
+    const c = document.createElement("canvas");
+    c.width = Math.round(img.width * scale);
+    c.height = Math.round(img.height * scale);
+    c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+    URL.revokeObjectURL(blobUrl);
+    // ลด quality ซ้ำจนขนาด base64 ไม่เกิน maxBytes
+    let q = 0.8;
+    let b64 = c.toDataURL("image/jpeg", q);
+    while (b64.length * 0.75 > maxBytes && q > 0.1) {
+      q = Math.max(0.1, q - 0.1);
+      b64 = c.toDataURL("image/jpeg", q);
+    }
+    resolve(b64);
+  };
+  img.onerror = () => { URL.revokeObjectURL(blobUrl); resolve(null); };
+  img.src = blobUrl;
+});
+
+// --- เพิ่มฟังก์ชันแปลง Base64 และอัปโหลดไปยัง Storage ตรงนี้ ---
+  const base64ToBlob = (base64Str) => {
+    const parts = base64Str.split(';base64,');
+    const contentType = parts[0].split(':')[1];
+    const raw = window.atob(parts[1]);
+    const rawLength = raw.length;
+    const uInt8Array = new Uint8Array(rawLength);
+    for (let i = 0; i < rawLength; ++i) {
+      uInt8Array[i] = raw.charCodeAt(i);
+    }
+    return new Blob([uInt8Array], { type: contentType });
+  };
+
+  const uploadImageToStorage = async (base64Str, folder = 'logs') => {
+    if (!base64Str) return null;
+    try {
+      const blob = base64ToBlob(base64Str);
+      // เปลี่ยนจากโครงสร้าง folder/ ให้เป็นชื่อไฟล์แบนๆ ตรงๆ เพื่อให้เซฟลง Bucket ได้ชัวร์ๆ
+      const fileName = `${folder}-${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
+      
+      const { data, error } = await supabase.storage
+        .from('exercise-photos')
+        .upload(fileName, blob, {
+          contentType: 'image/jpeg',
+          upsert: true
+        });
+
+      if (error) throw error;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('exercise-photos')
+        .getPublicUrl(fileName);
+
+      return publicUrl;
+    } catch (err) {
+      console.error("Storage Upload Error:", err.message);
+      return null;
+    }
+  };
+
+// ─── Supabase Config ─────────────────────────────────────────
+// ⚠️ เปลี่ยน YOUR_SUPABASE_URL และ YOUR_SUPABASE_ANON_KEY ให้ตรงกับโปรเจกต์ของคุณ
+const SUPABASE_URL      = 'https://lnqtszvqglqdsdvzncbe.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxucXRzenZxZ2xxZHNkdnpuY2JlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA0NTAyODcsImV4cCI6MjA5NjAyNjI4N30.vhsbuZYK_lfnZEWbmCPmskWUk64ya1jxllRbc2_078w';
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// ─── Exercise Logs API ──────────────────────────────────────
+const sbFetchLogs = async () => {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 90);
+  const { data, error } = await supabase
+    .from('exercise_logs')
+    .select('*')
+    .gte('log_date', cutoff.toISOString().split('T')[0])
+    .order('log_date', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(500);
+  if (error) throw new Error(error.message);
+  return (data || []).map(i => ({
+    id: i.id, spId: i.id,
+    empId: i.employee_id || null,
+    user: i.user_name || '', group: i.group_name || '',
+    exercise: i.exercise || '', duration: Number(i.duration) || 0,
+    calories: Number(i.calories) || 0, date: i.log_date || '',
+    note: i.note || '', likes: Number(i.likes) || 0, photo: i.photo || null,
+  }));
+};
+
+const sbPostLog = async (log) => {
+    // บันทึกค่า photo ที่ส่งมาจาก handleAdd ซึ่งถูกแปลงเป็น URL เรียบร้อยแล้ว
+    const { data, error } = await supabase
+      .from('exercise_logs')
+      .insert({
+        employee_id: log.empId || null,
+        user_name: log.user,
+        group_name: log.group,
+        exercise: log.exercise,
+        duration: log.duration,
+        calories: log.calories,
+        log_date: log.date,
+        note: log.note || '',
+        likes: 0,
+        photo: log.photo
+      })
+      .select().single();
+      
+    if (error) throw new Error(error.message);
+    return { ...log, spId: data.id, id: data.id };
+  };
+
+const sbPatchLike = async (id, likes) => {
+  if (!id) return;
+  await supabase.from('exercise_logs').update({ likes: Number(likes) }).eq('id', id);
+};
+
+const sbRemoveLog = async (id) => {
+  if (!id) return;
+  await supabase.from('exercise_logs').delete().eq('id', id);
+};
+
+// ─── User Profiles API ───────────────────────────────────────
+const sbFetchUsersOnce = async () => {
+  const { data, error } = await supabase.from('user_profiles').select('display_name,group_name,employee_id,photo');
+  if (error) return { allUsers: [], avatars: {} };
+  const allUsers = (data||[]).map(u => ({ user: u.display_name, group: u.group_name||'', empId: u.employee_id }));
+  const avatars = {};
+  (data||[]).forEach(u => { if (u.photo) avatars[u.display_name] = u.photo; });
+  return { allUsers, avatars };
+};
+const sbFetchUserPhotos = async () => { const { avatars } = await sbFetchUsersOnce(); return avatars; };
+const sbFetchAllUsers   = async () => { const { allUsers } = await sbFetchUsersOnce(); return allUsers; };
+
+const sbRegisterUser = async (empId, displayName, group, password, photo = null) => {
+  const { data: existing } = await supabase.from('user_profiles').select('employee_id').eq('employee_id', empId).single();
+  if (existing) throw new Error('รหัสพนักงานนี้มีอยู่แล้ว');
+const { error } = await supabase.from('user_profiles').insert({
+    employee_id: empId, display_name: displayName, group_name: group,
+    password_hash: password, // เก็บค่า password ลงในคอลัมน์เดิม (หรือคอลัมน์ที่คุณเปิดไว้)
+    role: 'user', photo: photo || null,
+  });
+  if (error) throw new Error(error.message || 'สมัครสมาชิกไม่สำเร็จ');
+  return { success: true };
+};
+
+const sbLoginUser = async (empId, password) => {
+  const { data, error } = await supabase.from('user_profiles').select('*').eq('employee_id', empId).single();
+  if (error || !data) throw new Error('รหัสพนักงานหรือรหัสผ่านไม่ถูกต้อง');
+if (password !== data.password_hash) throw new Error('รหัสพนักงานหรือรหัสผ่านไม่ถูกต้อง');
+  return { empId: data.employee_id, displayName: data.display_name,
+    group: data.group_name || 'A : ใส่ใจลูกค้า', role: data.role || 'user', photo: data.photo || null };
+};
+
+const sbUpdatePass = async (empId, oldPass, newPass) => {
+  const { data } = await supabase.from('user_profiles').select('password_hash').eq('employee_id', empId).single();
+  if (!data) throw new Error('ไม่พบบัญชีผู้ใช้');
+if (oldPass !== data.password_hash) throw new Error('รหัสผ่านเก่าไม่ถูกต้อง');
+  const { error } = await supabase.from('user_profiles').update({ password_hash: newPass }).eq('employee_id', empId);
+  if (error) throw new Error(error.message);
+  return true;
+};
+
+const sbUpdateUserPhoto = async (empId, photo) => {
+  if (!empId) throw new Error('empId missing');
+  const { error } = await supabase.from('user_profiles').update({ photo: photo || null }).eq('employee_id', empId);
+  if (error) throw new Error(error.message);
+  console.log('[UPDATE_PHOTO] saved to Supabase ✅ empId:', empId);
+};
+
+const RUN_APPS = [
+  { name: "Strava", icon: "🟠", color: "#FC4C02", url: "https://www.strava.com/athlete/training", hint: "Activities → เลือก activity → ดู Calories" },
+  { name: "Garmin", icon: "🔵", color: "#007CC3", url: "https://connect.garmin.com/modern/activities", hint: "Activities → เลือก activity → ดู Calories" },
+  { name: "Nike Run", icon: "⚫", color: "#111111", url: "https://www.nike.com/nrc-app", hint: "เปิดแอพในมือถือ → Activity → ดู Calories" },
+  { name: "Apple Health", icon: "🍎", color: "#FA2D55", url: "https://www.apple.com/ios/health/", hint: "Health App → Browse → Activity → Active Energy" },
+];
+
+const INIT_EXERCISES = [
+  { id: 1,  name: "วิ่ง",          icon: "🏃",  calPerMin: 10, calMin: 7,  calMax: 14, image: null },
+  { id: 2,  name: "ว่ายน้ำ",       icon: "🏊",  calPerMin: 8,  calMin: 6,  calMax: 12, image: null },
+  { id: 3,  name: "ปั่นจักรยาน",   icon: "🚴",  calPerMin: 7,  calMin: 5,  calMax: 10, image: null },
+  { id: 4,  name: "เดิน",           icon: "🚶",  calPerMin: 4,  calMin: 3,  calMax: 6,  image: null },
+  { id: 5,  name: "โยคะ",           icon: "🧘",  calPerMin: 3,  calMin: 2,  calMax: 5,  image: null },
+  { id: 6,  name: "ยกเวท",          icon: "🏋️", calPerMin: 6,  calMin: 4,  calMax: 9,  image: null },
+  { id: 7,  name: "HIIT",           icon: "⚡",  calPerMin: 12, calMin: 9,  calMax: 16, image: null },
+  { id: 8,  name: "กระโดดเชือก",   icon: "🪢",  calPerMin: 11, calMin: 8,  calMax: 14, image: null },
+  { id: 9,  name: "แบดมินตัน",     icon: "🏸",  calPerMin: 7,  calMin: 5,  calMax: 10, image: null },
+  { id: 10, name: "ฟุตบอล",         icon: "⚽",  calPerMin: 8,  calMin: 6,  calMax: 11, image: null },
+  { id: 11, name: "พายเรือ",        icon: "🚣",  calPerMin: 7,  calMin: 5,  calMax: 10, image: null },
+  { id: 12, name: "เข้ายิม",        icon: "💪",  calPerMin: 6,  calMin: 4,  calMax: 9,  image: null },
+  { id: 13, name: "มวย",            icon: "🥊",  calPerMin: 10, calMin: 7,  calMax: 13, image: null },
+  { id: 14, name: "กอล์ฟ",          icon: "⛳",  calPerMin: 3,  calMin: 2,  calMax: 5,  image: null },
+  { id: 15, name: "อื่นๆ",          icon: "🤸",  calPerMin: 5,  calMin: 3,  calMax: 8,  image: null },
+];
+
+const INIT_GROUPS = [
+  { id: 1, name: "A : ใส่ใจลูกค้า",      color: "#16A34A", image: null },
+  { id: 2, name: "B : ร่วมแรงร่วมใจ",    color: "#0EA5E9", image: null },
+  { id: 3, name: "C : ยืดหยุ่นคล่องตัว", color: "#8B5CF6", image: null },
+  { id: 4, name: "D : ว่องไวเป็นเลิศ",   color: "#F59E0B", image: null },
+];
+
+const PALETTE = ["#16A34A","#16A34A","#10B981","#4ADE80","#FF69B4","#BA68C8","#F06292","#4FC3F7","#81C784","#FFB74D","#E57373","#64B5F6"];
+const COMMON_EMOJIS = ["🏃","🏊","🚴","🚶","🧘","🏋️","⚡","🪢","🏸","⚽","🤸","🥊","🏐","🎾","🤾","🏇","🧗","🏄","🎿","⛷️","🤺","🏓","🥋","🤽","🚵","🏌️","🤿","🤼","🧜","🪃"];
+
+const INITIAL_LOGS = []; // ไม่มีข้อมูลตัวอย่าง — ดึงจาก SharePoint ทั้งหมด
+
+const BADGE_DEFS = [
+  { icon: "🌱", name: "มือใหม่",  desc: "บันทึกครั้งแรก",                  check: (cal, s) => s >= 1 },
+  { icon: "🔥", name: "ไฟลุก",   desc: "สะสม 500+ kcal",                  check: (cal) => cal >= 500 },
+  { icon: "⚡", name: "ซูเปอร์",  desc: "สะสม 1,000+ kcal",               check: (cal) => cal >= 1000 },
+  { icon: "💪", name: "นักกีฬา", desc: "สะสม 2,000+ kcal",               check: (cal) => cal >= 2000 },
+  { icon: "🏅", name: "แชมป์",   desc: "สะสม 5,000+ kcal",               check: (cal) => cal >= 5000 },
+  { icon: "🎯", name: "สม่ำเสมอ", desc: "ออกกำลัง 5+ ครั้ง",             check: (cal, s) => s >= 5 },
+  { icon: "🚀", name: "เร็วสุด",  desc: "ออกกำลัง 10+ ครั้ง",            check: (cal, s) => s >= 10 },
+  { icon: "🦾", name: "ฟิตจัด",   desc: "ออกกำลัง 30+ นาที 7 ครั้ง",    check: (cal, s, l) => l >= 7 },
+  { icon: "🌟", name: "ขยันแท้",  desc: "ออกกำลัง 30+ นาที 15 ครั้ง",   check: (cal, s, l) => l >= 15 },
+  { icon: "👑", name: "ร่างทอง",  desc: "ออกกำลัง 30+ นาที 30 ครั้ง",   check: (cal, s, l) => l >= 30 },
+];
+
+const getBadges = (totalCal, sessions, userLogs = []) => {
+  const longSessions = userLogs.filter(l => l.duration >= 30).length;
+  return BADGE_DEFS.filter(b => b.check(totalCal, sessions, longSessions));
+};
+
+const getLast7Days = (userLogs) => {
+  const days = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const ds = d.toISOString().split("T")[0];
+    const cal = userLogs.filter(l => l.date === ds).reduce((s, l) => s + l.calories, 0);
+    days.push({ date: ds, cal, label: ["อา","จ","อ","พ","พฤ","ศ","ส"][d.getDay()] });
+  }
+  return days;
+};
+
+function CalorieTracker() {
+  // ไม่ load logs จาก localStorage — ดึงสดจาก SharePoint ทุกครั้ง เพื่อป้องกัน log เก่าค้าง
+  const [logs, setLogs] = useState(INITIAL_LOGS);
+  const [exercises, setExercises] = useState(INIT_EXERCISES); // hardcoded — ทุกคนเห็นเหมือนกัน
+  const [groups, setGroups] = useState(INIT_GROUPS);
+  const [activeTab, setActiveTab] = useState("dashboard");
+  const [memberGroup, setMemberGroup] = useState("all"); // filter for members tab
+  const [memberSort, setMemberSort]   = useState("cal"); // "cal" | "sessions"
+  const [membersLoading, setMembersLoading] = useState(false);
+  const [animateIn, setAnimateIn] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+
+  // Auth state — sanitize Choice fields ที่ SharePoint ส่งเป็น object หรือ JSON string
+  const parseChoice = (v, fallback) => {
+    if (!v) return fallback;
+    if (typeof v === "object") return v?.Value ?? fallback;          // object โดยตรง
+    if (typeof v === "string" && v.trim().startsWith("{")) {         // stringified JSON
+      try { const p = JSON.parse(v); return p?.Value ?? fallback; } catch {}
+    }
+    return v;                                                        // plain string ปกติ
+  };
+  const sanitizeUser = (u) => {
+    if (!u) return null;
+    const avs = lsGet("tvohh_avatars", {});
+    // ใช้รูปจาก SharePoint (u.photo) ก่อน → fallback localStorage
+    const avatar = u.photo || avs[u.displayName] || null;
+    // sync รูป SP → localStorage เพื่อใช้ offline
+    if (u.photo && u.displayName) { avs[u.displayName] = u.photo; lsSet("tvohh_avatars", avs); }
+    return { ...u, group: parseChoice(u.group, "A : ใส่ใจลูกค้า"), role: parseChoice(u.role, "user"), avatar };
+  };
+  const [authUser, setAuthUser] = useState(() => sanitizeUser(lsGet("tvohh_session", null)));
+  const [authScreen, setAuthScreen] = useState("login");
+  const [authForm, setAuthForm] = useState({ empId: "", password: "", displayName: "", group: "A : ใส่ใจลูกค้า", confirmPass: "", avatar: null });
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authError, setAuthError] = useState("");
+  const [showTeamInfo, setShowTeamInfo] = useState(false);
+
+  // SharePoint connection state
+  const [spStatus, setSpStatus] = useState("local");
+  const [spLastSync, setSpLastSync] = useState(null);
+  const [dashSort, setDashSort] = useState("newest");
+
+  // ── Countdown ก่อนเปิดรับข้อมูล ──────────────────────────────
+  const OPEN_TIME = new Date('2026-06-11T00:15:00+07:00');
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    if (new Date() >= OPEN_TIME) return;
+    const t = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const isOpen = now >= OPEN_TIME;
+  const countdown = (() => {
+    if (isOpen) return null;
+    const diff = OPEN_TIME - now;
+    const h = Math.floor(diff / 3600000);
+    const m = Math.floor((diff % 3600000) / 60000);
+    const s = Math.floor((diff % 60000) / 1000);
+    return { h, m, s, total: diff };
+  })();
+
+  // Add form
+  const [form, setForm] = useState(() => { const s = lsGet("tvohh_session", null); const sg = s?.group; const cleanGrp = sg?.Value ?? (typeof sg === "string" && !sg.trim().startsWith("{") ? sg : "A : ใส่ใจลูกค้า"); return { user: s?.displayName || "", group: cleanGrp, exercise: "วิ่ง", duration: 30, date: new Date().toISOString().split("T")[0], note: "", photo: null, customCal: 300 }; });
+  const [showAppLinks, setShowAppLinks] = useState(false);
+  const addPhotoRef = useRef();
+  const avatarRegRef = useRef();
+  const avatarEditRef = useRef();
+
+  // Profile edit
+  const [showEditProfile, setShowEditProfile] = useState(false);
+  const [editForm, setEditForm] = useState({ displayName: "", avatar: undefined });
+
+  // Likes
+  const [likedLogs, setLikedLogs] = useState(new Set());
+
+  // Goals
+  const [goals, setGoals] = useState(() => lsGet("tvohh_goals", {}));
+  const getGoal = (user) => (goals[user]?.weekly ?? 5000);
+  const [goalFormUser, setGoalFormUser] = useState("");
+  const [goalFormVal, setGoalFormVal] = useState(5000);
+
+  // Profile
+  const [profileUser, setProfileUser] = useState(null);
+  const [profileFilter, setProfileFilter] = useState("all");
+  const [editingGoal, setEditingGoal] = useState(false);
+  const [goalInput, setGoalInput] = useState(5000);
+
+  // Share
+  const [shareSection, setShareSection] = useState("myActivity");
+  const [copied, setCopied] = useState(false);
+
+  // Admin
+  const [adminAuthed, setAdminAuthed] = useState(false);
+  const [adminSection, setAdminSection] = useState("exercises");
+  const [exForm, setExForm] = useState({ name: "", icon: "🏃", calPerMin: 5, image: null });
+  const [editingEx, setEditingEx] = useState(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [grpForm, setGrpForm] = useState({ name: "", color: "#16A34A", image: null });
+  const [editingGrp, setEditingGrp] = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const exImgRef = useRef();
+  const grpImgRef = useRef();
+  const [zoomPhoto, setZoomPhoto] = useState(null);
+
+  // Persist exercises/groups เท่านั้น — logs ไม่ cache (ดึงสดจาก SP)
+  // useEffect(() => { lsSet("tvohh_logs", logs); }, [logs]); // disabled
+  useEffect(() => { lsSet("tvohh_exercises", exercises); }, [exercises]);
+  useEffect(() => { lsSet("tvohh_goals", goals); }, [goals]);
+
+  // โหลดรูป User ทุกคนจาก SharePoint เมื่อเปิดแอพ (ทำให้ทุกเครื่องเห็นรูปคนอื่น)
+  // ใช้ React state แทน localStorage โดยตรง → React จะ re-render ทุก component ที่ใช้ avatars
+  const [avatars, setAvatars] = useState(() => lsGet("tvohh_avatars", {}));
+  // allUsers — ดึงจาก localStorage ก่อน (ใช้ทันที) แล้ว refresh จาก SharePoint ทีหลัง
+  const [allUsers, setAllUsers] = useState(() => lsGet("tvohh_allusers", []));
+  const syncAllUsers = (users) => { if (users.length) { lsSet("tvohh_allusers", users); setAllUsers(users); } };
+  useEffect(() => {
+    sbFetchUserPhotos().then(avs => { if (avs) setAvatars(avs); });
+    sbFetchAllUsers().then(syncAllUsers);
+  }, []);
+  // (ลบ useEffect ที่ fetch ซ้ำตอน connected — mount ครั้งแรกดึงไปแล้ว ไม่ต้องซ้ำ)
+
+  // ดึง allUsers ใหม่เมื่อเปิด tab สมาชิก — แต่ cooldown 30 วิ ไม่ fetch ซ้ำถี่เกินไป
+  const lastMembersFetchRef = useRef(0);
+  useEffect(() => {
+    if (activeTab !== "members") return;
+    const now = Date.now();
+    if (now - lastMembersFetchRef.current < 30000) return; // cooldown 30 วิ
+    lastMembersFetchRef.current = now;
+    setMembersLoading(true);
+    sbFetchAllUsers().then(users => {
+      console.log("[MEMBERS TAB] allUsers fetched:", users.length, users.slice(0,3));
+      syncAllUsers(users);
+      setMembersLoading(false);
+    }).catch(e => { console.warn("[MEMBERS TAB] fetch error:", e); setMembersLoading(false); });
+  }, [activeTab]);
+
+  // Auto-connect Supabase เมื่อโหลดแอพ
+  useEffect(() => {
+    setSpStatus("connecting");
+    const t = setTimeout(() => {
+      sbFetchLogs()
+        .then(d => { if(d.length>0)setLogs(d); setSpStatus("connected"); setSpLastSync(new Date().toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit"})); })
+        .catch(() => setSpStatus("error"));
+    }, 500);
+    return () => clearTimeout(t);
+  }, []);
+
+
+  // auto-set ตัวเองเมื่อเปิด profile ถ้ายังไม่ได้เลือกใคร
+  useEffect(() => {
+    if (activeTab === "profile" && !profileUser && authUser?.displayName)
+      setProfileUser(authUser.displayName);
+  }, [activeTab]);
+
+  // jitter refresh 60-90 วิ
+  useEffect(() => {
+    if (spStatus !== "connected") return;
+    const iv = setInterval(() => {
+      sbFetchLogs().then(d => { if (d.length > 0) setLogs(d); setSpLastSync(new Date().toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit"})); }).catch(()=>{});
+    }, 60000 + Math.random()*30000);
+    return () => clearInterval(iv);
+  }, [spStatus]);
+
+  useEffect(() => { setTimeout(() => setAnimateIn(true), 100); }, []);
+
+  const toast = (msg) => { setShowSuccess(msg || true); setTimeout(() => setShowSuccess(false), 2600); };
+  const calcCalories = (name, duration) => { const ex = exercises.find(e => e.name === name); return ex ? ex.calPerMin * duration : 0; };
+  const calcCalRange = (name, duration) => { const ex = exercises.find(e => e.name === name); if(!ex) return null; return { min: (ex.calMin||ex.calPerMin*0.7)*duration, max: (ex.calMax||ex.calPerMin*1.5)*duration }; };
+  const isCalAnomaly = (name, duration, cal) => { const r = calcCalRange(name, duration); if(!r) return false; return cal > r.max * 1.5; };
+  const getGroupColor = (gName) => groups.find(g => g.name === gName)?.color || "#16A34A";
+
+  const [showSaveConfirm, setShowSaveConfirm] = useState(false);
+
+const handleAdd = async () => {
+    if (!form.user.trim()) return;
+    const todayLogsCount = logs.filter(l => l.user === form.user && l.date === new Date().toISOString().split("T")[0]).length;
+    if (todayLogsCount >= DAILY_LIMIT) { toast("ครบ " + DAILY_LIMIT + " ครั้งแล้ววันนี้ 🔒"); setShowSaveConfirm(false); return; }
+
+    toast("กำลังบันทึกข้อมูลและอัปโหลดรูปภาพ... ⏳");
+    setShowSaveConfirm(false);
+
+    let finalPhotoUrl = form.photo;
+
+    // ถ้าเป็น Base64 ให้ upload ขึ้น Storage ก่อนเสมอ — ถ้าล้มเหลวให้ไม่มีรูป (null) แทนที่จะเก็บ base64 ลง DB
+    if (finalPhotoUrl && finalPhotoUrl.startsWith('data:')) {
+      const uploadedUrl = await uploadImageToStorage(finalPhotoUrl, 'logs');
+      finalPhotoUrl = uploadedUrl || null; // null ถ้า upload ล้มเหลว
+    }
+
+    const calories = Math.min(9999, form.customCal || 0);
+    const newLog = {
+      id: String(Date.now()),
+      spId: "",
+      empId: authUser?.empId || null,
+      user: form.user,
+      group: form.group,
+      exercise: form.exercise,
+      duration: form.duration,
+      note: form.note,
+      photo: finalPhotoUrl,
+      calories,
+      date: form.date || new Date().toISOString().split("T")[0],
+      likes: 0
+    };
+
+    // อัปเดตข้อมูลขึ้นหน้าจอ UI ทันที
+    setLogs(prev => [newLog, ...prev]);
+    
+    // เคลียร์ค่าฟอร์ม
+    setForm(p => ({ ...p, note:"", photo:null, customCal:300, date:new Date().toISOString().split("T")[0]}));
+    setShowAppLinks(false);
+    setActiveTab("dashboard");
+
+    // ยิงลงตารางฐานข้อมูล exercise_logs
+    try {
+      const saved = await sbPostLog(newLog);
+      // 🔥 แก้ไขจุดนี้: บังคับ Map ให้คอลัมน์ photo บนหน้าจอ UI กลายเป็น finalPhotoUrl (ที่เป็นลิงก์ HTTP) ด้วย เพื่อไม่ให้ค้างเป็น Base64
+      setLogs(prev => prev.map(l => l.id === newLog.id ? { ...l, photo: finalPhotoUrl, spId: saved.spId, id: saved.id } : l));
+      toast("บันทึกสำเร็จและอัปโหลดรูปภาพเรียบร้อย! 🔥");
+    } catch(_e) { 
+      console.warn("[ADD]", _e.message); 
+      toast("บันทึกข้อมูลสำเร็จ แต่ระบบฐานข้อมูลหลักขัดข้อง ⚠️");
+    }
+  };
+
+
+  const handleLike = (logId) => {
+    // คำนวณ likes ก่อน setState (setState callback ไม่รัน sync)
+    const log = logs.find(l => l.id === logId);
+    if (!log) return;
+    const isLiked = likedLogs.has(logId);
+    const newLikes = isLiked ? log.likes - 1 : log.likes + 1;
+
+    setLikedLogs(prev => {
+      const next = new Set(prev);
+      isLiked ? next.delete(logId) : next.add(logId);
+      return next;
+    });
+    setLogs(p => p.map(l => l.id === logId ? { ...l, likes: newLikes } : l));
+
+    // Sync ไป Supabase
+if (log.id) {
+    sbPatchLike(log.id, newLikes).catch((err) => console.error("Like sync error:", err));
+  }
+};
+
+  const handleImgUpload = (file, setter) => {
+    if (!file) return;
+    const r = new FileReader(); r.onload = e => setter(p => ({ ...p, image: e.target.result })); r.readAsDataURL(file);
+  };
+  const handlePhotoUpload = (file) => {
+    if (!file) return;
+    resizeImage(file).then(b64 => { if (b64) setForm(p => ({ ...p, photo: b64 })); });
+  };
+  const handleLogin = async () => {
+    if (!authForm.empId.trim() || !authForm.password) return setAuthError("กรุณากรอกรหัสพนักงานและรหัสผ่าน");
+    setAuthLoading(true); setAuthError("");
+    try { const raw = await sbLoginUser(authForm.empId.trim(), authForm.password); const user = sanitizeUser(raw); lsSet("tvohh_session", user); setAuthUser(user); setForm(p => ({ ...p, user: user.displayName, group: user.group })); toast("ยินดีต้อนรับ " + user.displayName + "! 🌿"); }
+    catch(_e) { setAuthError(_e.message); }
+    finally { setAuthLoading(false); }
+  };
+const handleRegister = async () => {
+    if (!authForm.empId.trim() || !authForm.displayName.trim() || !authForm.password) return setAuthError("กรุณากรอกข้อมูลให้ครบ");
+    if (authForm.password !== authForm.confirmPass) return setAuthError("รหัสผ่านไม่ตรงกัน");
+    if (authForm.password.length < 4) return setAuthError("รหัสผ่านต้องมีอย่างน้อย 4 ตัวอักษร");
+    
+    setAuthLoading(true); 
+    setAuthError("");
+    toast("กำลังประมวลผลรูปโปรไฟล์และลงทะเบียน... ⏳");
+
+    let finalAvatarUrl = authForm.avatar;
+
+    try {
+      // ถ้าเป็น Base64 ให้ upload ก่อนเสมอ — ถ้าล้มเหลวให้ไม่มีรูป (null) แทนที่จะเก็บ base64 ลง DB
+      if (finalAvatarUrl && finalAvatarUrl.startsWith('data:image')) {
+        const uploadedUrl = await uploadImageToStorage(finalAvatarUrl, 'avatars');
+        finalAvatarUrl = uploadedUrl || null;
+      }
+
+      await sbRegisterUser(authForm.empId.trim(), authForm.displayName.trim(), authForm.group, authForm.password, finalAvatarUrl);
+      
+      // อัปเดตเข้าระบบแคชข้อมูลรูปหน้าบ้าน
+      if (finalAvatarUrl) { 
+        const avs = lsGet("tvohh_avatars", {}); 
+        avs[authForm.displayName.trim()] = finalAvatarUrl; 
+        lsSet("tvohh_avatars", avs); 
+        setAvatars(prev => ({ ...prev, [authForm.displayName.trim()]: finalAvatarUrl })); 
+      }
+
+      const raw = await sbLoginUser(authForm.empId.trim(), authForm.password);
+      const user = sanitizeUser(raw);
+      lsSet("tvohh_session", user); 
+      setAuthUser(user); 
+      setForm(p => ({ ...p, user: user.displayName, group: user.group })); 
+      toast("ลงทะเบียนสำเร็จ! ยินดีต้อนรับ 🌿");
+    }
+    catch(_e) { 
+      console.error("[REGISTER ERROR]", _e); 
+      setAuthError(_e.message); 
+    }
+    finally { 
+      setAuthLoading(false); 
+    }
+  };
+  const handleLogout = () => { localStorage.removeItem("tvohh_session"); setAuthUser(null); setAuthForm({ empId: "", password: "", displayName: "", group: "A : ใส่ใจลูกค้า", confirmPass: "", avatar: null }); };
+  const handleSaveProfile = async () => {
+    const newAvatar = editForm.avatar !== undefined ? editForm.avatar : authUser.avatar;
+    let avatarUrl = newAvatar;
+
+    setShowEditProfile(false);
+
+    // ถ้าเป็น Base64 ให้ upload ก่อนเสมอ — ถ้าล้มเหลวให้ไม่มีรูป (null) แทนที่จะเก็บ base64 ลง DB
+    if (avatarUrl && avatarUrl.startsWith('data:image')) {
+      toast("กำลังอัปโหลดรูปโปรไฟล์... ⏳");
+      const uploadedUrl = await uploadImageToStorage(avatarUrl, 'avatars');
+      avatarUrl = uploadedUrl || null;
+    }
+
+    const avs = lsGet("tvohh_avatars", {});
+    avs[authUser.displayName] = avatarUrl;
+    lsSet("tvohh_avatars", avs);
+    setAvatars(prev => ({ ...prev, [authUser.displayName]: avatarUrl }));
+    
+    const updated = { ...authUser, avatar: avatarUrl, photo: avatarUrl };
+    lsSet("tvohh_session", updated);
+    setAuthUser(updated);
+
+    if (authUser.empId) {
+      try {
+        await sbUpdateUserPhoto(authUser.empId, avatarUrl);
+        toast("อัปเดตรูปโปรไฟล์สำเร็จ! ✨");
+      } catch(e) {
+        console.error("[SAVE PROFILE] Supabase save failed:", e);
+        toast("บันทึกรูปในเครื่องแล้ว ⚠️ Supabase พัง");
+      }
+    }
+  };
+  const fbShare = (text) => {
+    const fbText = text + "\n\n#TVOCaloriesChallenge #สุขภาพดีทีมTVO #TVOHappyHealth2026";
+    // copy ข้อความก่อน แล้วเปิด Facebook (paste ได้ทันที)
+    navigator.clipboard.writeText(fbText).catch(() => {});
+    const fbUrl = "https://www.facebook.com/";
+    const a = document.createElement("a");
+    a.href = fbUrl;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    a.click();
+  };
+  const handleSaveEx = () => {
+    if (!exForm.name.trim()) return;
+    if (editingEx !== null) {
+      const oldName = exercises.find(e => e.id === editingEx)?.name;
+      setExercises(prev => prev.map(e => e.id === editingEx ? { ...e, ...exForm } : e));
+      if (oldName !== exForm.name) setLogs(prev => prev.map(l => l.exercise === oldName ? { ...l, exercise: exForm.name } : l));
+    } else { setExercises(prev => [...prev, { id: Date.now(), ...exForm }]); }
+    setExForm({ name: "", icon: "🏃", calPerMin: 5, image: null }); setEditingEx(null); setShowEmojiPicker(false);
+    toast("บันทึกประเภทกีฬาสำเร็จ! ✅");
+  };
+  const handleSaveGrp = () => {
+    if (!grpForm.name.trim()) return;
+    if (editingGrp !== null) {
+      const oldName = groups.find(g => g.id === editingGrp)?.name;
+      setGroups(prev => prev.map(g => g.id === editingGrp ? { ...g, ...grpForm } : g));
+      if (oldName !== grpForm.name) setLogs(prev => prev.map(l => l.group === oldName ? { ...l, group: grpForm.name } : l));
+    } else { setGroups(prev => [...prev, { id: Date.now(), ...grpForm }]); }
+    setGrpForm({ name: "", color: "#16A34A", image: null }); setEditingGrp(null);
+    toast("บันทึกกลุ่มสำเร็จ! ✅");
+  };
+  const handleEditEx = (ex) => { setExForm({ name: ex.name, icon: ex.icon, calPerMin: ex.calPerMin, image: ex.image }); setEditingEx(ex.id); setShowEmojiPicker(false); };
+  const handleEditGrp = (g) => { setGrpForm({ name: g.name, color: g.color, image: g.image }); setEditingGrp(g.id); };
+
+  const handleSaveGoal = () => {
+    if (!goalFormUser) return;
+    setGoals(p => ({ ...p, [goalFormUser]: { weekly: goalFormVal } }));
+    toast(`ตั้งเป้าหมายให้ ${goalFormUser} แล้ว! 🎯`);
+  };
+
+  const exportCSV = () => {
+    const header = "ชื่อ,กลุ่ม,การออกกำลังกาย,ระยะเวลา(นาที),แคลอรี่,วันที่,บันทึก";
+    const rows = logs.map(l => `${l.user},${l.group},${l.exercise},${l.duration},${l.calories},${l.date},"${l.note}"`);
+    const csv = [header, ...rows].join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = "tvohappyhealth-data.csv"; a.click();
+    URL.revokeObjectURL(url);
+    toast("ดาวน์โหลด CSV แล้ว! 📊");
+  };
+
+  const handleCopyLink = () => {
+    const url = "https://thaivegetableoil.sharepoint.com/sites/HR_INFO/tvohappyhealth?team=all";
+    navigator.clipboard.writeText(url).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
+  };
+
+  // ใช้ทีมปัจจุบันจาก user_profiles เสมอ (ไม่ใช้ทีมที่เก็บใน log เก่า)
+  const userGroupMap = Object.fromEntries(allUsers.map(u => [u.user, u.group]));
+  const currentGroup = (log) => userGroupMap[log.user] || log.group;
+
+  const groupStats = groups.map(g => {
+    const gl = logs.filter(l => currentGroup(l) === g.name);
+    return { ...g, totalCal: gl.reduce((s, l) => s + l.calories, 0), totalMin: gl.reduce((s, l) => s + l.duration, 0), memberCount: [...new Set(gl.map(l => l.user))].length };
+  }).sort((a, b) => b.totalCal - a.totalCal);
+
+  const userStats = Object.values(logs.reduce((acc, l) => {
+    const grp = currentGroup(l);
+    if (!acc[l.user]) acc[l.user] = { user: l.user, group: grp, totalCal: 0, sessions: 0 };
+    acc[l.user].totalCal += l.calories; acc[l.user].sessions++; return acc;
+  }, {})).sort((a, b) => b.totalCal - a.totalCal);
+
+  const maxGroupCal = Math.max(1, ...groupStats.map(g => g.totalCal));
+  const maxUserCal = Math.max(1, ...userStats.map(u => u.totalCal));
+  const grpLabel = g => g?.trim() || "";
+  const medalColors = ["#4ADE80", "#C0C0C0", "#CD7F32"];
+
+  const profileUserData = userStats.find(u => u.user === profileUser);
+  const profileLogs = profileUser ? logs.filter(l => l.user === profileUser && (profileFilter === "all" || l.exercise === profileFilter)) : [];
+  const profileBadges = profileUserData ? getBadges(profileUserData.totalCal, profileUserData.sessions, logs.filter(l => l.user === profileUser)) : [];
+  const profileChart = profileUser ? getLast7Days(logs.filter(l => l.user === profileUser)) : [];
+  const chartMax = Math.max(1, ...profileChart.map(d => d.cal));
+  const weeklyGoal = profileUser ? getGoal(profileUser) : null;
+  const weeklyTotal = profileUser ? profileChart.reduce((s, d) => s + d.cal, 0) : 0;
+
+  const DAILY_LIMIT = 4;
+  const todayStr = new Date().toISOString().split("T")[0];
+  const todayCount = logs.filter(l => l.user === authUser?.displayName && l.date === todayStr).length;
+  const dailyFull = todayCount >= DAILY_LIMIT;
+
+  const tabs = [
+    { id: "dashboard", icon: "🏠", label: "หน้าหลัก" },
+    { id: "add",       icon: !isOpen ? "⏳" : dailyFull ? "🔒" : "➕", label: "บันทึก" },
+    { id: "profile",   icon: "👤", label: "โปรไฟล์" },
+    { id: "group",     icon: "👥", label: "กลุ่ม" },
+    { id: "members",   icon: "🏅", label: "สมาชิก" },
+    { id: "ranking",   icon: "🏆", label: "อันดับ" },
+    { id: "rules",     icon: "💡", label: "กติกา" },
+    { id: "share",     icon: "📤", label: "แชร์" },
+  ];
+
+  const shareUrl = "https://thaivegetableoil.sharepoint.com/sites/HR_INFO/tvohappyhealth";
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&color=16A34A&bgcolor=FFFFFF&data=${encodeURIComponent(shareUrl)}`;
+
+  const myLogs = authUser ? logs.filter(l => l.user === authUser.displayName) : [];
+  const myStats = userStats.find(u => u.user === authUser?.displayName);
+
+
+  // ─── AUTH SCREEN v2 ──────────────────────────────────────────
+  if (!authUser) return (
+    <div style={{ minHeight:"100vh", background:"linear-gradient(160deg,#ECFDF5 0%,#D1FAE5 50%,#A7F3D0 100%)", fontFamily:"'Sarabun','Prompt',sans-serif", overflowX:"hidden" }}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;600;700;900&family=Sarabun:wght@300;400;600&display=swap');
+        *{box-sizing:border-box;margin:0;padding:0}
+        .v2-in{width:100%;padding:13px 16px;border-radius:14px;border:1.5px solid #D1FAE5;background:#FFFFFF;color:#111827;font-family:'Sarabun';font-size:14px;outline:none;transition:border .2s,box-shadow .2s;display:block;margin-bottom:14px}
+        .v2-in:focus{border-color:#16A34A;box-shadow:0 0 0 3px #16A34A18}
+        .v2-sel{-webkit-appearance:none;appearance:none;width:100%;padding:13px 40px 13px 16px;border-radius:14px;border:1.5px solid #D1FAE5;background:#FFFFFF url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%2316A34A' stroke-width='1.8' fill='none' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 14px center;color:#111827;font-family:'Sarabun';font-size:14px;outline:none;cursor:pointer;display:block;margin-bottom:14px;transition:border .2s}
+        .v2-sel:focus{border-color:#16A34A;box-shadow:0 0 0 3px #16A34A18}
+        .v2-tab{flex:1;padding:11px;border:none;cursor:pointer;font-family:'Prompt';font-weight:700;font-size:13px;border-radius:11px;transition:all .2s;background:transparent;color:#6B7280}
+        .shake{animation:sh .4s}@keyframes sh{0%,100%{transform:translateX(0)}25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}
+        .team-card{border-radius:14px;padding:12px 14px;margin-bottom:8px;border:1.5px solid transparent;transition:all .2s}
+        .team-card:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(0,0,0,0.08)}
+        .team-expand{overflow:hidden;transition:max-height .4s cubic-bezier(0.4,0,0.2,1),opacity .3s ease,margin .3s ease}
+        .info-btn{background:none;border:1.5px solid #A7F3D0;border-radius:20px;padding:3px 10px;font-size:11px;color:#059669;cursor:pointer;font-family:'Sarabun';font-weight:600;transition:all .2s}
+        .info-btn:hover{background:#D1FAE5;color:#16A34A}
+      `}</style>
+
+      {/* Floating blobs */}
+      <div style={{ position:"fixed", top:"-15%", right:"-10%", width:380, height:380, background:"radial-gradient(circle,#16A34A22 0%,transparent 70%)", zIndex:0 }} />
+      <div style={{ position:"fixed", bottom:"-15%", left:"-8%", width:320, height:320, background:"radial-gradient(circle,#4ADE8018 0%,transparent 70%)", zIndex:0 }} />
+
+      <div style={{ position:"relative", zIndex:1, maxWidth:420, margin:"0 auto", padding:"40px 20px 60px" }}>
+        {/* Logo + Title */}
+        <div style={{ textAlign:"center", paddingBottom:32 }}>
+          <div style={{ width:88, height:88, borderRadius:28, background:"#FFFFFF", boxShadow:"0 12px 40px #16A34A35", margin:"0 auto 18px", display:"flex", alignItems:"center", justifyContent:"center", overflow:"hidden" }}>
+            <img src="logo.png" alt="TVO" style={{ width:72, height:72, objectFit:"contain" }} />
+          </div>
+          <h1 style={{ fontFamily:"'Prompt'", fontWeight:900, fontSize:26, background:"linear-gradient(135deg,#15803D,#22C55E)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent", marginBottom:6 }}>TVO Calories Challenge</h1>
+          <p style={{ fontSize:13, color:"#4B5563" }}>ร่วมพิชิตเป้าหมายสุขภาพปี 2026 💪</p>
+        </div>
+
+        {/* Card */}
+        <div style={{ background:"#FFFFFF", borderRadius:28, padding:"28px 24px", boxShadow:"0 12px 48px rgba(0,0,0,0.10), 0 2px 8px rgba(0,0,0,0.06)" }}>
+          {/* Tab switcher */}
+          <div style={{ display:"flex", background:"#F0FDF4", borderRadius:14, padding:4, marginBottom:26, gap:4 }}>
+            <button className="v2-tab" onClick={() => { setAuthScreen("login"); setAuthError(""); }}
+              style={{ background: authScreen==="login" ? "linear-gradient(135deg,#16A34A,#22C55E)" : "transparent", color: authScreen==="login" ? "#fff" : "#6B7280", boxShadow: authScreen==="login" ? "0 4px 12px #16A34A35" : "none" }}>
+              🔑 เข้าสู่ระบบ
+            </button>
+            <button className="v2-tab" onClick={() => { setAuthScreen("register"); setAuthError(""); }}
+              style={{ background: authScreen==="register" ? "linear-gradient(135deg,#059669,#10B981)" : "transparent", color: authScreen==="register" ? "#fff" : "#6B7280", boxShadow: authScreen==="register" ? "0 4px 12px #05966930" : "none" }}>
+              ✍️ สมัครสมาชิก
+            </button>
+          </div>
+
+          {authScreen === "login" ? (
+            <div>
+              <label style={{ fontSize:11.5, color:"#374151", fontWeight:700, display:"block", marginBottom:6 }}>รหัสพนักงาน</label>
+              <input className="v2-in" placeholder="เช่น 1234" value={authForm.empId} onChange={e=>setAuthForm(p=>({...p,empId:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&handleLogin()} />
+              <label style={{ fontSize:11.5, color:"#374151", fontWeight:700, display:"block", marginBottom:6 }}>รหัสผ่าน</label>
+              <input className={"v2-in"+(authError?" shake":"")} type="password" placeholder="รหัสผ่านของคุณ" value={authForm.password} onChange={e=>setAuthForm(p=>({...p,password:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&handleLogin()} />
+              {authError && <div style={{ color:"#DC2626", fontSize:12, textAlign:"center", marginBottom:12, marginTop:-8 }}>{authError}</div>}
+              <button onClick={handleLogin} disabled={authLoading} style={{ width:"100%", padding:"15px", fontSize:15, borderRadius:16, border:"none", cursor:"pointer", fontFamily:"'Prompt'", fontWeight:700, background: authLoading?"#D1FAE5":"linear-gradient(135deg,#16A34A,#22C55E)", color: authLoading?"#6B7280":"#fff", boxShadow:"0 4px 16px #16A34A30", transition:"all .2s" }}>
+                {authLoading ? "⏳ กำลังเข้าสู่ระบบ..." : "🔑 เข้าสู่ระบบ"}
+              </button>
+              <p style={{ textAlign:"center", marginTop:14, fontSize:11, color:"#9CA3AF" }}>ยังไม่มีบัญชี? กดแท็บ "สมัครสมาชิก" ด้านบน</p>
+            </div>
+          ) : (
+            <div>
+              {/* Avatar */}
+              <div style={{ textAlign:"center", marginBottom:20 }}>
+                <div onClick={()=>avatarRegRef.current?.click()} style={{ width:90, height:90, borderRadius:"50%", background: authForm.avatar?"transparent":"#F0FDF4", border: authForm.avatar?"3px solid #22C55E":"2.5px dashed #22C55E", display:"inline-flex", alignItems:"center", justifyContent:"center", cursor:"pointer", overflow:"hidden", boxShadow: authForm.avatar?"0 4px 20px #16A34A25":"none" }}>
+                  {authForm.avatar ? <img src={authForm.avatar} style={{ width:"100%", height:"100%", objectFit:"cover" }} alt="avatar" /> : <span style={{ fontSize:34 }}>📷</span>}
+                </div>
+                <input ref={avatarRegRef} type="file" accept="image/*" style={{ display:"none" }} onChange={e=>{ const f=e.target.files?.[0]; if(!f)return; resizeImage(f).then(b64=>setAuthForm(p=>({...p,avatar:b64}))); }} />
+                <p style={{ fontSize:10, color: authForm.avatar?"#16A34A":"#9CA3AF", marginTop:6, fontWeight: authForm.avatar?700:400 }}>{authForm.avatar?"✅ เลือกรูปแล้ว (แตะเพื่อเปลี่ยน)":"แตะเพื่อเลือกรูปโปรไฟล์ (ไม่บังคับ)"}</p>
+              </div>
+              <label style={{ fontSize:11.5, color:"#374151", fontWeight:700, display:"block", marginBottom:6 }}>รหัสพนักงาน</label>
+              <input className="v2-in" placeholder="เช่น 1234" value={authForm.empId} onChange={e=>setAuthForm(p=>({...p,empId:e.target.value}))} />
+              <label style={{ fontSize:11.5, color:"#374151", fontWeight:700, display:"block", marginBottom:6 }}>ชื่อที่ต้องการแสดง</label>
+              <input className="v2-in" placeholder="เช่น สมชาย ใจดี" value={authForm.displayName} onChange={e=>setAuthForm(p=>({...p,displayName:e.target.value}))} />
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6 }}>
+                <label style={{ fontSize:11.5, color:"#374151", fontWeight:700 }}>ทีม</label>
+                <button className="info-btn" type="button" onClick={()=>setShowTeamInfo(p=>!p)}>{showTeamInfo?"▲ ซ่อน":"ℹ️ ดูรายละเอียดทีม"}</button>
+              </div>
+              <select className="v2-sel" value={authForm.group} onChange={e=>setAuthForm(p=>({...p,group:e.target.value}))}>
+                {groups.map(g=><option key={g.id} value={g.name}>{g.name}</option>)}
+              </select>
+              <div className="team-expand" style={{ maxHeight:showTeamInfo?700:0, opacity:showTeamInfo?1:0, marginBottom:showTeamInfo?14:0, pointerEvents:showTeamInfo?"auto":"none" }}>
+                <div style={{ border:"1px solid #D1FAE5", borderRadius:16, padding:"14px 12px", background:"#FAFFFE" }}>
+                  <p style={{ textAlign:"center", fontSize:12, color:"#059669", fontWeight:700, marginBottom:10, fontFamily:"'Prompt'" }}>🏆 TVO Cal Teams</p>
+                  {[{l:"A","n":"ใส่ใจลูกค้า","en":"Customer Centric","c":"#16A34A","bg":"#F0FDF4","bc":"#86EFAC","d":"ชอบดูแลลูกค้า เพื่อนร่วมงาน เวลาออกกำลังกายชอบดูแลใส่ใจเพื่อนๆ 🤝"},
+                    {l:"B","n":"ร่วมแรงร่วมใจ","en":"Collaboration","c":"#0EA5E9","bg":"#EFF6FF","bc":"#93C5FD","d":"ร่วมกันฝ่าฟัน ชวนกันออกกำลังกายเป็นกลุ่ม ไม่เหงา 👫"},
+                    {l:"C","n":"ยืดหยุ่น คล่องตัว","en":"Adaptability","c":"#8B5CF6","bg":"#FAF5FF","bc":"#C4B5FD","d":"ยืดหยุ่นทำงาน ออกกำลังกายหลายอย่าง ดูตื่นเต้นไปหมด 🤸"},
+                    {l:"D","n":"ว่องไวเป็นเลิศ","en":"Speed & Excellence","c":"#F59E0B","bg":"#FFFBEB","bc":"#FCD34D","d":"ทำงานไวมีประสิทธิภาพ เน้นเผาผลาญแคลอรีสุดๆ 🔥"},
+                  ].map(t=>(
+                    <div key={t.l} className="team-card" style={{ background:`linear-gradient(135deg,${t.bg},${t.bg}dd)`, borderColor:t.bc }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:4 }}>
+                        <div style={{ background:t.c, color:"#fff", borderRadius:8, width:30, height:30, display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"'Prompt'", fontWeight:900, fontSize:14, flexShrink:0 }}>{t.l}</div>
+                        <div><span style={{ fontFamily:"'Prompt'", fontWeight:700, fontSize:13 }}>{t.n} </span><span style={{ fontSize:11, color:t.c, fontWeight:600 }}>{t.en}</span></div>
+                      </div>
+                      <p style={{ fontSize:11.5, lineHeight:1.6, paddingLeft:40, color:"#374151" }}>{t.d}</p>
+                    </div>
+                  ))}
+                  <p style={{ textAlign:"center", fontSize:11, color:"#9CA3AF", marginTop:8 }}>✨ เลือกทีมได้ตามใจ ✨</p>
+                </div>
+              </div>
+              <label style={{ fontSize:11.5, color:"#374151", fontWeight:700, display:"block", marginBottom:6 }}>รหัสผ่าน (อย่างน้อย 4 ตัว)</label>
+              <input className="v2-in" type="password" placeholder="ตั้งรหัสผ่าน" value={authForm.password} onChange={e=>setAuthForm(p=>({...p,password:e.target.value}))} />
+              <label style={{ fontSize:11.5, color:"#374151", fontWeight:700, display:"block", marginBottom:6 }}>ยืนยันรหัสผ่าน</label>
+              <input className={"v2-in"+(authError&&authError.includes("ตรงกัน")?" shake":"")} type="password" placeholder="กรอกรหัสผ่านอีกครั้ง" value={authForm.confirmPass} onChange={e=>setAuthForm(p=>({...p,confirmPass:e.target.value}))} />
+              {authError && <div style={{ color:"#DC2626", fontSize:12, textAlign:"center", marginBottom:12, marginTop:-8 }}>{authError}</div>}
+              <button onClick={handleRegister} disabled={authLoading} style={{ width:"100%", padding:"15px", fontSize:15, borderRadius:16, border:"none", cursor:"pointer", fontFamily:"'Prompt'", fontWeight:700, background: authLoading?"#D1FAE5":"linear-gradient(135deg,#059669,#10B981)", color: authLoading?"#6B7280":"#fff", boxShadow:"0 4px 16px #05966930" }}>
+                {authLoading ? "⏳ กำลังสมัคร..." : "✍️ สมัครสมาชิก"}
+              </button>
+            </div>
+          )}
+        </div>
+        <p style={{ textAlign:"center", marginTop:20, fontSize:11, color:"#6B7280", lineHeight:1.8 }}>ข้อมูลเชื่อมต่อกับ Supabase · <a href="admin.html" style={{ color:"#16A34A", fontWeight:600, textDecoration:"none" }}>Admin Panel</a></p>
+      </div>
+    </div>
+  );
+
+  // ─── MAIN APP v2 ─────────────────────────────────────────────
+  return (
+    <div style={{ minHeight:"100vh", background:"#F0F9F5", color:"#111827", fontFamily:"'Sarabun','Prompt',sans-serif", overflowX:"hidden" }}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;600;700;900&family=Sarabun:wght@300;400;600&display=swap');
+        *{box-sizing:border-box;margin:0;padding:0}
+        ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:#F0F9F5}::-webkit-scrollbar-thumb{background:#16A34A88;border-radius:2px}
+
+        /* Cards */
+        .v2-card{background:#FFFFFF;border-radius:20px;box-shadow:0 2px 8px rgba(0,0,0,0.06),0 0 0 1px rgba(0,0,0,0.04);transition:all .25s}
+        .v2-card-hover:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(22,163,74,0.12),0 0 0 1px rgba(22,163,74,0.08)}
+
+        /* Buttons */
+        .v2-btn-primary{background:linear-gradient(135deg,#16A34A,#22C55E);border:none;cursor:pointer;color:#fff;font-family:'Prompt';font-weight:700;border-radius:16px;box-shadow:0 4px 16px rgba(22,163,74,0.30);transition:all .2s}
+        .v2-btn-primary:hover{transform:translateY(-1px);box-shadow:0 8px 24px rgba(22,163,74,0.38)}
+        .v2-btn-ghost{background:transparent;border:1.5px solid #E5E7EB;cursor:pointer;color:#6B7280;font-family:'Sarabun';border-radius:12px;transition:all .2s}
+        .v2-btn-ghost:hover{border-color:#16A34A;color:#16A34A;background:#F0FDF4}
+        .v2-btn-danger{background:linear-gradient(135deg,#DC2626,#EF4444);border:none;cursor:pointer;color:#fff;font-family:'Prompt';font-weight:600;border-radius:10px;transition:all .2s}
+        .v2-btn-teal{background:linear-gradient(135deg,#0891B2,#06B6D4);border:none;cursor:pointer;color:#fff;font-family:'Prompt';font-weight:700;border-radius:12px;box-shadow:0 4px 12px rgba(8,145,178,0.22);transition:all .2s}
+        .v2-btn-teal:hover{transform:translateY(-1px)}
+
+        /* Inputs */
+        input,select,textarea{background:#F8FAF9;border:1.5px solid #D1FAE5;color:#111827;font-family:'Sarabun';outline:none;transition:border .2s,box-shadow .2s;border-radius:12px;font-size:15px}
+        input:focus,select:focus,textarea:focus{border-color:#16A34A;box-shadow:0 0 0 3px #16A34A14}
+        select option{background:#F0FDF4}
+        textarea{resize:vertical}
+
+        /* Bottom nav */
+        .v2-nav-btn{flex:0 0 auto;padding:7px 10px;border-radius:14px;border:none;cursor:pointer;background:transparent;color:#9CA3AF;font-family:'Sarabun';font-weight:600;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:10px;transition:all .2s;white-space:nowrap;min-width:54px}
+        .v2-nav-btn:hover{color:#16A34A}
+        .v2-nav-on{background:linear-gradient(135deg,#16A34A,#22C55E)!important;color:#fff!important;box-shadow:0 4px 14px rgba(22,163,74,0.35)!important}
+
+        /* Section title */
+        .v2-section-title{font-family:'Prompt';font-weight:700;font-size:15px;color:#111827;margin-bottom:14px}
+
+        /* Tab filter pills */
+        .v2-pill{padding:6px 14px;border-radius:999px;border:1.5px solid #E5E7EB;cursor:pointer;font-size:11.5px;font-family:'Sarabun';background:#FFFFFF;color:#6B7280;transition:all .15s;font-weight:600}
+        .v2-pill:hover{border-color:#16A34A44;color:#16A34A}
+        .v2-pill-on{background:#16A34A!important;color:#fff!important;border-color:#16A34A!important;box-shadow:0 2px 8px rgba(22,163,74,0.22)!important}
+
+        /* Animations */
+        .v2-in-anim{animation:v2fade .3s ease forwards}
+        @keyframes v2fade{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+        .v2-toast{animation:v2tin .3s ease,v2tout .3s 2.3s ease forwards;pointer-events:none}
+        @keyframes v2tin{from{opacity:0;transform:translateY(-14px) translateX(-50%)}to{opacity:1;transform:translateY(0) translateX(-50%)}}
+        @keyframes v2tout{to{opacity:0;transform:translateY(-14px) translateX(-50%)}}
+        @keyframes v2pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+        /* Like button */
+        .v2-like{background:none;border:1.5px solid #E5E7EB;border-radius:999px;cursor:pointer;display:inline-flex;align-items:center;gap:4px;padding:4px 12px;font-size:12px;color:#6B7280;transition:all .2s;font-family:'Sarabun'}
+        .v2-like:hover{border-color:#16A34A55;color:#16A34A;background:#F0FDF4}
+        .v2-like-on{border-color:#16A34A!important;color:#16A34A!important;background:#DCFCE7!important}
+
+        /* Progress bar */
+        .v2-bar-bg{background:#F3F4F6;border-radius:999px;height:8px;overflow:hidden}
+        .v2-bar-fill{height:100%;border-radius:999px;transition:width .8s cubic-bezier(.25,.46,.45,.94)}
+
+        /* Overlay */
+        .v2-ovl{position:fixed;inset:0;background:rgba(0,0,0,0.45);backdrop-filter:blur(6px);z-index:500;display:flex;align-items:center;justify-content:center;padding:20px}
+        .v2-modal{background:#FFFFFF;border-radius:24px;padding:28px;width:100%;max-width:380px;box-shadow:0 24px 64px rgba(0,0,0,0.18)}
+
+        /* Photo thumb */
+        .v2-pthumb{cursor:pointer;transition:all .2s;border-radius:10px;overflow:hidden}
+        .v2-pthumb:hover{transform:scale(1.04);box-shadow:0 4px 16px #00000055}
+
+        /* Exercise grid btn */
+        .v2-ex-btn{padding:9px 4px;border-radius:14px;border:1.5px solid #E5E7EB;background:#FFFFFF;cursor:pointer;text-align:center;transition:all .15s}
+        .v2-ex-btn:hover{border-color:#16A34A44;background:#F0FDF4}
+        .v2-ex-on{border-color:#16A34A!important;background:linear-gradient(135deg,#F0FDF4,#DCFCE7)!important;box-shadow:0 2px 8px rgba(22,163,74,0.16)!important}
+
+        /* Sort btn */
+        .v2-sort{padding:5px 12px;border-radius:999px;border:none;cursor:pointer;font-size:11.5px;font-family:'Sarabun';font-weight:600;transition:all .15s}
+
+        /* Badge chip */
+        .v2-badge{display:inline-flex;align-items:center;gap:6px;background:#F0FDF4;border:1.5px solid #D1FAE5;border-radius:999px;padding:5px 12px;font-size:11.5px;transition:all .2s}
+        .v2-badge:hover{background:#DCFCE7;border-color:#16A34A44}
+
+        /* Upload zone */
+        .v2-upload{border:2px dashed #D1FAE5;border-radius:16px;cursor:pointer;transition:all .2s;text-align:center;background:#FAFFFE}
+        .v2-upload:hover{border-color:#22C55E;background:#F0FDF4}
+
+        /* Admin card */
+        .v2-adm-card{background:linear-gradient(135deg,#F0FDF4,#DCFCE7);border:1px solid #A7F3D080;border-radius:18px}
+
+        /* Share card */
+        .v2-share-tab{flex:1;padding:9px;border:1.5px solid #E5E7EB;border-radius:12px;cursor:pointer;font-family:'Sarabun';font-size:12px;font-weight:600;background:#FFFFFF;color:#6B7280;transition:all .2s;text-align:center}
+        .v2-share-tab:hover{border-color:#16A34A44;color:#16A34A}
+        .v2-share-on{border-color:#16A34A!important;color:#16A34A!important;background:#F0FDF4!important}
+
+        /* Responsive */
+        @media(max-width:400px){
+          .v2-nav-btn{padding:6px 7px;font-size:9px;min-width:46px}
+          .v2-nav-btn span:first-child{font-size:15px}
+          .v2-modal{padding:22px 16px}
+        }
+        @media(max-width:360px){
+          .v2-nav-btn{padding:5px 5px;font-size:8.5px;min-width:40px}
+        }
+        .safe-pb{padding-bottom:calc(env(safe-area-inset-bottom,0px) + 0px)}
+        .tab-scroll{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none}
+        .tab-scroll::-webkit-scrollbar{display:none}
+      `}</style>
+
+      {/* Toast */}
+      {showSuccess && (
+        <div className="v2-toast" style={{ position:"fixed", top:20, left:"50%", zIndex:999, background:"linear-gradient(135deg,#ECFDF5,#D1FAE5)", border:"1px solid #6EE7B7", borderRadius:14, padding:"13px 22px", boxShadow:"0 8px 32px rgba(0,0,0,0.14)", fontFamily:"'Prompt'", whiteSpace:"nowrap" }}>
+          <span style={{ color:"#059669", fontWeight:700, fontSize:13 }}>{typeof showSuccess==="string"?showSuccess:"สำเร็จ!"}</span>
+        </div>
+      )}
+
+      {/* Photo zoom */}
+      {zoomPhoto && (
+        <div className="v2-ovl" onClick={()=>setZoomPhoto(null)} style={{ zIndex:600 }}>
+          <div style={{ maxWidth:500, width:"100%", borderRadius:20, overflow:"hidden", boxShadow:"0 24px 64px rgba(0,0,0,0.5)" }}>
+            <img src={zoomPhoto} alt="" style={{ width:"100%", display:"block" }} />
+          </div>
+        </div>
+      )}
+
+      {/* Save confirm modal */}
+      {showSaveConfirm && (()=>{
+        const expectedCal = calcCalories(form.exercise, form.duration);
+        const calRange = calcCalRange(form.exercise, form.duration);
+        const anomaly = calRange ? form.customCal > calRange.max * 1.5 : false;
+        const overPct = calRange ? Math.round(((form.customCal - calRange.max) / calRange.max) * 100) : 0;
+        return (
+        <div className="v2-ovl" onClick={()=>setShowSaveConfirm(false)}>
+          <div className="v2-modal" onClick={e=>e.stopPropagation()}>
+            <div style={{ textAlign:"center", marginBottom:22 }}>
+              <div style={{ width:64, height:64, borderRadius:20, background:"linear-gradient(135deg,#F0FDF4,#DCFCE7)", margin:"0 auto 12px", display:"flex", alignItems:"center", justifyContent:"center", fontSize:32, boxShadow:"0 4px 16px #16A34A20" }}>✅</div>
+              <div style={{ fontFamily:"'Prompt'", fontWeight:700, fontSize:18, color:"#111827" }}>ยืนยันการบันทึก?</div>
+            </div>
+            <div style={{ background:"#F0FDF4", borderRadius:14, padding:"14px 16px", marginBottom:14, fontSize:13 }}>
+              {[
+                ["กิจกรรม", form.exercise],
+                ["ระยะเวลา", `${form.duration} นาที`],
+                ["แคลอรี่ที่กรอก", `${form.customCal} kcal 🔥`],
+                ["ช่วงมาตรฐาน", calRange ? `${Math.round(calRange.min)}–${Math.round(calRange.max)} kcal` : "-"],
+                ["วันที่", form.date?new Date(form.date+"T00:00:00").toLocaleDateString("th-TH"):new Date().toLocaleDateString("th-TH")]
+              ].map(([k,v])=>(
+                <div key={k} style={{ display:"flex", justifyContent:"space-between", marginBottom:8 }}>
+                  <span style={{ color:"#6B7280" }}>{k}</span>
+                  <span style={{ fontWeight:700, color: k==="แคลอรี่ที่กรอก"?"#16A34A": k==="ช่วงมาตรฐาน"?"#0891B2":"#111827", fontSize: k==="แคลอรี่ที่กรอก"?15:13 }}>{v}</span>
+                </div>
+              ))}
+            </div>
+            {anomaly&&(
+              <div style={{ background:"#FEF9C3", border:"1.5px solid #FDE047", borderRadius:12, padding:"11px 14px", marginBottom:14, fontSize:12, color:"#713F12", lineHeight:1.6 }}>
+                ⚠️ <strong>แคลอรี่สูงผิดปกติ</strong> — {form.customCal} kcal เกินค่าสูงสุดมาตรฐาน ({Math.round(calRange.max)} kcal) {overPct}%
+              </div>
+            )}
+            <div style={{ background:"#FFF7ED", border:"1px solid #FED7AA", borderRadius:12, padding:"11px 14px", marginBottom:20, fontSize:12, color:"#92400E", lineHeight:1.6 }}>
+              📋 ข้าพเจ้าขอรับรองว่าสถิติดังกล่าวเป็นสถิติที่ออกกำลังกายด้วยตนเองจริง และยินดีให้ตรวจสอบความถูกต้องได้
+            </div>
+            <div style={{ display:"flex", gap:10 }}>
+              <button className="v2-btn-ghost" onClick={()=>setShowSaveConfirm(false)} style={{ flex:1, padding:13, fontSize:14 }}>ยกเลิก</button>
+              <button className="v2-btn-primary" onClick={handleAdd} style={{ flex:2, padding:13, fontSize:14 }}>✅ ยืนยัน</button>
+            </div>
+          </div>
+        </div>
+        );
+      })()}
+
+      {/* Delete confirm modal */}
+      {deleteConfirm && (
+        <div className="v2-ovl" onClick={()=>setDeleteConfirm(null)}>
+          <div className="v2-modal" onClick={e=>e.stopPropagation()}>
+            <div style={{ textAlign:"center", marginBottom:22 }}>
+              <div style={{ fontSize:48, marginBottom:8 }}>⚠️</div>
+              <div style={{ fontFamily:"'Prompt'", fontWeight:700, fontSize:18 }}>ยืนยันการลบ?</div>
+              <div style={{ fontSize:13, color:"#DC2626", marginTop:8 }}>"{deleteConfirm.name}"</div>
+            </div>
+            <div style={{ display:"flex", gap:10 }}>
+              <button className="v2-btn-ghost" onClick={()=>setDeleteConfirm(null)} style={{ flex:1, padding:13, fontSize:14 }}>ยกเลิก</button>
+              <button className="v2-btn-danger" onClick={deleteConfirm.fn} style={{ flex:1, padding:13, fontSize:14 }}>🗑️ ลบเลย</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Profile Modal */}
+      {showEditProfile && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:100, display:"flex", alignItems:"center", justifyContent:"center", padding:20 }} onClick={()=>setShowEditProfile(false)}>
+          <div className="v2-modal" onClick={e=>e.stopPropagation()}>
+            <h3 style={{ fontFamily:"'Prompt'", fontWeight:700, fontSize:17, marginBottom:22, color:"#111827" }}>✏️ แก้ไขโปรไฟล์</h3>
+            <div style={{ textAlign:"center", marginBottom:22 }}>
+              <div onClick={()=>avatarEditRef.current?.click()} style={{ width:96, height:96, borderRadius:"50%", border:"2.5px dashed #22C55E", display:"inline-flex", alignItems:"center", justifyContent:"center", cursor:"pointer", overflow:"hidden", background:"#F0FDF4", boxShadow:"0 4px 20px #16A34A18" }}>
+                {(editForm.avatar!==undefined?editForm.avatar:authUser?.avatar)
+                  ?<img src={editForm.avatar!==undefined?editForm.avatar:authUser.avatar} style={{ width:"100%", height:"100%", objectFit:"cover" }} alt="avatar" />
+                  :<span style={{ fontSize:38 }}>📷</span>}
+              </div>
+              <input ref={avatarEditRef} type="file" accept="image/*" style={{ display:"none" }} onChange={e=>{ const f=e.target.files?.[0]; if(!f)return; resizeImage(f).then(b64=>setEditForm(p=>({...p,avatar:b64}))); }} />
+              <p style={{ fontSize:10, color:"#9CA3AF", marginTop:6 }}>แตะวงกลมเพื่อเปลี่ยนรูป</p>
+              {(editForm.avatar!==undefined&&editForm.avatar!==null)&&<button onClick={()=>setEditForm(p=>({...p,avatar:null}))} style={{ marginTop:6, background:"none", border:"none", color:"#9CA3AF", fontSize:11, cursor:"pointer", textDecoration:"underline" }}>ลบรูปภาพ</button>}
+            </div>
+            <div style={{ display:"flex", gap:10 }}>
+              <button className="v2-btn-ghost" onClick={()=>setShowEditProfile(false)} style={{ flex:1, padding:13, fontSize:13 }}>ยกเลิก</button>
+              <button className="v2-btn-primary" onClick={handleSaveProfile} style={{ flex:2, padding:13, fontSize:13 }}>💾 บันทึก</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MAIN CONTENT ── */}
+      <div style={{ position:"relative", zIndex:1, maxWidth:680, width:"100%", margin:"0 auto", padding:"calc(env(safe-area-inset-top,0px) + 16px) 14px calc(100px + env(safe-area-inset-bottom,0px))" }}>
+
+        {/* ── HEADER v2 ── */}
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:20, opacity:animateIn?1:0, transform:animateIn?"none":"translateY(-16px)", transition:"all .5s ease" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+            <div style={{ width:40, height:40, borderRadius:12, background:"#FFFFFF", boxShadow:"0 2px 10px rgba(22,163,74,0.20)", display:"flex", alignItems:"center", justifyContent:"center", overflow:"hidden" }}>
+              <img src="logo.png" alt="TVO" style={{ width:32, height:32, objectFit:"contain" }} />
+            </div>
+            <div>
+              <div style={{ fontFamily:"'Prompt'", fontWeight:900, fontSize:17, background:"linear-gradient(135deg,#15803D,#22C55E)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent", lineHeight:1.2 }}>TVO Calories Challenge</div>
+              <div style={{ fontSize:9.5, color:"#9CA3AF", letterSpacing:1.5, textTransform:"uppercase" }}>Happy Health 2026</div>
+            </div>
+          </div>
+          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+            {/* Connection status dot */}
+            <div style={{ width:8, height:8, borderRadius:"50%", background: spStatus==="connected"?"#22C55E":spStatus==="error"?"#EF4444":"#F59E0B", boxShadow: spStatus==="connected"?"0 0 6px #22C55E":"none", animation: spStatus==="connecting"?"v2pulse 1.2s infinite":"none" }} title={spStatus==="connected"?`Sync ${spLastSync}`:spStatus} />
+            {/* User chip */}
+            <div onClick={()=>{ setEditForm({displayName:authUser.displayName,avatar:undefined}); setShowEditProfile(true); }} style={{ display:"flex", alignItems:"center", gap:8, background:"#FFFFFF", border:"1px solid #D1FAE5", borderRadius:999, padding:"5px 12px 5px 6px", cursor:"pointer", boxShadow:"0 2px 8px rgba(0,0,0,0.06)", transition:"box-shadow .2s" }} title="แก้ไขโปรไฟล์">
+              {authUser?.avatar
+                ?<img src={authUser.avatar} style={{ width:30, height:30, borderRadius:"50%", objectFit:"cover", border:"2px solid #22C55E" }} alt="av" />
+                :<div style={{ width:30, height:30, borderRadius:"50%", background:"linear-gradient(135deg,#16A34A,#4ADE80)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:15 }}>👤</div>}
+              <div>
+                <div style={{ fontSize:12, fontWeight:700, color:"#111827", lineHeight:1.2, maxWidth:80, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{authUser?.displayName}</div>
+                <div style={{ fontSize:9.5, color:"#9CA3AF", lineHeight:1.2 }}>{grpLabel(authUser?.group)}</div>
+              </div>
+            </div>
+            <button onClick={handleLogout} style={{ background:"none", border:"1.5px solid #E5E7EB", borderRadius:10, padding:"6px 10px", cursor:"pointer", fontSize:11, color:"#9CA3AF", fontFamily:"'Sarabun'", transition:"all .2s" }}>ออก</button>
+          </div>
+        </div>
+
+        {/* ── STATS BAR v2 ── */}
+        {(() => {
+          const totalCal = logs.reduce((s,l)=>s+l.calories,0);
+          const TARGET = 1000000;
+          const pct = Math.min(100, (totalCal / TARGET) * 100);
+          const calDisplay = totalCal.toLocaleString();
+          return (
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:10, marginBottom:22, opacity:animateIn?1:0, transition:"all .5s ease .15s" }}>
+              {/* Calorie card — special with progress */}
+              <div className="v2-card" style={{ padding:"14px 8px", textAlign:"center", gridColumn:"1" }}>
+                <div style={{ width:36, height:36, borderRadius:11, background:"linear-gradient(135deg,#16A34A,#22C55E)", margin:"0 auto 8px", display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, boxShadow:"0 4px 12px rgba(22,163,74,0.25)" }}>🔥</div>
+                <div style={{ fontFamily:"'Prompt'", fontSize:19, fontWeight:800, color:"#111827", lineHeight:1 }}>{calDisplay}</div>
+                <div style={{ fontSize:8.5, color:"#16A34A", fontWeight:700, marginTop:2 }}>{pct.toFixed(1)}% of 1M</div>
+                <div style={{ background:"#F3F4F6", borderRadius:999, height:5, overflow:"hidden", margin:"5px 4px 0" }}>
+                  <div style={{ height:"100%", borderRadius:999, background:"linear-gradient(90deg,#16A34A,#22C55E)", width:`${pct}%`, transition:"width 1s cubic-bezier(.25,.46,.45,.94)" }} />
+                </div>
+              </div>
+              {/* Session card */}
+              <div className="v2-card" style={{ padding:"14px 8px", textAlign:"center" }}>
+                <div style={{ width:36, height:36, borderRadius:11, background:"linear-gradient(135deg,#0891B2,#06B6D4)", margin:"0 auto 8px", display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, boxShadow:"0 4px 12px rgba(8,145,178,0.22)" }}>⚡</div>
+                <div style={{ fontFamily:"'Prompt'", fontSize:20, fontWeight:800, color:"#111827", lineHeight:1 }}>{logs.length}</div>
+                <div style={{ fontSize:9.5, color:"#9CA3AF", marginTop:4, lineHeight:1.3 }}>ครั้ง<br/>เซสชั่น</div>
+              </div>
+              {/* Members card */}
+              <div className="v2-card" style={{ padding:"14px 8px", textAlign:"center" }}>
+                <div style={{ width:36, height:36, borderRadius:11, background:"linear-gradient(135deg,#7C3AED,#8B5CF6)", margin:"0 auto 8px", display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, boxShadow:"0 4px 12px rgba(124,58,237,0.22)" }}>👥</div>
+                <div style={{ fontFamily:"'Prompt'", fontSize:20, fontWeight:800, color:"#111827", lineHeight:1 }}>{[...new Set(logs.map(l=>l.user))].length}</div>
+                <div style={{ fontSize:9.5, color:"#9CA3AF", marginTop:4, lineHeight:1.3 }}>คน<br/>ผู้เข้าร่วม</div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* ── CONTENT TABS v2 ── */}
+
+        {/* ───── DASHBOARD ───── */}
+        {activeTab==="dashboard" && (
+          <div className="v2-in-anim">
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
+              <h2 className="v2-section-title" style={{ marginBottom:0 }}>📋 บันทึกล่าสุด</h2>
+              <div className="tab-scroll" style={{ gap:5 }}>
+                {[{id:"newest",label:"ใหม่สุด"},{id:"oldest",label:"เก่าสุด"},{id:"name",label:"ชื่อ"},{id:"exercise",label:"กีฬา"},{id:"calories",label:"kcal🔥"}].map(s=>(
+                  <button key={s.id} className="v2-sort" onClick={()=>setDashSort(s.id)}
+                    style={{ background:dashSort===s.id?"#16A34A":"#FFFFFF", color:dashSort===s.id?"#fff":"#6B7280", border:dashSort===s.id?"none":"1px solid #E5E7EB", fontWeight:dashSort===s.id?700:500 }}>
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+              {[...logs].sort((a,b)=>{
+                if(dashSort==="newest") return b.date>a.date?1:b.date<a.date?-1:0;
+                if(dashSort==="oldest") return a.date>b.date?1:a.date<b.date?-1:0;
+                if(dashSort==="name") return a.user.localeCompare(b.user,"th");
+                if(dashSort==="exercise") return a.exercise.localeCompare(b.exercise,"th");
+                if(dashSort==="calories") return b.calories-a.calories;
+                return 0;
+              }).slice(0,30).map(log=>{
+                const ex=exercises.find(e=>e.name===log.exercise);
+                const color=getGroupColor(log.group);
+                const liked=likedLogs.has(log.id);
+                const logAv=avatars[log.user];
+                return (
+                  <div key={log.id} className="v2-card" style={{ padding:"14px 16px", borderLeft:`4px solid ${color}` }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+                      {/* Profile avatar (แทน exercise icon) */}
+                      <div onClick={()=>{ setProfileUser(log.user); setProfileFilter("all"); setActiveTab("profile"); }} style={{ width:44, height:44, borderRadius:"50%", overflow:"hidden", flexShrink:0, border:`2px solid ${color}55`, background:`${color}18`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, cursor:"pointer" }}>
+                        {logAv?<img src={logAv} style={{ width:"100%", height:"100%", objectFit:"cover" }} alt="" />:<span>👤</span>}
+                      </div>
+                      {/* Info */}
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ display:"flex", alignItems:"center", gap:7, marginBottom:3, flexWrap:"wrap" }}>
+                          <span onClick={()=>{ setProfileUser(log.user); setProfileFilter("all"); setActiveTab("profile"); }} style={{ fontWeight:700, fontFamily:"'Prompt'", fontSize:14, cursor:"pointer", color:"#111827" }}>{log.user}</span>
+                          <span style={{ fontSize:10, background:`${color}18`, color, borderRadius:999, padding:"2px 8px", fontWeight:700 }}>{grpLabel(log.group)}</span>
+                        </div>
+                        <div style={{ color:"#6B7280", fontSize:12 }}>{log.exercise} · {log.duration} นาที · {log.date}</div>
+                        {log.note&&<div style={{ color:"#9CA3AF", fontSize:11, marginTop:3, fontStyle:"italic" }}>"{log.note}"</div>}
+                        <div style={{ marginTop:8, display:"flex", alignItems:"center", gap:8 }}>
+                          <button className={`v2-like ${liked?"v2-like-on":""}`} onClick={()=>handleLike(log.id)}>
+                            {liked?"❤️":"🤍"} <span>{log.likes}</span>
+                          </button>
+                          {log.photo&&<div className="v2-pthumb" onClick={()=>setZoomPhoto(log.photo)} style={{ width:30, height:30 }}><img src={log.photo} alt="" style={{ width:"100%", height:"100%", objectFit:"cover", borderRadius:8 }} /></div>}
+                        </div>
+                      </div>
+                      {/* Calorie chip + exercise icon */}
+                      <div style={{ flexShrink:0, textAlign:"center", background:`linear-gradient(135deg,${color}18,${color}0a)`, borderRadius:14, padding:"8px 12px", border:`1px solid ${color}22` }}>
+                        <div style={{ width:28, height:28, borderRadius:8, background:`${color}22`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, margin:"0 auto 4px", overflow:"hidden" }}>
+                          {ex?.image?<img src={ex.image} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} />:(ex?.icon||"🏃")}
+                        </div>
+                        <div style={{ fontFamily:"'Prompt'", fontWeight:800, fontSize:18, color, lineHeight:1 }}>{log.calories}</div>
+                        <div style={{ fontSize:9.5, color:"#9CA3AF", marginTop:2 }}>kcal</div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              {logs.length===0&&<div style={{ textAlign:"center", padding:"48px 0", color:"#9CA3AF", fontSize:14 }}>ยังไม่มีข้อมูล — ลองบันทึกการออกกำลังกายแรก!</div>}
+            </div>
+          </div>
+        )}
+
+        {/* ───── ADD ───── */}
+        {activeTab==="add" && !isOpen && (
+          <div className="v2-in-anim">
+            <div className="v2-card" style={{ padding:28, textAlign:"center" }}>
+              <div style={{ fontSize:52, marginBottom:12 }}>⏳</div>
+              <div style={{ fontFamily:"'Prompt'", fontWeight:900, fontSize:18, color:"#16A34A", marginBottom:6 }}>
+                เปิดรับข้อมูลในอีก...
+              </div>
+              <div style={{ fontFamily:"'Prompt'", fontWeight:900, fontSize:48, color:"#111827", letterSpacing:2, marginBottom:4 }}>
+                {String(countdown.h).padStart(2,"0")}
+                <span style={{ color:"#9CA3AF", fontSize:32 }}>:</span>
+                {String(countdown.m).padStart(2,"0")}
+                <span style={{ color:"#9CA3AF", fontSize:32 }}>:</span>
+                {String(countdown.s).padStart(2,"0")}
+              </div>
+              <div style={{ fontSize:12, color:"#9CA3AF", marginBottom:20 }}>ชั่วโมง : นาที : วินาที</div>
+              <div style={{ background:"#F0FDF4", border:"1px solid #BBF7D0", borderRadius:14, padding:"14px 18px", fontSize:13, color:"#374151", lineHeight:1.8 }}>
+                <div style={{ fontFamily:"'Prompt'", fontWeight:700, color:"#16A34A", marginBottom:6 }}>📢 TVO Happy Health 2026</div>
+                <div>เริ่มส่งข้อมูลแคลอรี่ได้ตั้งแต่</div>
+                <div style={{ fontWeight:700, color:"#16A34A" }}>วันที่ 11 มิถุนายน 2569 เวลา 00:15 น.</div>
+                <div style={{ marginTop:6, fontSize:12, color:"#9CA3AF" }}>กรุณารอจนครบเวลาเพื่อเริ่มบันทึกกิจกรรม</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab==="add" && isOpen && (
+          <div className="v2-in-anim">
+            <div className="v2-card" style={{ padding:22 }}>
+              <h2 className="v2-section-title">🏃 บันทึกการออกกำลังกาย</h2>
+
+              {/* User chip */}
+              <div style={{ background:"linear-gradient(135deg,#F0FDF4,#DCFCE7)", border:"1px solid #A7F3D0", borderRadius:16, padding:"12px 16px", display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:20 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                  {authUser?.avatar?<img src={authUser.avatar} style={{ width:38, height:38, borderRadius:"50%", objectFit:"cover", border:"2px solid #22C55E" }} alt="av" />:<div style={{ width:38, height:38, borderRadius:"50%", background:"linear-gradient(135deg,#16A34A,#4ADE80)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:19 }}>👤</div>}
+                  <div>
+                    <div style={{ fontFamily:"'Prompt'", fontWeight:700, fontSize:14, color:"#15803D" }}>{authUser?.displayName}</div>
+                    <div style={{ fontSize:11, color:"#6B7280" }}>{authUser?.group}</div>
+                  </div>
+                </div>
+                <div style={{ fontSize:11, color:"#16A34A", fontWeight:600, background:"#FFFFFF", borderRadius:999, padding:"3px 10px", border:"1px solid #D1FAE5" }}>ผู้บันทึก</div>
+              </div>
+
+              {/* Exercise selector */}
+              <div style={{ marginBottom:20 }}>
+                <label style={{ fontSize:12, color:"#374151", display:"block", marginBottom:10, fontWeight:700 }}>🎯 ประเภทการออกกำลังกาย</label>
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:7 }}>
+                  {exercises.map(ex=>{
+                    const sel=form.exercise===ex.name;
+                    const c=getGroupColor(form.group);
+                    return (
+                      <button key={ex.id} onClick={()=>setForm(p=>({...p,exercise:ex.name}))}
+                        className={`v2-ex-btn ${sel?"v2-ex-on":""}`}
+                        style={{ borderColor:sel?c:"#E5E7EB" }}>
+                        <div style={{ width:30, height:30, borderRadius:9, overflow:"hidden", margin:"0 auto 4px", background:"#F0FDF4", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                          {ex.image?<img src={ex.image} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} />:<span style={{ fontSize:17 }}>{ex.icon}</span>}
+                        </div>
+                        <div style={{ fontSize:9.5, color:sel?c:"#6B7280", fontWeight:600, lineHeight:1.2 }}>{ex.name}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Date */}
+              <div style={{ marginBottom:20 }}>
+                <label style={{ fontSize:12, color:"#374151", display:"block", marginBottom:8, fontWeight:700 }}>📅 วันที่</label>
+                <input type="date" value={form.date} max={new Date().toISOString().split("T")[0]}
+                  onChange={e=>setForm(p=>({...p,date:e.target.value}))}
+                  style={{ width:"100%", padding:"12px 16px", borderRadius:14, fontSize:14, border:"1.5px solid #D1FAE5", color:"#15803D", fontWeight:600 }} />
+              </div>
+
+              {/* Duration */}
+              <div style={{ marginBottom:20 }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+                  <label style={{ fontSize:12, color:"#374151", fontWeight:700 }}>⏱️ ระยะเวลา</label>
+                  <input
+                    type="number" min={15} max={480} value={form.duration}
+                    onChange={e => { const v = Math.max(15, Math.min(480, +e.target.value||15)); setForm(p=>({...p,duration:v})); }}
+                    style={{ width:72, padding:"4px 8px", borderRadius:10, border:"1.5px solid #D1FAE5", fontFamily:"'Prompt'", fontWeight:700, fontSize:15, color:"#16A34A", textAlign:"center", outline:"none", background:"#F0FDF4" }}
+                  />
+                </div>
+                <input type="range" min={15} max={480} step={1} value={form.duration} onChange={e=>setForm(p=>({...p,duration:+e.target.value}))} style={{ width:"100%", accentColor:"#16A34A", borderRadius:999, border:"none", background:"transparent" }} />
+                <div style={{ display:"flex", justifyContent:"space-between", fontSize:10, color:"#9CA3AF", marginTop:4 }}><span>15 น.</span><span>480 น.</span></div>
+              </div>
+
+              {/* Note */}
+              <div style={{ marginBottom:20 }}>
+                <label style={{ fontSize:12, color:"#374151", display:"block", marginBottom:8, fontWeight:700 }}>📝 บันทึก</label>
+                <textarea value={form.note} onChange={e=>setForm(p=>({...p,note:e.target.value}))} placeholder="เช่น วิ่งตอนเช้า รู้สึกดีมาก..." rows={2} style={{ width:"100%", padding:"12px 14px", borderRadius:14, fontSize:13 }} />
+              </div>
+
+              {/* Photo */}
+              <div style={{ marginBottom:20 }}>
+                <label style={{ fontSize:12, color:"#374151", display:"block", marginBottom:8, fontWeight:700 }}>📸 รูปการออกกำลังกาย <span style={{ color:"#DC2626", fontWeight:800 }}>*</span> <span style={{ color:"#9CA3AF", fontWeight:400, fontSize:11 }}>(บังคับ)</span></label>
+                {form.photo?(
+                  <div style={{ position:"relative" }}>
+                    <img src={form.photo} alt="" onClick={()=>setZoomPhoto(form.photo)} className="v2-pthumb" style={{ width:"100%", maxHeight:200, objectFit:"cover", borderRadius:16, display:"block" }} />
+                    <button onClick={()=>setForm(p=>({...p,photo:null}))} style={{ position:"absolute", top:8, right:8, background:"rgba(0,0,0,0.65)", border:"none", color:"#fff", borderRadius:"50%", width:30, height:30, cursor:"pointer", fontSize:14, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
+                    <button onClick={()=>addPhotoRef.current?.click()} style={{ position:"absolute", bottom:8, right:8, background:"rgba(22,163,74,0.85)", border:"none", color:"#fff", borderRadius:8, padding:"5px 12px", cursor:"pointer", fontSize:11, fontFamily:"'Sarabun'", fontWeight:600 }}>เปลี่ยนรูป</button>
+                  </div>
+                ):(
+                  <div className="v2-upload" onClick={()=>addPhotoRef.current?.click()} style={{ padding:"26px 16px" }}>
+                    <div style={{ fontSize:30, marginBottom:6 }}>📸</div>
+                    <div style={{ fontSize:13, color:"#6B7280" }}>แตะเพื่อเลือกรูปภาพ</div>
+                    <div style={{ fontSize:10, color:"#9CA3AF", marginTop:3 }}>PNG / JPG / WEBP (บีบอัดอัตโนมัติ)</div>
+                  </div>
+                )}
+                <input ref={addPhotoRef} type="file" accept="image/*" style={{ display:"none" }} onChange={e=>handlePhotoUpload(e.target.files[0])} />
+              </div>
+
+              {/* kcal entry */}
+              <div style={{ marginBottom:22 }}>
+                <div style={{ marginBottom:12 }}>
+                  <button onClick={()=>setShowAppLinks(p=>!p)} className="v2-btn-ghost" style={{ width:"100%", padding:"10px", fontSize:12, display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
+                    <span>📱 ดู kcal จากแอพวิ่ง</span><span>{showAppLinks?"▲":"▼"}</span>
+                  </button>
+                  {showAppLinks&&(
+                    <div style={{ marginTop:8, display:"flex", flexDirection:"column", gap:8 }}>
+                      {RUN_APPS.map(app=>(
+                        <a key={app.name} href={app.url} target="_blank" rel="noopener noreferrer"
+                          style={{ display:"flex", alignItems:"center", gap:12, background:"#FAFFFE", border:`1.5px solid ${app.color}22`, borderRadius:14, padding:"11px 14px", textDecoration:"none" }}>
+                          <div style={{ width:36, height:36, borderRadius:10, background:app.color+"18", display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, flexShrink:0 }}>{app.icon}</div>
+                          <div style={{ flex:1 }}>
+                            <div style={{ fontWeight:700, fontSize:13, color:app.color }}>{app.name}</div>
+                            <div style={{ fontSize:10, color:"#9CA3AF", marginTop:1 }}>{app.hint}</div>
+                          </div>
+                          <span style={{ fontSize:11, color:"#9CA3AF" }}>เปิด →</span>
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <label style={{ fontSize:12, color:"#374151", display:"block", marginBottom:10, fontWeight:700 }}>🔥 กรอก kcal</label>
+                <div style={{ display:"flex", alignItems:"center", gap:12, background:"#F0FDF4", borderRadius:18, padding:"8px 16px", border:"1.5px solid #D1FAE5" }}>
+                  <input type="number" min={1} max={9999} value={form.customCal} onChange={e=>setForm(p=>({...p,customCal:Math.min(9999,Math.max(1,+e.target.value||1))}))}
+                    style={{ flex:1, padding:"8px 4px", background:"transparent", border:"none", fontSize:28, fontWeight:800, color:"#16A34A", textAlign:"center", boxShadow:"none" }} />
+                  <span style={{ fontSize:14, color:"#6B7280", fontWeight:700 }}>kcal</span>
+                </div>
+              </div>
+
+              {dailyFull?(
+                <div style={{ background:"#F3F4F6", borderRadius:16, padding:"14px 16px", textAlign:"center" }}>
+                  <div style={{ fontSize:22, marginBottom:6 }}>🔒</div>
+                  <div style={{ fontFamily:"'Prompt'", fontWeight:700, fontSize:14, color:"#9CA3AF" }}>ครบ {DAILY_LIMIT} ครั้งแล้ววันนี้</div>
+                  <div style={{ fontSize:12, color:"#9CA3AF", marginTop:4 }}>สามารถบันทึกใหม่ได้พรุ่งนี้</div>
+                </div>
+              ):(
+                <button className="v2-btn-primary" onClick={()=>{
+                  if(!form.photo){ toast("⚠️ กรุณาแนบรูปการออกกำลังกายก่อนบันทึก"); return; }
+                  setShowSaveConfirm(true);
+                }} style={{ width:"100%", padding:16, fontSize:15 }}>🔥 บันทึกแคลอรี่</button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ───── PROFILE ───── */}
+        {activeTab==="profile" && (
+          <div className="v2-in-anim">
+            {!profileUser?(<p style={{ fontSize:12, color:"#9CA3AF" }}>กำลังโหลด...</p>):(
+              <div>
+                {/* Profile header */}
+                <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20 }}>
+                  {profileUser!==authUser?.displayName&&(
+                    <button className="v2-btn-ghost" onClick={()=>{ setProfileUser(authUser?.displayName); setProfileFilter("all"); }} style={{ padding:"7px 14px", fontSize:13 }}>← กลับ</button>
+                  )}
+                  <div style={{ position:"relative" }}>
+                    {avatars[profileUser]
+                      ?<img src={avatars[profileUser]} style={{ width:60, height:60, borderRadius:"50%", objectFit:"cover", border:"3px solid #22C55E", boxShadow:"0 4px 16px #16A34A30" }} alt="av" />
+                      :<div style={{ width:60, height:60, borderRadius:"50%", background:"linear-gradient(135deg,#16A34A,#4ADE80)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:28, boxShadow:"0 4px 16px #16A34A25" }}>👤</div>}
+                  </div>
+                  <div>
+                    <div style={{ fontFamily:"'Prompt'", fontWeight:800, fontSize:20, color:"#111827" }}>{profileUser}</div>
+                    <div style={{ fontSize:11, color:"#9CA3AF", marginTop:2 }}>{profileUserData?.group}</div>
+                  </div>
+                </div>
+
+                {/* Stats row */}
+                {profileUserData&&(
+                  <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:9, marginBottom:16 }}>
+                    {[
+                      { label:"แคลอรี่รวม", value:profileUserData.totalCal.toLocaleString(), unit:"kcal", color:"#16A34A" },
+                      { label:"เซสชั่น", value:profileUserData.sessions, unit:"ครั้ง", color:"#0891B2" },
+                      { label:"เฉลี่ย/ครั้ง", value:Math.round(profileUserData.totalCal/profileUserData.sessions).toLocaleString(), unit:"kcal", color:"#7C3AED" },
+                      ...(profileUser===authUser?.displayName ? [{ label:"วันนี้", value:`${todayCount}/${DAILY_LIMIT}`, unit:"ครั้ง", color: dailyFull?"#9CA3AF":"#F59E0B" }] : []),
+                    ].map(s=>(
+                      <div key={s.label} className="v2-card" style={{ padding:"12px 8px", textAlign:"center" }}>
+                        <div style={{ fontFamily:"'Prompt'", fontSize:17, fontWeight:800, color:s.color }}>{s.value}</div>
+                        <div style={{ fontSize:9.5, color:"#9CA3AF", marginTop:3, lineHeight:1.3 }}>{s.unit}<br/>{s.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Weekly Goal */}
+                <div className="v2-card" style={{ padding:18, marginBottom:14 }}>
+                  <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}>
+                    <div style={{ fontFamily:"'Prompt'", fontWeight:700, fontSize:13, color:"#374151" }}>🎯 เป้าหมายสัปดาห์นี้</div>
+                    <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                      <span style={{ fontSize:11, color:"#9CA3AF" }}>7 วัน: <span style={{ color:"#16A34A", fontWeight:700 }}>{weeklyTotal.toLocaleString()} kcal</span></span>
+                      {!editingGoal&&<button onClick={()=>{ setGoalInput(weeklyGoal||5000); setEditingGoal(true); }} style={{ background:"#F0FDF4", border:"1px solid #D1FAE5", borderRadius:8, padding:"3px 9px", fontSize:11, color:"#16A34A", cursor:"pointer", fontFamily:"'Sarabun'", fontWeight:600 }}>✏️ ตั้งเป้า</button>}
+                    </div>
+                  </div>
+                  {editingGoal?(
+                    <div>
+                      <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, color:"#6B7280", marginBottom:6 }}>
+                        <span>เป้าหมาย</span><span style={{ color:"#16A34A", fontWeight:700, fontSize:14 }}>{goalInput.toLocaleString()} kcal/สัปดาห์</span>
+                      </div>
+                      <input type="range" min={500} max={10000} step={250} value={goalInput} onChange={e=>setGoalInput(+e.target.value)} style={{ width:"100%", accentColor:"#16A34A", marginBottom:10, border:"none", background:"transparent" }} />
+                      <div style={{ display:"flex", gap:8 }}>
+                        <button onClick={()=>setEditingGoal(false)} style={{ flex:1, padding:10, borderRadius:12, border:"1.5px solid #E5E7EB", background:"#fff", cursor:"pointer", fontSize:13, color:"#6B7280", fontFamily:"'Sarabun'" }}>ยกเลิก</button>
+                        <button onClick={()=>{ setGoals(p=>({...p,[profileUser]:{weekly:goalInput}})); setEditingGoal(false); toast("บันทึกเป้าหมายแล้ว 🎯"); }} style={{ flex:2, padding:10, borderRadius:12, border:"none", background:"linear-gradient(135deg,#16A34A,#22C55E)", color:"#fff", cursor:"pointer", fontSize:13, fontFamily:"'Prompt'", fontWeight:700 }}>💾 บันทึก</button>
+                      </div>
+                    </div>
+                  ):(
+                    <div>
+                      <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, color:"#6B7280", marginBottom:6 }}>
+                        <span>{weeklyTotal.toLocaleString()} / {weeklyGoal.toLocaleString()} kcal</span>
+                        <span style={{ color:weeklyTotal>=weeklyGoal?"#10B981":"#16A34A", fontWeight:700 }}>{Math.min(100,Math.round((weeklyTotal/weeklyGoal)*100))}%</span>
+                      </div>
+                      <div className="v2-bar-bg" style={{ height:10 }}>
+                        <div className="v2-bar-fill" style={{ width:`${Math.min(100,(weeklyTotal/weeklyGoal)*100)}%`, background:weeklyTotal>=weeklyGoal?"linear-gradient(90deg,#4ADE80,#22C55E)":"linear-gradient(90deg,#16A34A,#22C55E)" }} />
+                      </div>
+                      {weeklyTotal>=weeklyGoal&&<div style={{ fontSize:12, color:"#10B981", marginTop:8, textAlign:"center", fontWeight:700 }}>🎉 ถึงเป้าหมายแล้ว!</div>}
+                    </div>
+                  )}
+                </div>
+
+                {/* 7-day chart */}
+                <div className="v2-card" style={{ padding:18, marginBottom:14 }}>
+                  <div style={{ fontFamily:"'Prompt'", fontWeight:700, fontSize:13, color:"#374151", marginBottom:16 }}>📈 7 วันล่าสุด</div>
+                  <div style={{ display:"flex", alignItems:"flex-end", gap:7, height:90 }}>
+                    {profileChart.map((d,i)=>{
+                      const pct=chartMax>0?(d.cal/chartMax)*100:0;
+                      const isToday=i===6;
+                      return (
+                        <div key={d.date} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:4, height:"100%" }}>
+                          <div style={{ flex:1, width:"100%", display:"flex", alignItems:"flex-end" }}>
+                            <div style={{ width:"100%", height:`${Math.max(5,pct)}%`, background:isToday?"linear-gradient(180deg,#16A34A,#22C55E)":d.cal>0?"linear-gradient(180deg,#D1FAE5,#A7F3D0)":"#F3F4F6", borderRadius:"5px 5px 0 0", border:isToday?"1px solid #16A34A44":"none", transition:"height .8s cubic-bezier(.25,.46,.45,.94)" }} />
+                          </div>
+                          {d.cal>0&&<div style={{ fontSize:8, color:isToday?"#16A34A":"#6B7280", fontWeight:700, whiteSpace:"nowrap" }}>{d.cal}</div>}
+                          <div style={{ fontSize:9.5, color:isToday?"#16A34A":"#9CA3AF", fontWeight:isToday?700:400 }}>{d.label}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Badges */}
+                <div className="v2-card" style={{ padding:18, marginBottom:14 }}>
+                  <div style={{ fontFamily:"'Prompt'", fontWeight:700, fontSize:13, color:"#374151", marginBottom:14 }}>🏅 รางวัลที่ได้รับ</div>
+                  <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
+                    {BADGE_DEFS.map(b=>{
+                      const earned=b.check(profileUserData?.totalCal||0,profileUserData?.sessions||0,logs.filter(l=>l.user===profileUser&&l.duration>=30).length);
+                      return (
+                        <div key={b.name} className="v2-badge" style={{ opacity:earned?1:0.3, filter:earned?"none":"grayscale(1)" }} title={b.desc}>
+                          <span style={{ fontSize:18 }}>{b.icon}</span>
+                          <div>
+                            <div style={{ fontSize:11, fontWeight:700, color:earned?"#16A34A":"#9CA3AF" }}>{b.name}</div>
+                            <div style={{ fontSize:9.5, color:"#9CA3AF" }}>{b.desc}</div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Activity history */}
+                <div className="tab-scroll" style={{ marginBottom:14 }}>
+                  <button onClick={()=>setProfileFilter("all")} className={`v2-pill ${profileFilter==="all"?"v2-pill-on":""}`}>ทั้งหมด</button>
+                  {[...new Set(logs.filter(l=>l.user===profileUser).map(l=>l.exercise))].map(ex=>(
+                    <button key={ex} onClick={()=>setProfileFilter(ex)} className={`v2-pill ${profileFilter===ex?"v2-pill-on":""}`}>{exercises.find(e=>e.name===ex)?.icon} {ex}</button>
+                  ))}
+                </div>
+                <div style={{ display:"flex", flexDirection:"column", gap:9 }}>
+                  {profileLogs.length===0&&<div style={{ textAlign:"center", padding:40, color:"#9CA3AF", fontSize:13 }}>ไม่มีข้อมูล</div>}
+                  {profileLogs.map(log=>{
+                    const ex=exercises.find(e=>e.name===log.exercise);
+                    const color=getGroupColor(log.group);
+                    const liked=likedLogs.has(log.id);
+                    return (
+                      <div key={log.id} className="v2-card" style={{ padding:14, borderLeft:`4px solid ${color}` }}>
+                        <div style={{ display:"flex", gap:12, alignItems:"flex-start" }}>
+                          <div style={{ width:40, height:40, borderRadius:12, background:`${color}18`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, overflow:"hidden", flexShrink:0 }}>
+                            {ex?.image?<img src={ex.image} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} />:(ex?.icon||"🏃")}
+                          </div>
+                          <div style={{ flex:1, minWidth:0 }}>
+                            <div style={{ fontFamily:"'Prompt'", fontWeight:700, fontSize:13, color:"#111827" }}>{log.exercise}</div>
+                            <div style={{ fontSize:11, color:"#9CA3AF" }}>{log.date} · {log.duration} นาที</div>
+                            {log.note&&<div style={{ fontSize:11, color:"#6B7280", fontStyle:"italic", marginTop:3 }}>"{log.note}"</div>}
+                            <div style={{ marginTop:6, display:"flex", alignItems:"center", gap:8 }}>
+                              <button className={`v2-like ${liked?"v2-like-on":""}`} onClick={()=>handleLike(log.id)}>{liked?"❤️":"🤍"} {log.likes}</button>
+                              {log.photo&&<div className="v2-pthumb" onClick={()=>setZoomPhoto(log.photo)} style={{ width:30, height:30 }}><img src={log.photo} alt="" style={{ width:"100%", height:"100%", objectFit:"cover", borderRadius:8 }} /></div>}
+                            </div>
+                          </div>
+                          <div style={{ fontFamily:"'Prompt'", fontWeight:800, fontSize:16, color, flexShrink:0 }}>{log.calories} <span style={{ fontSize:10, color:"#9CA3AF", fontWeight:400 }}>kcal</span></div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ───── GROUP ───── */}
+        {activeTab==="group" && (
+          <div className="v2-in-anim">
+            <h2 className="v2-section-title">👥 สรุปผลตามกลุ่ม</h2>
+            <div style={{ display:"flex", flexDirection:"column", gap:13 }}>
+              {groupStats.map((g,i)=>(
+                <div key={g.id} className="v2-card" style={{ padding:18, borderLeft:`5px solid ${g.color}` }}>
+                  <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:13 }}>
+                      <div style={{ width:48, height:48, borderRadius:14, overflow:"hidden", background:g.color+"18", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, border:`1.5px solid ${g.color}30` }}>
+                        {g.image?<img src={g.image} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} />:<span style={{ fontSize:24 }}>{["🥇","🥈","🥉","4️⃣"][i]||i+1}</span>}
+                      </div>
+                      <div>
+                        <div style={{ fontFamily:"'Prompt'", fontWeight:700, fontSize:15, color:g.color }}>{g.name}</div>
+                        <div style={{ fontSize:11, color:"#9CA3AF", marginTop:2 }}>{g.memberCount} สมาชิก · {g.totalMin} นาที</div>
+                      </div>
+                    </div>
+                    <div style={{ textAlign:"right" }}>
+                      <div style={{ fontFamily:"'Prompt'", fontWeight:800, fontSize:22, color:g.color }}>{g.totalCal.toLocaleString()}</div>
+                      <div style={{ fontSize:10, color:"#9CA3AF" }}>kcal</div>
+                    </div>
+                  </div>
+                  <div className="v2-bar-bg" style={{ marginBottom:13 }}>
+                    <div className="v2-bar-fill" style={{ width:`${(g.totalCal/maxGroupCal)*100}%`, background:`linear-gradient(90deg,${g.color}66,${g.color})` }} />
+                  </div>
+                  <div style={{ display:"flex", gap:10 }}>
+                    {[{ label:"เวลารวม", value:`${Math.floor(g.totalMin/60)}ชม. ${g.totalMin%60}น.` },{ label:"เฉลี่ย/คน", value:`${g.memberCount?Math.round(g.totalCal/g.memberCount).toLocaleString():0} kcal` }].map(s=>(
+                      <div key={s.label} style={{ flex:1, background:`${g.color}10`, borderRadius:12, padding:"9px 12px", textAlign:"center", border:`1px solid ${g.color}18` }}>
+                        <div style={{ fontWeight:700, fontSize:13, color:"#111827" }}>{s.value}</div>
+                        <div style={{ fontSize:10, color:"#9CA3AF", marginTop:2 }}>{s.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ───── MEMBERS ───── */}
+        {activeTab==="members" && (() => {
+          const TEAM_NAMES=["all","A : ใส่ใจลูกค้า","B : ร่วมแรงร่วมใจ","C : ยืดหยุ่นคล่องตัว","D : ว่องไวเป็นเลิศ"];
+          const combined=[...allUsers];
+          userStats.forEach(s=>{ if(!combined.some(u=>u.user===s.user)) combined.push({user:s.user,group:s.group}); });
+          const baseList=combined.map(u=>{ const stats=userStats.find(s=>s.user===u.user); return stats?stats:{user:u.user,group:u.group,totalCal:0,sessions:0}; });
+          const filtered=memberGroup==="all"?baseList:baseList.filter(u=>u.group===memberGroup);
+          const sorted=[...filtered].sort((a,b)=>memberSort==="cal"?b.totalCal-a.totalCal:b.sessions-a.sessions);
+          return (
+            <div className="v2-in-anim">
+              <h2 className="v2-section-title">🏅 สมาชิกทั้งหมด</h2>
+              <div className="tab-scroll" style={{ marginBottom:12 }}>
+                {TEAM_NAMES.map(g=>{
+                  const color=g==="all"?"#16A34A":getGroupColor(g);
+                  const active=memberGroup===g;
+                  return <button key={g} onClick={()=>setMemberGroup(g)} className={`v2-pill ${active?"v2-pill-on":""}`} style={{ borderColor:active?color:undefined, background:active?color:undefined }}>{g==="all"?"🌐 ทุกกลุ่ม":g}</button>;
+                })}
+              </div>
+              <div style={{ display:"flex", gap:8, marginBottom:16 }}>
+                {[{id:"cal",label:"🔥 Cal สะสม"},{id:"sessions",label:"🏃 จำนวนครั้ง"}].map(s=>(
+                  <button key={s.id} onClick={()=>setMemberSort(s.id)} style={{ flex:1, padding:"8px 0", borderRadius:12, border:"none", background:memberSort===s.id?"linear-gradient(135deg,#16A34A,#22C55E)":"#F3F4F6", color:memberSort===s.id?"#fff":"#6B7280", fontSize:12, fontFamily:"'Sarabun'", cursor:"pointer", fontWeight:memberSort===s.id?700:500, boxShadow:memberSort===s.id?"0 4px 12px #16A34A25":"none", transition:"all .2s" }}>
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+              {membersLoading&&<div style={{ textAlign:"center", color:"#16A34A", fontSize:11, marginBottom:10, padding:"7px 0", background:"#F0FDF4", borderRadius:10 }}>⏳ กำลังดึงข้อมูล...</div>}
+              {sorted.map((u,i)=>{
+                const color=getGroupColor(u.group);
+                const av=avatars[u.user];
+                const maxVal=memberSort==="cal"?Math.max(1,...sorted.map(x=>x.totalCal)):Math.max(1,...sorted.map(x=>x.sessions));
+                const val=memberSort==="cal"?u.totalCal:u.sessions;
+                const pct=Math.round(val/maxVal*100);
+                return (
+                  <div key={u.user} className="v2-card v2-card-hover" style={{ padding:"13px 16px", marginBottom:9, display:"flex", alignItems:"center", gap:12, cursor:"pointer" }}
+                    onClick={()=>{ setProfileUser(u.user); setProfileFilter("all"); setActiveTab("profile"); }}>
+                    <div style={{ width:28, textAlign:"center", fontFamily:"'Prompt'", fontWeight:800, fontSize:15, color:i<3?["#F59E0B","#9CA3AF","#CD7F32"][i]:"#D1D5DB" }}>{i<3?["🥇","🥈","🥉"][i]:`#${i+1}`}</div>
+                    <div style={{ width:42, height:42, borderRadius:"50%", overflow:"hidden", border:`2.5px solid ${color}55`, flexShrink:0, background:color+"18", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                      {av?<img src={av} style={{ width:"100%", height:"100%", objectFit:"cover" }} alt="" />:<span style={{ fontSize:19 }}>👤</span>}
+                    </div>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:7, marginBottom:5, flexWrap:"wrap" }}>
+                        <span style={{ fontWeight:700, fontFamily:"'Prompt'", fontSize:13, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{u.user}</span>
+                        <span style={{ fontSize:10, background:color+"18", color, borderRadius:999, padding:"1px 7px", fontWeight:700 }}>{grpLabel(u.group)}</span>
+                      </div>
+                      <div className="v2-bar-bg" style={{ height:6 }}>
+                        <div className="v2-bar-fill" style={{ height:"100%", background:`linear-gradient(90deg,${color}66,${color})`, width:`${pct}%` }} />
+                      </div>
+                    </div>
+                    <div style={{ textAlign:"right", flexShrink:0 }}>
+                      <div style={{ fontFamily:"'Prompt'", fontWeight:800, fontSize:15, color }}>{memberSort==="cal"?u.totalCal.toLocaleString():u.sessions}</div>
+                      <div style={{ fontSize:10, color:"#9CA3AF" }}>{memberSort==="cal"?"kcal":"ครั้ง"}</div>
+                    </div>
+                  </div>
+                );
+              })}
+              {sorted.length>0&&<div style={{ textAlign:"center", fontSize:11, color:"#9CA3AF", marginTop:4 }}>{sorted.length} สมาชิก · Cal รวม {sorted.reduce((s,u)=>s+u.totalCal,0).toLocaleString()} kcal</div>}
+            </div>
+          );
+        })()}
+
+        {/* ───── RANKING ───── */}
+        {activeTab==="ranking" && (
+          <div className="v2-in-anim">
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:18 }}>
+              <h2 className="v2-section-title" style={{ marginBottom:0 }}>🏆 อันดับนักกีฬา</h2>
+              <button className="v2-btn-teal" onClick={()=>{ setShareSection("qr"); setActiveTab("share"); }} style={{ padding:"7px 14px", fontSize:11 }}>📤 แชร์</button>
+            </div>
+
+            {/* Podium top 3 */}
+            {userStats.length>=3&&(
+              <div className="v2-card" style={{ padding:"16px 12px 0", marginBottom:20 }}>
+                <div style={{ display:"flex", alignItems:"flex-end", justifyContent:"center", gap:6 }}>
+                  {[1,0,2].map(idx=>{
+                    const u=userStats[idx]; if(!u) return null;
+                    const posIdx=[1,0,2].indexOf(idx);
+                    const barH=[100,130,80][posIdx];
+                    const mc=medalColors[idx];
+                    const rankAv=avatars[u.user];
+                    return (
+                      <div key={u.user} onClick={()=>{ setProfileUser(u.user); setProfileFilter("all"); setActiveTab("profile"); }}
+                        style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", cursor:"pointer" }}>
+                        {rankAv
+                          ?<img src={rankAv} style={{ width:40, height:40, borderRadius:"50%", objectFit:"cover", border:`2.5px solid ${mc}`, marginBottom:4, flexShrink:0 }} alt="av" />
+                          :<div style={{ width:40, height:40, borderRadius:"50%", background:mc+"22", border:`2.5px solid ${mc}`, marginBottom:4, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18 }}>👤</div>}
+                        <div style={{ fontSize:11, fontFamily:"'Prompt'", fontWeight:700, color:mc, marginBottom:2, textAlign:"center", width:"100%", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", padding:"0 4px" }}>{u.user}</div>
+                        <div style={{ fontSize:10, color:"#6B7280", marginBottom:6, textAlign:"center", fontWeight:600 }}>{u.totalCal.toLocaleString()}</div>
+                        <div style={{ width:"100%", height:barH, background:`linear-gradient(180deg,${mc}30,${mc}10)`, border:`1.5px solid ${mc}44`, borderRadius:"10px 10px 0 0", display:"flex", alignItems:"flex-start", justifyContent:"center", paddingTop:10 }}>
+                          <span style={{ fontSize:26 }}>{["🥇","🥈","🥉"][idx]}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+              {userStats.map((u,i)=>{
+                const color=getGroupColor(u.group);
+                const badges=getBadges(u.totalCal,u.sessions,logs.filter(l=>l.user===u.user));
+                const rankAv=avatars[u.user];
+                return (
+                  <div key={u.user} className="v2-card v2-card-hover" onClick={()=>{ setProfileUser(u.user); setProfileFilter("all"); setActiveTab("profile"); }}
+                    style={{ padding:"12px 16px", display:"flex", alignItems:"center", gap:12, cursor:"pointer" }}>
+                    <div style={{ width:28, textAlign:"center", fontFamily:"'Prompt'", fontWeight:800, fontSize:15, color:i<3?medalColors[i]:"#9CA3AF" }}>{i<3?["🥇","🥈","🥉"][i]:i+1}</div>
+                    <div style={{ width:38, height:38, borderRadius:"50%", overflow:"hidden", border:`2px solid ${color}44`, flexShrink:0, background:color+"18", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                      {rankAv?<img src={rankAv} style={{ width:"100%", height:"100%", objectFit:"cover" }} alt="" />:<span style={{ fontSize:17 }}>👤</span>}
+                    </div>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:7, marginBottom:5, flexWrap:"wrap" }}>
+                        <span style={{ fontWeight:700, fontFamily:"'Prompt'", fontSize:13 }}>{u.user}</span>
+                        <span style={{ fontSize:10, background:color+"18", color, borderRadius:999, padding:"2px 8px", fontWeight:700 }}>{grpLabel(u.group)}</span>
+                        {badges.slice(0,2).map(b=><span key={b.name} style={{ fontSize:13 }}>{b.icon}</span>)}
+                      </div>
+                      <div className="v2-bar-bg" style={{ height:6 }}>
+                        <div className="v2-bar-fill" style={{ width:`${(u.totalCal/maxUserCal)*100}%`, background:i===0?`linear-gradient(90deg,#4ADE80,#22C55E)`:`linear-gradient(90deg,${color}66,${color})` }} />
+                      </div>
+                    </div>
+                    <div style={{ textAlign:"right", flexShrink:0 }}>
+                      <div style={{ fontFamily:"'Prompt'", fontWeight:800, fontSize:15, color:i===0?"#16A34A":color }}>{u.totalCal.toLocaleString()}</div>
+                      <div style={{ fontSize:10, color:"#9CA3AF" }}>{u.sessions} ครั้ง</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ───── RULES ───── */}
+        {activeTab==="rules" && (
+          <div className="v2-in-anim">
+            <h2 className="v2-section-title">💡 กติกาและแนวทางการส่งข้อมูล</h2>
+
+            {/* ── ระยะเวลา ── */}
+            <div style={{ background:"#fff", border:"1px solid #D1FAE5", borderRadius:16, padding:"18px 20px", marginBottom:14 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:12 }}>
+                <span style={{ fontSize:20 }}>✅</span>
+                <span style={{ fontFamily:"'Prompt'", fontWeight:700, fontSize:15, color:"#16A34A" }}>ระยะเวลาโครงการ</span>
+              </div>
+              <div style={{ fontSize:13, lineHeight:1.8, color:"#374151" }}>
+                <div>📅 เริ่มส่งข้อมูล: <strong>11 มิถุนายน 2569</strong> เวลา 00.00 น.</div>
+                <div>📅 สิ้นสุด: <strong>31 ตุลาคม 2569</strong> เวลา 23.59 น.</div>
+              </div>
+            </div>
+
+            {/* ── การนับ Cal ── */}
+            <div style={{ background:"#fff", border:"1px solid #D1FAE5", borderRadius:16, padding:"18px 20px", marginBottom:14 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:12 }}>
+                <span style={{ fontSize:20 }}>✅</span>
+                <span style={{ fontFamily:"'Prompt'", fontWeight:700, fontSize:15, color:"#16A34A" }}>การนับ Calories</span>
+              </div>
+              <div style={{ fontSize:13, lineHeight:1.9, color:"#374151" }}>
+                <div>🏃 ออกกำลังกายได้ทุกประเภทที่เป็นการตั้งใจออกกำลังกายจริงๆ</div>
+                <div>⏱️ กิจกรรมต้องมีระยะเวลา <strong>15 – 480 นาที</strong></div>
+                <div style={{ marginTop:8, paddingLeft:12, borderLeft:"3px solid #FCA5A5", color:"#DC2626" }}>
+                  <div>❌ ไม่นับการเดินประจำวัน (Daily Walking)</div>
+                  <div>❌ ไม่นับกิจกรรมที่ใช้เวลาน้อยกว่า 15 นาที</div>
+                </div>
+              </div>
+            </div>
+
+            {/* ── การส่งข้อมูล ── */}
+            <div style={{ background:"#fff", border:"1px solid #D1FAE5", borderRadius:16, padding:"18px 20px", marginBottom:14 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:12 }}>
+                <span style={{ fontSize:20 }}>✅</span>
+                <span style={{ fontFamily:"'Prompt'", fontWeight:700, fontSize:15, color:"#16A34A" }}>การส่งข้อมูล</span>
+              </div>
+              <div style={{ fontSize:13, lineHeight:1.9, color:"#374151" }}>
+                <div>🔒 ส่งข้อมูลได้ไม่เกิน <strong>วันละ 4 ครั้ง</strong> (ระบบจะล็อคอัตโนมัติ)</div>
+                <div style={{ marginTop:8 }}>📸 แนบภาพหน้าจอจากแอปที่ใช้บันทึก โดยต้องแสดง:</div>
+                <div style={{ paddingLeft:16, marginTop:4, lineHeight:2 }}>
+                  <div>• ประเภทกิจกรรม</div>
+                  <div>• ระยะเวลาออกกำลังกาย</div>
+                  <div>• จำนวน Calories</div>
+                  <div>• ข้อมูลในภาพต้องตรงกับข้อมูลที่บันทึกในระบบ</div>
+                </div>
+                <div style={{ marginTop:8, color:"#D97706", fontSize:12 }}>⚠️ หากข้อมูลไม่ครบถ้วน ผู้ดูแลจะแจ้งลบรายการและให้บันทึกใหม่</div>
+              </div>
+            </div>
+
+            {/* ── ข้อสำคัญ ── */}
+            <div style={{ background:"#FFF7ED", border:"1px solid #FED7AA", borderRadius:16, padding:"18px 20px", marginBottom:14 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:12 }}>
+                <span style={{ fontSize:20 }}>✅</span>
+                <span style={{ fontFamily:"'Prompt'", fontWeight:700, fontSize:15, color:"#EA580C" }}>ข้อสำคัญ</span>
+              </div>
+              <div style={{ fontSize:13, lineHeight:1.9, color:"#374151" }}>
+                <div>👤 ต้องเป็นข้อมูลการออกกำลังกายจริงของผู้เข้าร่วมเท่านั้น</div>
+                <div style={{ color:"#DC2626" }}>🚫 หากตรวจพบข้อมูลไม่เป็นความจริง จะถูกตัดสิทธิ์และลบแคลออกจากระบบ</div>
+              </div>
+            </div>
+
+            {/* ── รางวัล ── */}
+            <div style={{ background:"#FFFBEB", border:"1px solid #FDE68A", borderRadius:16, padding:"18px 20px", marginBottom:14 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:12 }}>
+                <span style={{ fontSize:20 }}>🏆</span>
+                <span style={{ fontFamily:"'Prompt'", fontWeight:700, fontSize:15, color:"#D97706" }}>รางวัล</span>
+              </div>
+              <div style={{ fontSize:13, lineHeight:1.9, color:"#374151" }}>
+                <div>🥇 มีรางวัลทั้ง<strong>รายบุคคล</strong>และ<strong>รางวัลทีม</strong> — มีโอกาสได้รับมากกว่า 1 ประเภท</div>
+                <div>👫 แยกรางวัลตาม<strong>เพศ</strong>และ<strong>สังกัดแผนก</strong></div>
+                <div style={{ marginTop:8, color:"#16A34A" }}>💚 นับเฉพาะ Calories จากกิจกรรมที่ส่งเข้าร่วมโครงการเท่านั้น</div>
+              </div>
+            </div>
+
+            {/* ── footer note ── */}
+            <div style={{ background:"#F0FDF4", border:"1px solid #BBF7D0", borderRadius:12, padding:"14px 18px", textAlign:"center" }}>
+              <div style={{ fontSize:13, fontWeight:700, color:"#16A34A", marginBottom:4 }}>
+                📌 "คำตัดสินของคณะกรรมการ/ผู้ดูแลโครงการถือเป็นที่สิ้นสุด"
+              </div>
+              <div style={{ fontSize:12, color:"#6B7280" }}>
+                หากมีข้อสงสัย สามารถสอบถามทีมงานโครงการได้ เพื่อร่วมกิจกรรมได้อย่างสนุกและเป็นธรรม 😊
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ───── SHARE ───── */}
+        {activeTab==="share" && (
+          <div className="v2-in-anim">
+            <h2 className="v2-section-title">📤 แชร์ผลลัพธ์</h2>
+            <div style={{ display:"flex", gap:8, marginBottom:20, flexWrap:"wrap" }}>
+              {[{id:"myActivity",label:"📱 กิจกรรมฉัน"},{id:"totalCal",label:"🔥 Cal สะสม"},{id:"leaderboard",label:"🏆 อันดับ"}].map(s=>(
+                <button key={s.id} onClick={()=>setShareSection(s.id)} className={`v2-share-tab ${shareSection===s.id?"v2-share-on":""}`}>{s.label}</button>
+              ))}
+            </div>
+
+            {shareSection==="myActivity"&&(
+              <div>
+                <div className="v2-card" style={{ padding:20, marginBottom:14 }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:11, marginBottom:16 }}>
+                    {authUser?.avatar?<img src={authUser.avatar} style={{ width:46, height:46, borderRadius:"50%", objectFit:"cover", border:"2.5px solid #22C55E" }} alt="av" />:<div style={{ width:46, height:46, borderRadius:"50%", background:"linear-gradient(135deg,#16A34A,#4ADE80)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:22 }}>👤</div>}
+                    <div>
+                      <div style={{ fontFamily:"'Prompt'", fontWeight:700, fontSize:15, color:"#16A34A" }}>{authUser?.displayName}</div>
+                      <div style={{ fontSize:11, color:"#9CA3AF" }}>{authUser?.group} · {myLogs.length} กิจกรรม</div>
+                    </div>
+                  </div>
+                  {myLogs.length===0?<div style={{ textAlign:"center", color:"#9CA3AF", fontSize:13, padding:"20px 0" }}>ยังไม่มีกิจกรรม — เริ่มบันทึกเลย!</div>:(
+                    <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                      {myLogs.slice(0,5).map(l=>(
+                        <div key={l.id} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", background:"#F0FDF4", borderRadius:12, padding:"10px 14px" }}>
+                          <div>
+                            <div style={{ fontWeight:600, fontSize:13, color:"#111827" }}>{l.exercise}</div>
+                            <div style={{ fontSize:11, color:"#9CA3AF" }}>{l.duration} นาที · {l.date}</div>
+                          </div>
+                          <div style={{ fontFamily:"'Prompt'", fontWeight:800, fontSize:15, color:"#16A34A" }}>{l.calories} <span style={{ fontSize:10, fontWeight:400, color:"#9CA3AF" }}>kcal</span></div>
+                        </div>
+                      ))}
+                      {myLogs.length>5&&<div style={{ textAlign:"center", fontSize:11, color:"#9CA3AF" }}>...และอีก {myLogs.length-5} รายการ</div>}
+                    </div>
+                  )}
+                </div>
+                <button className="v2-btn-primary" onClick={()=>{ const lines=myLogs.slice(0,5).map(l=>`• ${l.exercise} ${l.duration} นาที 🔥 ${l.calories} kcal`).join("\n"); const total=myLogs.reduce((s,l)=>s+l.calories,0); fbShare(`🌿 ${authUser?.displayName} ออกกำลังกายวันนี้!\n${lines}\n\n💪 รวม ${total.toLocaleString()} kcal จาก ${myLogs.length} กิจกรรม`); }} style={{ width:"100%", padding:13, fontSize:14, display:"flex", alignItems:"center", justifyContent:"center", gap:8, marginBottom:8 }}>
+                  <span style={{ fontSize:18 }}>👍</span> แชร์บน Facebook
+                </button>
+                {myLogs.length>0&&<button className="v2-btn-ghost" onClick={()=>{ const lines=myLogs.slice(0,5).map(l=>`• ${l.exercise} ${l.duration} นาที 🔥 ${l.calories} kcal`).join("\n"); const total=myLogs.reduce((s,l)=>s+l.calories,0); navigator.clipboard.writeText(`🌿 ${authUser?.displayName} ออกกำลังกายวันนี้!\n${lines}\n\n💪 รวม ${total.toLocaleString()} kcal\n#TVOCaloriesChallenge #สุขภาพดีทีมTVO #TVOHappyHealth2026`).then(()=>toast("คัดลอกแล้ว! 📋")); }} style={{ width:"100%", padding:12, fontSize:13 }}>📋 คัดลอกข้อความ</button>}
+              </div>
+            )}
+
+            {shareSection==="totalCal"&&(
+              <div>
+                <div style={{ background:"linear-gradient(135deg,#15803D,#16A34A,#22C55E)", borderRadius:24, padding:"30px 22px", textAlign:"center", marginBottom:16, boxShadow:"0 12px 36px #16A34A35" }}>
+                  <div style={{ fontSize:13, color:"#D1FAE5", marginBottom:6 }}>🌿 {authUser?.displayName} สะสมแล้ว</div>
+                  <div style={{ fontFamily:"'Prompt'", fontWeight:900, fontSize:56, color:"#fff", lineHeight:1, marginBottom:4 }}>{(myStats?.totalCal||0).toLocaleString()}</div>
+                  <div style={{ fontSize:16, color:"#A7F3D0", marginBottom:20 }}>kcal</div>
+                  <div style={{ display:"flex", justifyContent:"center", gap:24 }}>
+                    {[{ v:myStats?.sessions||0, l:"ครั้ง" },{ v:grpLabel(authUser?.group), l:"ทีม" },{ v:`#${userStats.findIndex(u=>u.user===authUser?.displayName)+1||"-"}`, l:"อันดับ" }].map((s,i)=>(
+                      <React.Fragment key={i}>
+                        {i>0&&<div style={{ width:1, background:"#A7F3D033" }} />}
+                        <div style={{ textAlign:"center" }}>
+                          <div style={{ fontFamily:"'Prompt'", fontWeight:700, fontSize:20, color:"#fff" }}>{s.v}</div>
+                          <div style={{ fontSize:11, color:"#A7F3D0" }}>{s.l}</div>
+                        </div>
+                      </React.Fragment>
+                    ))}
+                  </div>
+                </div>
+                <div style={{ display:"flex", gap:9 }}>
+                  <button className="v2-btn-primary" onClick={()=>fbShare(`🔥 ${authUser?.displayName} สะสมแคลอรี่แล้ว ${(myStats?.totalCal||0).toLocaleString()} kcal!\nออกกำลังกาย ${myStats?.sessions||0} ครั้ง · ทีม ${authUser?.group}\n🏅 อันดับที่ ${userStats.findIndex(u=>u.user===authUser?.displayName)+1}`)} style={{ flex:1, padding:13, fontSize:13, display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
+                    <span>👍</span> Facebook
+                  </button>
+                  <button className="v2-btn-ghost" onClick={()=>{ const text=`🔥 ${authUser?.displayName} สะสม ${(myStats?.totalCal||0).toLocaleString()} kcal!\n${myStats?.sessions||0} ครั้ง · ทีม ${authUser?.group} · #${userStats.findIndex(u=>u.user===authUser?.displayName)+1}\n#TVOCaloriesChallenge`; navigator.clipboard.writeText(text).then(()=>toast("คัดลอกแล้ว! 📋")); }} style={{ flex:1, padding:13, fontSize:13 }}>📋 คัดลอก</button>
+                </div>
+              </div>
+            )}
+
+            {shareSection==="leaderboard"&&(
+              <div>
+                <div style={{ background:"linear-gradient(135deg,#14532D,#15803D,#16A34A)", borderRadius:22, padding:20, marginBottom:14 }}>
+                  <div style={{ fontFamily:"'Prompt'", fontWeight:900, fontSize:17, color:"#4ADE80", marginBottom:4, textAlign:"center" }}>🏆 TVO Calories Challenge</div>
+                  <div style={{ fontSize:12, color:"#A7F3D0", marginBottom:16, textAlign:"center" }}>Top {Math.min(3,userStats.length)} พนักงาน</div>
+                  <div style={{ display:"flex", flexDirection:"column", gap:9, marginBottom:4 }}>
+                    {userStats.slice(0,3).map((u,i)=>(
+                      <div key={u.user} style={{ display:"flex", alignItems:"center", gap:11, background:i===0?"rgba(255,255,255,0.15)":"rgba(255,255,255,0.08)", borderRadius:12, padding:"11px 14px" }}>
+                        <span style={{ fontSize:22, width:28 }}>{["🥇","🥈","🥉"][i]}</span>
+                        <div style={{ flex:1 }}>
+                          <div style={{ fontWeight:700, fontSize:13, color:"#fff" }}>{u.user}</div>
+                          <div style={{ fontSize:11, color:"#A7F3D0" }}>{u.group}</div>
+                        </div>
+                        <div style={{ fontFamily:"'Prompt'", fontWeight:800, fontSize:16, color:i===0?"#4ADE80":"#fff" }}>{u.totalCal.toLocaleString()} kcal</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div style={{ display:"flex", gap:9, marginBottom:16 }}>
+                  <button className="v2-btn-primary" onClick={()=>{ const lines=userStats.slice(0,3).map((u,i)=>`${["🥇","🥈","🥉"][i]} ${u.user} - ${u.totalCal.toLocaleString()} kcal`).join("\n"); fbShare(`🏆 TVO Calories Challenge 2026!\n${lines}\n💪 ร่วมพิชิตเป้าหมายสุขภาพ TVO!`); }} style={{ flex:1, padding:13, fontSize:13, display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
+                    <span>👍</span> Facebook
+                  </button>
+                  <button className="v2-btn-ghost" onClick={()=>{ const lines=userStats.slice(0,3).map((u,i)=>`${["🥇","🥈","🥉"][i]} ${u.user} - ${u.totalCal.toLocaleString()} kcal`).join("\n"); navigator.clipboard.writeText(`🏆 TVO Calories Challenge 2026!\n${lines}\n💪 ร่วมพิชิตเป้าหมายสุขภาพ TVO!\n#TVOCaloriesChallenge #สุขภาพดีทีมTVO #TVOHappyHealth2026`).then(()=>toast("คัดลอกแล้ว! 📋")); }} style={{ flex:1, padding:13, fontSize:13 }}>📋 คัดลอก</button>
+                </div>
+                <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                  {userStats.map((u,i)=>{
+                    const color=getGroupColor(u.group);
+                    const isMe=u.user===authUser?.displayName;
+                    return (
+                      <div key={u.user} onClick={()=>{ setProfileUser(u.user); setProfileFilter("all"); setActiveTab("profile"); }} style={{ background:isMe?"#F0FDF4":"#FFFFFF", border:`1px solid ${isMe?"#D1FAE5":"#F3F4F6"}`, borderRadius:13, padding:"11px 15px", display:"flex", alignItems:"center", gap:11, cursor:"pointer", transition:"all .2s" }}>
+                        <div style={{ fontFamily:"'Prompt'", fontWeight:800, fontSize:16, width:28, textAlign:"center", color:i<3?medalColors[i]:"#9CA3AF" }}>{i<3?["🥇","🥈","🥉"][i]:i+1}</div>
+                        <div style={{ flex:1 }}>
+                          <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
+                            <span style={{ fontWeight:700, fontSize:13, color:isMe?"#16A34A":"#111827" }}>{u.user}</span>
+                            {isMe&&<span style={{ fontSize:10, background:"#16A34A1a", color:"#16A34A", borderRadius:999, padding:"1px 7px", fontWeight:700 }}>คุณ</span>}
+                            <span style={{ fontSize:10, background:color+"18", color, borderRadius:999, padding:"1px 7px" }}>{u.group}</span>
+                          </div>
+                        </div>
+                        <div style={{ fontFamily:"'Prompt'", fontWeight:800, fontSize:15, color:isMe?"#16A34A":color }}>{u.totalCal.toLocaleString()}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ───── ADMIN ───── */}
+        {activeTab==="admin"&&adminAuthed&&(
+          <div className="v2-in-anim">
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:18 }}>
+              <div>
+                <div style={{ fontFamily:"'Prompt'", fontWeight:800, fontSize:18, background:"linear-gradient(135deg,#16A34A,#4ADE80)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>⚙️ Admin Panel</div>
+                <div style={{ fontSize:11, color:"#9CA3AF", marginTop:2 }}>จัดการระบบ TVO Calories Challenge</div>
+              </div>
+              <button className="v2-btn-ghost" onClick={()=>{ setAdminAuthed(false); setActiveTab("dashboard"); }} style={{ padding:"8px 14px", fontSize:11 }}>🔓 ออก</button>
+            </div>
+            <div className="tab-scroll" style={{ marginBottom:16 }}>
+              {[{id:"exercises",label:"🏋️ กีฬา"},{id:"groups",label:"👥 กลุ่ม"},{id:"logs",label:"📋 ประวัติ"},{id:"anomaly",label:"🔍 ตรวจสอบ"}].map(s=>(
+                <button key={s.id} onClick={()=>setAdminSection(s.id)} className={`v2-pill ${adminSection===s.id?"v2-pill-on":""}`}>{s.label}</button>
+              ))}
+            </div>
+
+            {adminSection==="exercises"&&(
+              <div>
+                <div className="v2-adm-card" style={{ padding:18, marginBottom:14 }}>
+                  <div style={{ fontFamily:"'Prompt'", fontWeight:700, color:"#16A34A", marginBottom:13, fontSize:14 }}>{editingEx!==null?"✏️ แก้ไขประเภทกีฬา":"➕ เพิ่มประเภทกีฬา"}</div>
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:11, marginBottom:11 }}>
+                    <div><label style={{ fontSize:10.5, color:"#374151", display:"block", marginBottom:5, fontWeight:700 }}>ชื่อกีฬา</label><input value={exForm.name} onChange={e=>setExForm(p=>({...p,name:e.target.value}))} placeholder="เช่น วิ่ง" style={{ width:"100%", padding:"10px 12px", borderRadius:11, fontSize:13 }} /></div>
+                    <div><label style={{ fontSize:10.5, color:"#374151", display:"block", marginBottom:5, fontWeight:700 }}>kcal/นาที</label><input type="number" min={1} max={30} value={exForm.calPerMin} onChange={e=>setExForm(p=>({...p,calPerMin:+e.target.value}))} style={{ width:"100%", padding:"10px 12px", borderRadius:11, fontSize:13 }} /></div>
+                  </div>
+                  <div style={{ marginBottom:11 }}>
+                    <label style={{ fontSize:10.5, color:"#374151", display:"block", marginBottom:6, fontWeight:700 }}>ไอคอน</label>
+                    <div style={{ display:"flex", gap:9, alignItems:"center" }}>
+                      <div style={{ width:42, height:42, borderRadius:11, background:"#F0FDF4", border:"1px solid #D1FAE5", display:"flex", alignItems:"center", justifyContent:"center", fontSize:22 }}>{exForm.icon}</div>
+                      <button className="v2-btn-ghost" onClick={()=>setShowEmojiPicker(p=>!p)} style={{ padding:"8px 13px", fontSize:12 }}>เลือก {showEmojiPicker?"▲":"▼"}</button>
+                    </div>
+                    {showEmojiPicker&&(
+                      <div style={{ marginTop:8, background:"#FFFFFF", border:"1px solid #E5E7EB", borderRadius:13, padding:11 }}>
+                        <div style={{ display:"grid", gridTemplateColumns:"repeat(6,1fr)", gap:6, maxHeight:170, overflowY:"auto" }}>
+                          {COMMON_EMOJIS.map(em=><button key={em} onClick={()=>{ setExForm(p=>({...p,icon:em})); setShowEmojiPicker(false); }} style={{ background:"#F0FDF4", border:"1px solid #E5E7EB", borderRadius:9, cursor:"pointer", padding:7, fontSize:19, transition:"all .15s" }}>{em}</button>)}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ marginBottom:13 }}>
+                    <label style={{ fontSize:10.5, color:"#374151", display:"block", marginBottom:6, fontWeight:700 }}>🖼️ รูปภาพ</label>
+                    <div style={{ display:"flex", gap:9, alignItems:"center" }}>
+                      {exForm.image&&<div style={{ width:50, height:50, borderRadius:11, overflow:"hidden" }}><img src={exForm.image} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} /></div>}
+                      <div className="v2-upload" onClick={()=>exImgRef.current?.click()} style={{ flex:1, padding:"12px 7px" }}>
+                        <div style={{ fontSize:18, marginBottom:3 }}>📷</div><div style={{ fontSize:10.5, color:"#9CA3AF" }}>อัพโหลดรูป</div>
+                      </div>
+                      <input ref={exImgRef} type="file" accept="image/*" style={{ display:"none" }} onChange={e=>handleImgUpload(e.target.files[0],setExForm)} />
+                    </div>
+                    {exForm.image&&<button className="v2-btn-ghost" onClick={()=>setExForm(p=>({...p,image:null}))} style={{ fontSize:11, padding:"3px 9px", marginTop:6 }}>✕ ลบรูป</button>}
+                  </div>
+                  <div style={{ display:"flex", gap:8 }}>
+                    <button className="v2-btn-primary" onClick={handleSaveEx} style={{ flex:1, padding:11, fontSize:13 }}>{editingEx!==null?"💾 บันทึก":"➕ เพิ่ม"}</button>
+                    {editingEx!==null&&<button className="v2-btn-ghost" onClick={()=>{ setEditingEx(null); setExForm({name:"",icon:"🏃",calPerMin:5,image:null}); setShowEmojiPicker(false); }} style={{ padding:"11px 13px", fontSize:12 }}>ยกเลิก</button>}
+                  </div>
+                </div>
+                <div style={{ fontSize:11, color:"#9CA3AF", marginBottom:8 }}>{exercises.length} ประเภท</div>
+                <div style={{ display:"flex", flexDirection:"column", gap:7 }}>
+                  {exercises.map(ex=>(
+                    <div key={ex.id} className="v2-card" style={{ padding:"10px 14px", display:"flex", alignItems:"center", gap:10 }}>
+                      <div style={{ width:38, height:38, borderRadius:11, overflow:"hidden", background:"#F0FDF4", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                        {ex.image?<img src={ex.image} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} />:<span style={{ fontSize:18 }}>{ex.icon}</span>}
+                      </div>
+                      <div style={{ flex:1 }}><div style={{ fontWeight:700, fontFamily:"'Prompt'", fontSize:13 }}>{ex.name}</div><div style={{ fontSize:10, color:"#9CA3AF" }}>{ex.calPerMin} kcal/นาที</div></div>
+                      <div style={{ display:"flex", gap:6 }}>
+                        <button className="v2-btn-ghost" onClick={()=>handleEditEx(ex)} style={{ padding:"5px 10px", fontSize:12 }}>✏️</button>
+                        <button className="v2-btn-danger" onClick={()=>setDeleteConfirm({name:ex.name,fn:()=>{ setExercises(p=>p.filter(e=>e.id!==ex.id)); setDeleteConfirm(null); }})} style={{ padding:"5px 10px", fontSize:12 }}>🗑️</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {adminSection==="groups"&&(
+              <div>
+                <div className="v2-adm-card" style={{ padding:18, marginBottom:14 }}>
+                  <div style={{ fontFamily:"'Prompt'", fontWeight:700, color:"#16A34A", marginBottom:13, fontSize:14 }}>{editingGrp!==null?"✏️ แก้ไขกลุ่ม":"➕ เพิ่มกลุ่มใหม่"}</div>
+                  <div style={{ marginBottom:11 }}>
+                    <label style={{ fontSize:10.5, color:"#374151", display:"block", marginBottom:5, fontWeight:700 }}>ชื่อกลุ่ม</label>
+                    <input value={grpForm.name} onChange={e=>setGrpForm(p=>({...p,name:e.target.value}))} placeholder="เช่น E : ทีมใหม่" style={{ width:"100%", padding:"10px 12px", borderRadius:11, fontSize:13 }} />
+                  </div>
+                  <div style={{ marginBottom:11 }}>
+                    <label style={{ fontSize:10.5, color:"#374151", display:"block", marginBottom:6, fontWeight:700 }}>สีประจำกลุ่ม</label>
+                    <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:9 }}>
+                      {PALETTE.map(c=><button key={c} onClick={()=>setGrpForm(p=>({...p,color:c}))} style={{ width:28, height:28, borderRadius:7, background:c, border:grpForm.color===c?"3px solid #fff":"2px solid transparent", cursor:"pointer", boxShadow:grpForm.color===c?`0 0 0 2px ${c}`:"none", transition:"all .15s" }} />)}
+                    </div>
+                    <div style={{ display:"flex", alignItems:"center", gap:9 }}>
+                      <div style={{ width:32, height:32, borderRadius:9, background:grpForm.color, flexShrink:0 }} />
+                      <input value={grpForm.color} onChange={e=>setGrpForm(p=>({...p,color:e.target.value}))} style={{ padding:"7px 11px", borderRadius:9, fontSize:12, width:100 }} />
+                    </div>
+                  </div>
+                  <div style={{ display:"flex", gap:8 }}>
+                    <button className="v2-btn-primary" onClick={handleSaveGrp} style={{ flex:1, padding:11, fontSize:13 }}>{editingGrp!==null?"💾 บันทึก":"➕ เพิ่มกลุ่ม"}</button>
+                    {editingGrp!==null&&<button className="v2-btn-ghost" onClick={()=>{ setEditingGrp(null); setGrpForm({name:"",color:"#16A34A",image:null}); }} style={{ padding:"11px 13px", fontSize:12 }}>ยกเลิก</button>}
+                  </div>
+                </div>
+                <div style={{ display:"flex", flexDirection:"column", gap:7 }}>
+                  {groups.map(g=>(
+                    <div key={g.id} className="v2-card" style={{ padding:"10px 14px", display:"flex", alignItems:"center", gap:10 }}>
+                      <div style={{ width:38, height:38, borderRadius:11, background:g.color+"22", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, border:`1.5px solid ${g.color}33` }}>
+                        <span style={{ fontSize:18, color:g.color }}>👥</span>
+                      </div>
+                      <div style={{ flex:1 }}><div style={{ fontWeight:700, fontFamily:"'Prompt'", fontSize:13, color:g.color }}>{g.name}</div><div style={{ display:"flex", alignItems:"center", gap:5, marginTop:2 }}><div style={{ width:10, height:10, borderRadius:3, background:g.color }} /><span style={{ fontSize:10, color:"#9CA3AF" }}>{g.color}</span></div></div>
+                      <div style={{ display:"flex", gap:6 }}>
+                        <button className="v2-btn-ghost" onClick={()=>handleEditGrp(g)} style={{ padding:"5px 10px", fontSize:12 }}>✏️</button>
+                        <button className="v2-btn-danger" onClick={()=>setDeleteConfirm({name:g.name,fn:()=>{ setGroups(p=>p.filter(x=>x.id!==g.id)); setDeleteConfirm(null); }})} style={{ padding:"5px 10px", fontSize:12 }}>🗑️</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+
+            {adminSection==="anomaly"&&(()=>{
+              const anomalyLogs = logs.filter(l => isCalAnomaly(l.exercise, l.duration, l.calories));
+              return (
+              <div>
+                <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:14 }}>
+                  <div style={{ fontFamily:"'Prompt'", fontWeight:700, fontSize:14, color:"#D97706" }}>🔍 แคลอรี่ผิดปกติ</div>
+                  <div style={{ background:"#FEF3C7", border:"1px solid #FDE68A", borderRadius:999, padding:"2px 10px", fontSize:11, fontWeight:700, color:"#92400E" }}>{anomalyLogs.length} รายการ</div>
+                </div>
+                <div style={{ fontSize:11, color:"#9CA3AF", marginBottom:14 }}>เกณฑ์: แคลอรี่ที่บันทึก &gt; ค่าสูงสุดมาตรฐาน × 1.5</div>
+                {anomalyLogs.length===0?(
+                  <div style={{ textAlign:"center", padding:"40px 0", color:"#9CA3AF", fontSize:13 }}>✅ ไม่พบข้อมูลผิดปกติ</div>
+                ):(
+                  <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                    {anomalyLogs.map(log=>{
+                      const r = calcCalRange(log.exercise, log.duration);
+                      const c = getGroupColor(log.group);
+                      const overPct = r ? Math.round(((log.calories - r.max) / r.max) * 100) : 0;
+                      return (
+                        <div key={log.id} style={{ background:"#FFFBEB", border:"1.5px solid #FDE68A", borderRadius:13, padding:"12px 14px" }}>
+                          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6 }}>
+                            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                              <span style={{ fontWeight:700, fontSize:13, color:"#111827" }}>{log.user}</span>
+                              <span style={{ fontSize:10, background:c+"18", color:c, borderRadius:999, padding:"1px 7px", fontWeight:700 }}>{grpLabel(log.group)}</span>
+                            </div>
+                            <span style={{ background:"#FEF3C7", border:"1px solid #FCD34D", borderRadius:8, padding:"2px 8px", fontSize:11, fontWeight:700, color:"#B45309" }}>+{overPct}% เกินสูงสุด</span>
+                          </div>
+                          <div style={{ fontSize:12, color:"#6B7280", marginBottom:4 }}>{log.exercise} · {log.duration} นาที · {log.date}</div>
+                          <div style={{ display:"flex", alignItems:"center", gap:12, fontSize:12 }}>
+                            <span>บันทึก: <strong style={{ color:"#DC2626" }}>{log.calories} kcal</strong></span>
+                            <span style={{ color:"#9CA3AF" }}>|</span>
+                            <span style={{ color:"#6B7280" }}>ช่วงมาตรฐาน: {r?`${Math.round(r.min)}–${Math.round(r.max)}`:"?"} kcal</span>
+                          </div>
+                          {log.note&&<div style={{ fontSize:11, color:"#9CA3AF", marginTop:4, fontStyle:"italic" }}>"{log.note}"</div>}
+                          {log.photo&&<img src={log.photo} alt="" onClick={()=>setZoomPhoto(log.photo)} style={{ marginTop:8, width:56, height:56, objectFit:"cover", borderRadius:8, cursor:"zoom-in", border:"1px solid #FDE68A" }} />}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+              );
+            })()}
+
+            {adminSection==="logs"&&(
+              <div>
+                <div style={{ display:"flex", alignItems:"center", gap:8, background:spStatus==="connected"?"#F0FDF4":"#FEF2F2", border:`1px solid ${spStatus==="connected"?"#D1FAE5":"#FEE2E2"}`, borderRadius:13, padding:"10px 14px", marginBottom:12 }}>
+                  <span>{spStatus==="connected"?"🟢":spStatus==="connecting"?"🟡":"🔴"}</span>
+                  <div style={{ flex:1 }}>
+
+                    <div style={{ fontSize:12, fontWeight:600, color:spStatus==="connected"?"#16A34A":"#DC2626" }}>{spStatus==="connected"?`Supabase ✓ sync ${spLastSync}`:spStatus==="connecting"?"กำลังเชื่อมต่อ...":"เชื่อมต่อไม่ได้"}</div>
+                  </div>
+                  <button className="v2-btn-teal" style={{ padding:"5px 12px", fontSize:11 }} onClick={()=>{ setSpStatus("connecting"); sbFetchLogs().then(d=>{ if(d.length>0)setLogs(d); setSpStatus("connected"); setSpLastSync(new Date().toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit"})); }).catch(()=>setSpStatus("error")); }}>🔄 Sync</button>
+                </div>
+                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
+                  <div style={{ fontSize:11, color:"#9CA3AF" }}>{logs.length} รายการ</div>
+                  <div style={{ display:"flex", gap:7 }}>
+                    <button className="v2-btn-teal" onClick={exportCSV} style={{ padding:"6px 12px", fontSize:11 }}>⬇️ CSV</button>
+                    <button className="v2-btn-danger" onClick={()=>setDeleteConfirm({name:"ประวัติทั้งหมด",fn:()=>{ setLogs([]); setDeleteConfirm(null); }})} style={{ padding:"6px 12px", fontSize:11 }}>🗑️ ล้าง</button>
+                  </div>
+                </div>
+                <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                  {logs.map(log=>{
+                    const c=getGroupColor(log.group);
+                    return (
+                      <div key={log.id} style={{ background:"#FFFFFF", border:"1px solid #F3F4F6", borderRadius:12, padding:"9px 13px", display:"flex", alignItems:"center", gap:9 }}>
+                        {log.photo&&<div className="v2-pthumb" onClick={()=>setZoomPhoto(log.photo)} style={{ width:36, height:36, flexShrink:0 }}><img src={log.photo} alt="" style={{ width:"100%", height:"100%", objectFit:"cover", borderRadius:8 }} /></div>}
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:2 }}>
+                            <span onClick={()=>{ setProfileUser(log.user); setProfileFilter("all"); setActiveTab("profile"); }} style={{ fontWeight:700, fontSize:12, cursor:"pointer", textDecoration:"underline dotted", color:"#111827" }}>{log.user}</span>
+                            <span style={{ fontSize:9, background:c+"18", color:c, borderRadius:999, padding:"1px 6px", fontWeight:700 }}>{grpLabel(log.group)}</span>
+                          </div>
+                          <div style={{ color:"#9CA3AF", fontSize:10 }}>{log.exercise} · {log.duration}น. · {log.date}</div>
+                        </div>
+                        <div style={{ display:"flex", alignItems:"center", gap:8, flexShrink:0 }}>
+                          <div style={{ textAlign:"right" }}>
+                            <div style={{ fontFamily:"'Prompt'", fontWeight:800, fontSize:14, color:c }}>{log.calories}</div>
+                            <div style={{ fontSize:9, color:"#9CA3AF" }}>kcal</div>
+                          </div>
+                          {log.spId&&authUser?.role==="admin"&&<button className="v2-btn-danger" onClick={()=>setDeleteConfirm({name:`${log.user} - ${log.exercise}`,fn:async()=>{ await sbRemoveLog(log.id); setLogs(p=>p.filter(l=>l.id!==log.id)); setDeleteConfirm(null); }})} style={{ padding:"4px 9px", fontSize:11 }}>🗑️</button>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+      </div>
+
+      {/* Bottom Nav */}
+      <div style={{ position:"fixed", bottom:0, left:0, right:0, zIndex:50, background:"rgba(255,255,255,0.92)", backdropFilter:"blur(20px)", WebkitBackdropFilter:"blur(20px)", borderTop:"1px solid rgba(0,0,0,0.06)", paddingBottom:"env(safe-area-inset-bottom,0px)" }}>
+        <div style={{ maxWidth:680, margin:"0 auto", display:"flex" }}>
+          {tabs.map(tab=>(
+            <button key={tab.id} onClick={()=>setActiveTab(tab.id)} className={`v2-nav-btn ${activeTab===tab.id?"v2-nav-on":""}`}>
+              <span style={{ fontSize:20 }}>{tab.icon}</span>
+              <span>{tab.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<CalorieTracker />);
+  </script>
+</body>
+</html>
