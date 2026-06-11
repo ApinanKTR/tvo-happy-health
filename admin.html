@@ -121,8 +121,13 @@ async function sbGetLogs() {
     exercise: i.exercise || '', duration: Number(i.duration)||0,
     calories: Number(i.calories)||0, date: i.log_date||'',
     note: i.note||'', photo: i.photo||'', likes: Number(i.likes)||0,
-    createdAt: i.created_at||'',
+    createdAt: i.created_at||'', verified: i.verified || false,
   }));
+}
+
+async function sbSetVerified(id, verified) {
+  const { error } = await supabase.from('exercise_logs').update({ verified }).eq('id', id);
+  if (error) throw new Error(error.message);
 }
 
 async function sbDeleteLog(id) {
@@ -282,6 +287,13 @@ function AdminApp() {
   };
 
   // ── Delete Log ─────────────────────────────────────────────
+  const toggleVerified = async (id, current) => {
+    try {
+      await sbSetVerified(id, !current);
+      setLogs(prev => prev.map(l => l.id === id ? { ...l, verified: !current } : l));
+    } catch(e) { showToast("❌ บันทึกไม่สำเร็จ: " + e.message); }
+  };
+
   const deleteLog = async (id) => {
     if (!window.confirm("ลบ Log นี้จริงหรือ?")) return;
     if (!id) { showToast("❌ ID ไม่ถูกต้อง"); return; }
@@ -533,9 +545,15 @@ function AdminApp() {
                         <td>{l.group}</td>
                         <td>{l.exercise}</td>
                         <td>{l.duration} น.</td>
-                        <td style={{ color: GREEN, fontWeight: 700 }}>{l.calories?.toLocaleString()}</td>
+                        <td style={{ color: GREEN, fontWeight: 700 }}>{l.calories?.toLocaleString()}{isCalAnomaly(l.exercise, l.duration, l.calories) && <span title="แคลสูงกว่ามาตรฐาน" style={{ marginLeft: 4 }}>👀</span>}</td>
                         <td>
-                          <button className="btn-r" onClick={() => deleteLog(l.id || l.spId)}>🗑 ลบ</button>
+                          <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+                            <button onClick={() => toggleVerified(l.id, l.verified)} title={l.verified?"ยกเลิกตรวจสอบ":"ทำเครื่องหมายตรวจสอบแล้ว"}
+                              style={{ background: l.verified?"#DCFCE7":"#F3F4F6", border: l.verified?"1.5px solid #22C55E":"1.5px solid #D1D5DB", borderRadius:8, width:30, height:30, cursor:"pointer", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center", transition:"all .15s" }}>
+                              {l.verified ? "✅" : "⬜"}
+                            </button>
+                            <button className="btn-r" onClick={() => deleteLog(l.id || l.spId)}>🗑 ลบ</button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -601,7 +619,7 @@ function AdminApp() {
                           </div>
                           <div style={{ fontSize: 13, marginTop: 6 }}>
                             <span style={{ marginRight: 10 }}>{l.exercise} · {l.duration} นาที</span>
-                            <span style={{ color: "#D97706", fontWeight: 700 }}>{l.calories.toLocaleString()} kcal</span>
+                            <span style={{ color: "#D97706", fontWeight: 700 }}>{l.calories.toLocaleString()} kcal 👀</span>
                             {range && (
                               <span style={{ color: "#9CA3AF", fontSize: 11, marginLeft: 8 }}>
                                 (มาตรฐาน {range.min.toLocaleString()}–{range.max.toLocaleString()} kcal)
@@ -613,7 +631,13 @@ function AdminApp() {
                           </div>
                           {l.note && <div style={{ fontSize: 12, color: "#6B7280", marginTop: 4, fontStyle: "italic" }}>"{l.note}"</div>}
                         </div>
-                        <button className="btn-r" onClick={() => deleteLog(l.id)} style={{ flexShrink: 0, fontSize: 12 }}>🗑</button>
+                        <div style={{ display:"flex", flexDirection:"column", gap:6, flexShrink:0 }}>
+                          <button onClick={() => toggleVerified(l.id, l.verified)} title={l.verified?"ยกเลิก":"ตรวจสอบแล้ว"}
+                            style={{ background: l.verified?"#DCFCE7":"#F3F4F6", border: l.verified?"1.5px solid #22C55E":"1.5px solid #D1D5DB", borderRadius:8, width:32, height:32, cursor:"pointer", fontSize:16, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                            {l.verified ? "✅" : "⬜"}
+                          </button>
+                          <button className="btn-r" onClick={() => deleteLog(l.id)} style={{ fontSize: 12 }}>🗑</button>
+                        </div>
                       </div>
                     );
                   })}

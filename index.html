@@ -119,7 +119,13 @@ const sbFetchLogs = async () => {
     exercise: i.exercise || '', duration: Number(i.duration) || 0,
     calories: Number(i.calories) || 0, date: i.log_date || '',
     note: i.note || '', likes: Number(i.likes) || 0, photo: i.photo || null,
+    verified: i.verified || false,
   }));
+};
+
+const sbSetVerified = async (id, verified) => {
+  const { error } = await supabase.from('exercise_logs').update({ verified }).eq('id', id);
+  if (error) throw new Error(error.message);
 };
 
 const sbPostLog = async (log) => {
@@ -362,6 +368,8 @@ function CalorieTracker() {
   // Profile
   const [profileUser, setProfileUser] = useState(null);
   const [profileFilter, setProfileFilter] = useState("all");
+  const [calMonth, setCalMonth] = useState(() => { const n=new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}`; });
+  const [calSelectedDate, setCalSelectedDate] = useState(null);
   const [editingGoal, setEditingGoal] = useState(false);
   const [goalInput, setGoalInput] = useState(5000);
 
@@ -538,6 +546,16 @@ const handleAdd = async () => {
       await sbToggleLike(logId, authUser.empId);
       await sbPatchLike(logId, newLikes);
     } catch(e) { console.error("Like sync error:", e); }
+  };
+
+  const isAdmin = authUser?.role === 'admin';
+
+  const handleVerify = async (logId) => {
+    const log = logs.find(l => l.id === logId);
+    if (!log) return;
+    const next = !log.verified;
+    setLogs(p => p.map(l => l.id === logId ? { ...l, verified: next } : l));
+    sbSetVerified(logId, next).catch(e => console.error("Verify sync error:", e));
   };
 
   const handleShowLikers = async (logId) => {
@@ -1131,6 +1149,14 @@ const handleRegister = async () => {
                         <div style={{ color:"#6B7280", fontSize:12 }}>{log.exercise} · {log.duration} นาที · {log.date}{(()=>{ const r=calcCalRange(log.exercise,log.duration); return r?<span style={{ color:"#C4C4C4", marginLeft:4 }}>({r.min}–{r.max} kcal)</span>:null; })()}</div>
                         {log.note&&<div style={{ color:"#9CA3AF", fontSize:11, marginTop:3, fontStyle:"italic" }}>"{log.note}"</div>}
                         <div style={{ marginTop:8, display:"flex", alignItems:"center", gap:8 }}>
+                          {isAdmin?(
+                            <button onClick={()=>handleVerify(log.id)} title={log.verified?"ตรวจสอบแล้ว — กดเพื่อยกเลิก":"ทำเครื่องหมายตรวจสอบแล้ว"}
+                              style={{ background:log.verified?"#DCFCE7":"#F3F4F6", border:log.verified?"1.5px solid #22C55E":"1.5px solid #D1D5DB", borderRadius:8, width:28, height:28, cursor:"pointer", fontSize:14, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, transition:"all .15s" }}>
+                              {log.verified?"✅":"⬜"}
+                            </button>
+                          ):log.verified&&(
+                            <span title="ตรวจสอบโดย Admin แล้ว" style={{ fontSize:14, flexShrink:0 }}>✅</span>
+                          )}
                           <button className={`v2-like ${liked?"v2-like-on":""}`} onClick={()=>handleLike(log.id)}>
                             {liked?"❤️":"🤍"}
                           </button>
@@ -1402,48 +1428,124 @@ const handleRegister = async () => {
                   </div>
                 </div>
 
-                {/* Activity history */}
-                <div className="tab-scroll" style={{ marginBottom:14 }}>
-                  <button onClick={()=>setProfileFilter("all")} className={`v2-pill ${profileFilter==="all"?"v2-pill-on":""}`}>ทั้งหมด</button>
-                  {[...new Set(logs.filter(l=>l.user===profileUser).map(l=>l.exercise))].map(ex=>(
-                    <button key={ex} onClick={()=>setProfileFilter(ex)} className={`v2-pill ${profileFilter===ex?"v2-pill-on":""}`}>{exercises.find(e=>e.name===ex)?.icon} {ex}</button>
-                  ))}
-                </div>
-                <div style={{ display:"flex", flexDirection:"column", gap:9 }}>
-                  {profileLogs.length===0&&<div style={{ textAlign:"center", padding:40, color:"#9CA3AF", fontSize:13 }}>ไม่มีข้อมูล</div>}
-                  {profileLogs.map(log=>{
-                    const ex=exercises.find(e=>e.name===log.exercise);
-                    const color=getGroupColor(log.group);
-                    const liked=likedLogs.has(log.id);
-                    return (
-                      <div key={log.id} className="v2-card" style={{ padding:14, borderLeft:`4px solid ${color}` }}>
-                        <div style={{ display:"flex", gap:12, alignItems:"flex-start" }}>
-                          <div style={{ width:40, height:40, borderRadius:12, background:`${color}18`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, overflow:"hidden", flexShrink:0 }}>
-                            {ex?.image?<img src={ex.image} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} />:(ex?.icon||"🏃")}
-                          </div>
-                          <div style={{ flex:1, minWidth:0 }}>
-                            <div style={{ fontFamily:"'Prompt'", fontWeight:700, fontSize:13, color:"#111827" }}>{log.exercise}</div>
-                            <div style={{ fontSize:11, color:"#9CA3AF" }}>{log.date} · {log.duration} นาที{(()=>{ const r=calcCalRange(log.exercise,log.duration); return r?<span style={{ color:"#C4C4C4", marginLeft:4 }}>({r.min}–{r.max} kcal)</span>:null; })()}</div>
-                            {log.note&&<div style={{ fontSize:11, color:"#6B7280", fontStyle:"italic", marginTop:3 }}>"{log.note}"</div>}
-                            <div style={{ marginTop:6, display:"flex", alignItems:"center", gap:8 }}>
-                              <button className={`v2-like ${liked?"v2-like-on":""}`} onClick={()=>handleLike(log.id)}>{liked?"❤️":"🤍"}</button>
-                              <span onClick={()=>log.likes>0&&handleShowLikers(log.id)} style={{ fontSize:12, fontWeight:700, color:"#6B7280", cursor:log.likes>0?"pointer":"default" }}>{log.likes}</span>
-                              {log.photo&&<div className="v2-pthumb" onClick={()=>setZoomPhoto(log.photo)} style={{ width:30, height:30 }}><img src={log.photo} alt="" style={{ width:"100%", height:"100%", objectFit:"cover", borderRadius:8 }} /></div>}
-                            </div>
-                          </div>
-                          {(()=>{ const calRange=calcCalRange(log.exercise,log.duration); return (
-                          <div style={{ flexShrink:0, textAlign:"right" }}>
-                            <div style={{ fontFamily:"'Prompt'", fontWeight:800, fontSize:16, color }}>
-                              {log.calories}{isCalAnomaly(log.exercise,log.duration,log.calories)&&<span style={{ fontSize:13, marginLeft:2 }}>👀</span>}
-                            </div>
-                            <div style={{ fontSize:10, color:"#9CA3AF" }}>kcal</div>
-                          </div>
-                          );})()}
-                        </div>
+                {/* ── Calendar ── */}
+                {(()=>{
+                  const userLogs = logs.filter(l => l.user === profileUser);
+                  // สร้าง map date → [logs]
+                  const dayMap = {};
+                  userLogs.forEach(l => {
+                    if (!dayMap[l.date]) dayMap[l.date] = [];
+                    dayMap[l.date].push(l);
+                  });
+                  // parse calMonth
+                  const [cy, cm] = calMonth.split('-').map(Number);
+                  const firstDay = new Date(cy, cm-1, 1);
+                  const daysInMonth = new Date(cy, cm, 0).getDate();
+                  const startDow = firstDay.getDay(); // 0=Sun
+                  const todayStr = thaiDate();
+                  const DAYS = ['อา','จ','อ','พ','พฤ','ศ','ส'];
+                  const thMonths = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+                  // prev/next
+                  const goPrev = () => { const d=new Date(cy,cm-2,1); setCalMonth(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`); setCalSelectedDate(null); };
+                  const goNext = () => { const d=new Date(cy,cm,1); setCalMonth(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`); setCalSelectedDate(null); };
+                  // selected day logs
+                  const selectedLogs = calSelectedDate ? (dayMap[calSelectedDate]||[]) : [];
+                  // cells
+                  const cells = [];
+                  for (let i=0;i<startDow;i++) cells.push(null);
+                  for (let d=1;d<=daysInMonth;d++) {
+                    const ds = `${cy}-${String(cm).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+                    cells.push({ d, ds, logs: dayMap[ds]||[] });
+                  }
+                  const color = getGroupColor(userLogs[0]?.group||'');
+                  return (
+                    <div className="v2-card" style={{ padding:16, marginBottom:8 }}>
+                      {/* Header */}
+                      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}>
+                        <button onClick={goPrev} style={{ background:"#F0FDF4", border:"1px solid #D1FAE5", borderRadius:8, width:32, height:32, cursor:"pointer", fontSize:16, color:"#16A34A" }}>‹</button>
+                        <div style={{ fontFamily:"'Prompt'", fontWeight:700, fontSize:14, color:"#111827" }}>{thMonths[cm-1]} {cy}</div>
+                        <button onClick={goNext} style={{ background:"#F0FDF4", border:"1px solid #D1FAE5", borderRadius:8, width:32, height:32, cursor:"pointer", fontSize:16, color:"#16A34A" }}>›</button>
                       </div>
-                    );
-                  })}
-                </div>
+                      {/* Day headers */}
+                      <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:3, marginBottom:4 }}>
+                        {DAYS.map(d=><div key={d} style={{ textAlign:"center", fontSize:10, color:"#9CA3AF", fontWeight:600, padding:"2px 0" }}>{d}</div>)}
+                      </div>
+                      {/* Cells */}
+                      <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:3 }}>
+                        {cells.map((cell,i)=>{
+                          if (!cell) return <div key={`e${i}`} />;
+                          const isToday = cell.ds === todayStr;
+                          const isSelected = cell.ds === calSelectedDate;
+                          const haslogs = cell.logs.length > 0;
+                          const dayTotal = cell.logs.reduce((s,l)=>s+(Number(l.calories)||0),0);
+                          return (
+                            <div key={cell.ds} onClick={()=>haslogs&&setCalSelectedDate(isSelected?null:cell.ds)}
+                              style={{ borderRadius:10, padding:"6px 2px 5px", textAlign:"center", cursor:haslogs?"pointer":"default",
+                                background: isSelected?"#16A34A": isToday?"#F0FDF4":"#FAFAFA",
+                                border: isSelected?"2px solid #16A34A": isToday?"2px solid #86EFAC":"2px solid transparent",
+                                transition:"all .15s" }}>
+                              <div style={{ fontSize:13, fontWeight:isToday||isSelected?700:400, color:isSelected?"#fff":isToday?"#16A34A":"#374151", lineHeight:1 }}>{cell.d}</div>
+                              {haslogs?(
+                                <div style={{ marginTop:3 }}>
+                                  <div style={{ fontSize:8, color:isSelected?"#dcfce7":"#16A34A", fontWeight:700, lineHeight:1 }}>{dayTotal}</div>
+                                  <div style={{ display:"flex", justifyContent:"center", gap:2, marginTop:2 }}>
+                                    {cell.logs.slice(0,3).map((_,li)=><div key={li} style={{ width:4, height:4, borderRadius:"50%", background:isSelected?"#fff":color }} />)}
+                                  </div>
+                                </div>
+                              ):<div style={{ height:18 }} />}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {/* Selected day detail */}
+                      {calSelectedDate && (
+                        <div style={{ marginTop:14, borderTop:"1px solid #F0FDF4", paddingTop:12 }}>
+                          <div style={{ fontFamily:"'Prompt'", fontWeight:700, fontSize:13, color:"#374151", marginBottom:10 }}>
+                            📅 {calSelectedDate.split('-').reverse().join('/')} · {selectedLogs.length} รายการ
+                          </div>
+                          <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                            {selectedLogs.map(log=>{
+                              const ex=exercises.find(e=>e.name===log.exercise);
+                              const lc=getGroupColor(log.group);
+                              const liked=likedLogs.has(log.id);
+                              return (
+                                <div key={log.id} style={{ background:"#F8FFF8", borderRadius:12, padding:"10px 12px", borderLeft:`3px solid ${lc}`, display:"flex", gap:10, alignItems:"flex-start" }}>
+                                  <div style={{ width:36, height:36, borderRadius:10, background:`${lc}18`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, overflow:"hidden", flexShrink:0 }}>
+                                    {ex?.image?<img src={ex.image} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} />:(ex?.icon||"🏃")}
+                                  </div>
+                                  <div style={{ flex:1, minWidth:0 }}>
+                                    <div style={{ fontWeight:700, fontSize:13, color:"#111827" }}>{log.exercise}</div>
+                                    <div style={{ fontSize:11, color:"#9CA3AF" }}>{log.duration} นาที{(()=>{ const r=calcCalRange(log.exercise,log.duration); return r?<span style={{ color:"#C4C4C4", marginLeft:4 }}>({r.min}–{r.max} kcal)</span>:null; })()}</div>
+                                    {log.note&&<div style={{ fontSize:11, color:"#6B7280", fontStyle:"italic", marginTop:2 }}>"{log.note}"</div>}
+                                    <div style={{ marginTop:5, display:"flex", alignItems:"center", gap:7 }}>
+                                      {isAdmin?(
+                                        <button onClick={()=>handleVerify(log.id)} title={log.verified?"ตรวจสอบแล้ว":"ทำเครื่องหมายตรวจสอบแล้ว"}
+                                          style={{ background:log.verified?"#DCFCE7":"#F3F4F6", border:log.verified?"1.5px solid #22C55E":"1.5px solid #D1D5DB", borderRadius:7, width:26, height:26, cursor:"pointer", fontSize:13, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                                          {log.verified?"✅":"⬜"}
+                                        </button>
+                                      ):log.verified&&(
+                                        <span title="ตรวจสอบโดย Admin แล้ว" style={{ fontSize:13, flexShrink:0 }}>✅</span>
+                                      )}
+                                      <button className={`v2-like ${liked?"v2-like-on":""}`} onClick={()=>handleLike(log.id)}>{liked?"❤️":"🤍"}</button>
+                                      <span onClick={()=>log.likes>0&&handleShowLikers(log.id)} style={{ fontSize:12, fontWeight:700, color:"#6B7280", cursor:log.likes>0?"pointer":"default" }}>{log.likes}</span>
+                                      {log.photo&&<div className="v2-pthumb" onClick={()=>setZoomPhoto(log.photo)} style={{ width:28, height:28 }}><img src={log.photo} alt="" style={{ width:"100%", height:"100%", objectFit:"cover", borderRadius:7 }} /></div>}
+                                    </div>
+                                  </div>
+                                  <div style={{ flexShrink:0, textAlign:"right" }}>
+                                    <div style={{ fontFamily:"'Prompt'", fontWeight:800, fontSize:16, color:lc }}>
+                                      {log.calories}{isCalAnomaly(log.exercise,log.duration,log.calories)&&<span style={{ fontSize:12, marginLeft:2 }}>👀</span>}
+                                    </div>
+                                    <div style={{ fontSize:10, color:"#9CA3AF" }}>kcal</div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             )}
           </div>
