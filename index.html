@@ -129,6 +129,11 @@ const sbSetVerified = async (id, verified) => {
   if (error) throw new Error(error.message);
 };
 
+const sbSetComment = async (id, comment) => {
+  const { error } = await supabase.from('exercise_logs').update({ admin_comment: comment || null }).eq('id', id);
+  if (error) throw new Error(error.message);
+};
+
 const sbPostLog = async (log) => {
     // บันทึกค่า photo ที่ส่งมาจาก handleAdd ซึ่งถูกแปลงเป็น URL เรียบร้อยแล้ว
     const { data, error } = await supabase
@@ -397,6 +402,7 @@ function CalorieTracker() {
   const exImgRef = useRef();
   const grpImgRef = useRef();
   const [zoomPhoto, setZoomPhoto] = useState(null);
+  const [commentDrafts, setCommentDrafts] = useState({}); // { [logId]: text }
 
   // Persist exercises/groups เท่านั้น — logs ไม่ cache (ดึงสดจาก SP)
   // useEffect(() => { lsSet("tvohh_logs", logs); }, [logs]); // disabled
@@ -564,6 +570,14 @@ const handleAdd = async () => {
     const next = !log.verified;
     setLogs(p => p.map(l => l.id === logId ? { ...l, verified: next } : l));
     sbSetVerified(logId, next).catch(e => console.error("Verify sync error:", e));
+  };
+
+  const handleSaveComment = async (logId) => {
+    const text = (commentDrafts[logId] ?? logs.find(l=>l.id===logId)?.adminComment ?? '').trim();
+    setLogs(p => p.map(l => l.id === logId ? { ...l, adminComment: text } : l));
+    setCommentDrafts(p => { const n={...p}; delete n[logId]; return n; });
+    try { await sbSetComment(logId, text || null); toast("บันทึก comment แล้ว 💬"); }
+    catch(e) { toast("❌ บันทึกไม่สำเร็จ: " + e.message); }
   };
 
   const openEditLog = (log) => setEditLogModal({ log, form: { exercise: log.exercise, date: log.date, duration: log.duration, calories: log.calories, photo: log.photo }, saving: false });
@@ -1285,15 +1299,34 @@ const handleRegister = async () => {
                         <div style={{ color:"#6B7280", fontSize:12 }}>{log.exercise} · {log.duration} นาที · {log.date}{(()=>{ const r=calcCalRange(log.exercise,log.duration); return r?<span style={{ color:"#C4C4C4", marginLeft:4 }}>({r.min}–{r.max} kcal)</span>:null; })()}</div>
                         {log.note&&<div style={{ color:"#9CA3AF", fontSize:11, marginTop:3, fontStyle:"italic" }}>"{log.note}"</div>}
                         {/* admin comment — เห็น owner + admin */}
-                        {!log.verified && log.adminComment && (log.user===authUser?.displayName || isAdmin) && (
+                        {!log.verified && log.adminComment && !isAdmin && log.user===authUser?.displayName && (
                           <div style={{ marginTop:5, background:"#FEF9C3", border:"1px solid #FDE047", borderRadius:10, padding:"6px 10px", display:"flex", alignItems:"flex-start", gap:6 }}>
                             <span style={{ fontSize:13, flexShrink:0 }}>💬</span>
-                            <span style={{ fontSize:11, color:"#92400E", lineHeight:1.6 }}>
-                              {isAdmin && log.user!==authUser?.displayName && <><strong style={{ color:"#B45309" }}>→ {log.user}:</strong>{" "}</>}
-                              <strong>Admin:</strong> {log.adminComment}
-                            </span>
+                            <span style={{ fontSize:11, color:"#92400E", lineHeight:1.6 }}><strong>Admin:</strong> {log.adminComment}</span>
                           </div>
                         )}
+                        {/* admin: inline comment input */}
+                        {!log.verified && isAdmin && (()=>{
+                          const draft = commentDrafts[log.id] !== undefined ? commentDrafts[log.id] : (log.adminComment || '');
+                          const changed = draft !== (log.adminComment || '');
+                          return (
+                            <div style={{ marginTop:5, display:"flex", gap:6, alignItems:"center" }}>
+                              <span style={{ fontSize:12, flexShrink:0 }}>💬</span>
+                              <input
+                                value={draft}
+                                onChange={e => setCommentDrafts(p => ({ ...p, [log.id]: e.target.value }))}
+                                placeholder="Comment ถึง user..."
+                                style={{ flex:1, fontSize:11, padding:"4px 8px", borderRadius:8, border:"1px solid #FDE047", background:"#FFFBEB", outline:"none", fontFamily:"inherit" }}
+                              />
+                              {changed && (
+                                <button onClick={()=>handleSaveComment(log.id)}
+                                  style={{ fontSize:11, padding:"4px 10px", borderRadius:8, background:"#F59E0B", color:"#fff", border:"none", cursor:"pointer", fontWeight:700, flexShrink:0 }}>
+                                  บันทึก
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })()}
                         <div style={{ marginTop:8, display:"flex", alignItems:"center", gap:8 }}>
                           {isAdmin?(
                             <button onClick={()=>handleVerify(log.id)} title={log.verified?"ตรวจสอบแล้ว — กดเพื่อยกเลิก":"ทำเครื่องหมายตรวจสอบแล้ว"}
