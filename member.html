@@ -43,7 +43,7 @@ function MemberPage() {
       try {
         const [{ data: uData, error: uErr }, { data: lData, error: lErr }] = await Promise.all([
           supabase.from('user_profiles').select('employee_id,display_name,group_name,photo'),
-          supabase.from('exercise_logs').select('user_name,group_name,calories,duration,log_date'),
+          supabase.from('exercise_logs').select('user_name,group_name,calories,duration,log_date,employee_id'),
         ]);
         if (uErr) throw new Error(uErr.message);
         if (lErr) throw new Error(lErr.message);
@@ -54,19 +54,13 @@ function MemberPage() {
     })();
   }, []);
 
-  // รวม user จาก user_profiles + user ที่มีใน logs แต่ไม่มีใน profiles (เหมือน index.html)
-  const combined = [...users];
-  const profileNames = new Set(users.map(u => u.display_name));
-  logs.forEach(l => {
-    if (l.user_name && !profileNames.has(l.user_name)) {
-      profileNames.add(l.user_name);
-      combined.push({ display_name: l.user_name, group_name: l.group_name||'', employee_id: null, photo: null });
-    }
-  });
-
-  // คำนวณ stats ต่อ user
-  const userStats = combined.map(u => {
-    const ul = logs.filter(l => l.user_name === u.display_name);
+  // ใช้เฉพาะ user_profiles เท่านั้น (ไม่รวม orphan จาก logs)
+  // คำนวณ stats ต่อ user — จับคู่ด้วย employee_id ก่อน fallback display_name
+  const userStats = users.map(u => {
+    const ul = logs.filter(l =>
+      (u.employee_id && l.employee_id && l.employee_id === u.employee_id) ||
+      (!l.employee_id && l.user_name === u.display_name)
+    );
     return {
       ...u,
       totalCal: ul.reduce((s, l) => s + (Number(l.calories)||0), 0),
@@ -138,7 +132,7 @@ function MemberPage() {
               <span style={{ fontSize:11, fontWeight:700, background: activeTeam==="all"?"#ffffff30":"#DCFCE7", color: activeTeam==="all"?"#fff":"#16A34A", borderRadius:20, padding:"2px 8px" }}>ทั้งหมด</span>
             </div>
             <div style={{ fontFamily:"'Prompt'", fontWeight:900, fontSize:22, color: activeTeam==="all"?"#fff":"#16A34A", marginTop:8 }}>
-              {combined.length} <span style={{ fontSize:13, fontWeight:600 }}>คน</span>
+              {users.length} <span style={{ fontSize:13, fontWeight:600 }}>คน</span>
             </div>
             <div style={{ fontSize:11, color: activeTeam==="all"?"#dcfce7":"#9CA3AF", marginTop:2 }}>
               {logs.reduce((s,l)=>s+(Number(l.calories)||0),0).toLocaleString()} kcal สะสม
@@ -230,7 +224,7 @@ function MemberPage() {
 
         {/* Footer note */}
         <div style={{ marginTop:24, textAlign:"center", fontSize:11, color:"#9CA3AF" }}>
-          อัปเดตข้อมูล ณ เวลาโหลดหน้า · {combined.length} สมาชิก · {logs.length} รายการ
+          อัปเดตข้อมูล ณ เวลาโหลดหน้า · {users.length} สมาชิก · {logs.length} รายการ
         </div>
       </div>
     </div>
