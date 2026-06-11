@@ -149,6 +149,33 @@ const sbPatchLike = async (id, likes) => {
   await supabase.from('exercise_logs').update({ likes: Number(likes) }).eq('id', id);
 };
 
+// ── Like tracking via log_likes table ────────────────────────
+async function sbToggleLike(logId, empId) {
+  const { data } = await supabase.from('log_likes').select('id').eq('log_id', logId).eq('employee_id', empId).maybeSingle();
+  if (data) {
+    await supabase.from('log_likes').delete().eq('log_id', logId).eq('employee_id', empId);
+    return false; // unliked
+  } else {
+    await supabase.from('log_likes').insert({ log_id: logId, employee_id: empId });
+    return true;  // liked
+  }
+}
+
+async function sbGetMyLikes(empId) {
+  if (!empId) return new Set();
+  const { data } = await supabase.from('log_likes').select('log_id').eq('employee_id', empId);
+  return new Set((data || []).map(l => l.log_id));
+}
+
+async function sbGetLikers(logId) {
+  const { data } = await supabase
+    .from('log_likes')
+    .select('employee_id, user_profiles(display_name)')
+    .eq('log_id', logId)
+    .order('created_at', { ascending: true });
+  return (data || []).map(l => l.user_profiles?.display_name || l.employee_id);
+}
+
 const sbRemoveLog = async (id) => {
   if (!id) return;
   await supabase.from('exercise_logs').delete().eq('id', id);
@@ -324,6 +351,7 @@ function CalorieTracker() {
 
   // Likes
   const [likedLogs, setLikedLogs] = useState(new Set());
+  const [likersModal, setLikersModal] = useState(null); // { logId, names, loading }
 
   // Goals
   const [goals, setGoals] = useState(() => lsGet("tvohh_goals", {}));
@@ -369,6 +397,12 @@ function CalorieTracker() {
     sbFetchUserPhotos().then(avs => { if (avs) setAvatars(avs); });
     sbFetchAllUsers().then(syncAllUsers);
   }, []);
+
+  // โหลด likes ของตัวเองจาก DB เมื่อ login
+  useEffect(() => {
+    if (!authUser?.empId) return;
+    sbGetMyLikes(authUser.empId).then(set => setLikedLogs(set));
+  }, [authUser?.empId]);
   // (ลบ useEffect ที่ fetch ซ้ำตอน connected — mount ครั้งแรกดึงไปแล้ว ไม่ต้องซ้ำ)
 
   // เมื่อ allUsers อัปเดต → remap group ใน logs ทั้งหมดให้ตรงกับทีมปัจจุบัน
@@ -491,25 +525,26 @@ const handleAdd = async () => {
   };
 
 
-  const handleLike = (logId) => {
-    // คำนวณ likes ก่อน setState (setState callback ไม่รัน sync)
+  const handleLike = async (logId) => {
     const log = logs.find(l => l.id === logId);
-    if (!log) return;
+    if (!log || !authUser?.empId) return;
     const isLiked = likedLogs.has(logId);
     const newLikes = isLiked ? log.likes - 1 : log.likes + 1;
-
-    setLikedLogs(prev => {
-      const next = new Set(prev);
-      isLiked ? next.delete(logId) : next.add(logId);
-      return next;
-    });
+    // Optimistic UI
+    setLikedLogs(prev => { const next = new Set(prev); isLiked ? next.delete(logId) : next.add(logId); return next; });
     setLogs(p => p.map(l => l.id === logId ? { ...l, likes: newLikes } : l));
+    // Sync ทั้งสองตาราง
+    try {
+      await sbToggleLike(logId, authUser.empId);
+      await sbPatchLike(logId, newLikes);
+    } catch(e) { console.error("Like sync error:", e); }
+  };
 
-    // Sync ไป Supabase
-if (log.id) {
-    sbPatchLike(log.id, newLikes).catch((err) => console.error("Like sync error:", err));
-  }
-};
+  const handleShowLikers = async (logId) => {
+    setLikersModal({ logId, names: [], loading: true });
+    const names = await sbGetLikers(logId).catch(() => []);
+    setLikersModal({ logId, names, loading: false });
+  };
 
   const handleImgUpload = (file, setter) => {
     if (!file) return;
@@ -877,6 +912,32 @@ const handleRegister = async () => {
         </div>
       )}
 
+      {/* Likers modal */}
+      {likersModal && (
+        <div className="v2-ovl" onClick={()=>setLikersModal(null)} style={{ zIndex:700 }}>
+          <div onClick={e=>e.stopPropagation()} style={{ background:"#fff", borderRadius:20, padding:"20px 24px", minWidth:260, maxWidth:340, width:"90%", boxShadow:"0 12px 48px rgba(0,0,0,0.25)" }}>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
+              <div style={{ fontFamily:"'Prompt'", fontWeight:800, fontSize:16, color:"#111827" }}>❤️ คนที่กดหัวใจ</div>
+              <button onClick={()=>setLikersModal(null)} style={{ background:"#F3F4F6", border:"none", borderRadius:8, width:28, height:28, cursor:"pointer", fontSize:14, color:"#6B7280" }}>✕</button>
+            </div>
+            {likersModal.loading ? (
+              <div style={{ textAlign:"center", padding:"20px 0", color:"#9CA3AF", fontSize:13 }}>กำลังโหลด...</div>
+            ) : likersModal.names.length === 0 ? (
+              <div style={{ textAlign:"center", padding:"20px 0", color:"#9CA3AF", fontSize:13 }}>ยังไม่มีคนกด</div>
+            ) : (
+              <div style={{ display:"flex", flexDirection:"column", gap:8, maxHeight:280, overflowY:"auto" }}>
+                {likersModal.names.map((name, i) => (
+                  <div key={i} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 10px", background:"#FFF1F2", borderRadius:10 }}>
+                    <span style={{ fontSize:18 }}>❤️</span>
+                    <span style={{ fontWeight:600, fontSize:14, color:"#111827" }}>{name}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Save confirm modal */}
       {showSaveConfirm && (()=>{
         const expectedCal = calcCalories(form.exercise, form.duration);
@@ -1067,16 +1128,18 @@ const handleRegister = async () => {
                           <span onClick={()=>{ setProfileUser(log.user); setProfileFilter("all"); setActiveTab("profile"); }} style={{ fontWeight:700, fontFamily:"'Prompt'", fontSize:14, cursor:"pointer", color:"#111827" }}>{log.user}</span>
                           <span style={{ fontSize:10, background:`${color}18`, color, borderRadius:999, padding:"2px 8px", fontWeight:700 }}>{grpLabel(log.group)}</span>
                         </div>
-                        <div style={{ color:"#6B7280", fontSize:12 }}>{log.exercise} · {log.duration} นาที · {log.date}</div>
+                        <div style={{ color:"#6B7280", fontSize:12 }}>{log.exercise} · {log.duration} นาที · {log.date}{(()=>{ const r=calcCalRange(log.exercise,log.duration); return r?<span style={{ color:"#C4C4C4", marginLeft:4 }}>({r.min}–{r.max} kcal)</span>:null; })()}</div>
                         {log.note&&<div style={{ color:"#9CA3AF", fontSize:11, marginTop:3, fontStyle:"italic" }}>"{log.note}"</div>}
                         <div style={{ marginTop:8, display:"flex", alignItems:"center", gap:8 }}>
                           <button className={`v2-like ${liked?"v2-like-on":""}`} onClick={()=>handleLike(log.id)}>
-                            {liked?"❤️":"🤍"} <span>{log.likes}</span>
+                            {liked?"❤️":"🤍"}
                           </button>
+                          <span onClick={()=>log.likes>0&&handleShowLikers(log.id)} style={{ fontSize:12, fontWeight:700, color:"#6B7280", cursor:log.likes>0?"pointer":"default", minWidth:16 }}>{log.likes}</span>
                           {log.photo&&<div className="v2-pthumb" onClick={()=>setZoomPhoto(log.photo)} style={{ width:30, height:30 }}><img src={log.photo} alt="" style={{ width:"100%", height:"100%", objectFit:"cover", borderRadius:8 }} /></div>}
                         </div>
                       </div>
                       {/* Calorie chip + exercise icon */}
+                      {(()=>{ const calRange=calcCalRange(log.exercise,log.duration); return (
                       <div style={{ flexShrink:0, textAlign:"center", background:`linear-gradient(135deg,${color}18,${color}0a)`, borderRadius:14, padding:"8px 12px", border:`1px solid ${color}22` }}>
                         <div style={{ width:28, height:28, borderRadius:8, background:`${color}22`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, margin:"0 auto 4px", overflow:"hidden" }}>
                           {ex?.image?<img src={ex.image} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} />:(ex?.icon||"🏃")}
@@ -1086,6 +1149,7 @@ const handleRegister = async () => {
                         </div>
                         <div style={{ fontSize:9.5, color:"#9CA3AF", marginTop:2 }}>kcal</div>
                       </div>
+                      );})()}
                     </div>
                   </div>
                 );
@@ -1359,16 +1423,22 @@ const handleRegister = async () => {
                           </div>
                           <div style={{ flex:1, minWidth:0 }}>
                             <div style={{ fontFamily:"'Prompt'", fontWeight:700, fontSize:13, color:"#111827" }}>{log.exercise}</div>
-                            <div style={{ fontSize:11, color:"#9CA3AF" }}>{log.date} · {log.duration} นาที</div>
+                            <div style={{ fontSize:11, color:"#9CA3AF" }}>{log.date} · {log.duration} นาที{(()=>{ const r=calcCalRange(log.exercise,log.duration); return r?<span style={{ color:"#C4C4C4", marginLeft:4 }}>({r.min}–{r.max} kcal)</span>:null; })()}</div>
                             {log.note&&<div style={{ fontSize:11, color:"#6B7280", fontStyle:"italic", marginTop:3 }}>"{log.note}"</div>}
                             <div style={{ marginTop:6, display:"flex", alignItems:"center", gap:8 }}>
-                              <button className={`v2-like ${liked?"v2-like-on":""}`} onClick={()=>handleLike(log.id)}>{liked?"❤️":"🤍"} {log.likes}</button>
+                              <button className={`v2-like ${liked?"v2-like-on":""}`} onClick={()=>handleLike(log.id)}>{liked?"❤️":"🤍"}</button>
+                              <span onClick={()=>log.likes>0&&handleShowLikers(log.id)} style={{ fontSize:12, fontWeight:700, color:"#6B7280", cursor:log.likes>0?"pointer":"default" }}>{log.likes}</span>
                               {log.photo&&<div className="v2-pthumb" onClick={()=>setZoomPhoto(log.photo)} style={{ width:30, height:30 }}><img src={log.photo} alt="" style={{ width:"100%", height:"100%", objectFit:"cover", borderRadius:8 }} /></div>}
                             </div>
                           </div>
-                          <div style={{ fontFamily:"'Prompt'", fontWeight:800, fontSize:16, color, flexShrink:0 }}>
-                            {log.calories}{isCalAnomaly(log.exercise,log.duration,log.calories)&&<span style={{ fontSize:13, marginLeft:2 }}>👀</span>} <span style={{ fontSize:10, color:"#9CA3AF", fontWeight:400 }}>kcal</span>
+                          {(()=>{ const calRange=calcCalRange(log.exercise,log.duration); return (
+                          <div style={{ flexShrink:0, textAlign:"right" }}>
+                            <div style={{ fontFamily:"'Prompt'", fontWeight:800, fontSize:16, color }}>
+                              {log.calories}{isCalAnomaly(log.exercise,log.duration,log.calories)&&<span style={{ fontSize:13, marginLeft:2 }}>👀</span>}
+                            </div>
+                            <div style={{ fontSize:10, color:"#9CA3AF" }}>kcal</div>
                           </div>
+                          );})()}
                         </div>
                       </div>
                     );
@@ -1421,9 +1491,8 @@ const handleRegister = async () => {
         {/* ───── MEMBERS ───── */}
         {activeTab==="members" && (() => {
           const TEAM_NAMES=["all","A : ใส่ใจลูกค้า","B : ร่วมแรงร่วมใจ","C : ยืดหยุ่นคล่องตัว","D : ว่องไวเป็นเลิศ"];
-          const combined=[...allUsers];
-          userStats.forEach(s=>{ if(!combined.some(u=>u.user===s.user)) combined.push({user:s.user,group:s.group}); });
-          const baseList=combined.map(u=>{ const stats=userStats.find(s=>s.user===u.user); return stats?stats:{user:u.user,group:u.group,totalCal:0,sessions:0}; });
+          // ใช้เฉพาะ user_profiles เท่านั้น (ไม่รวม orphan จาก logs)
+          const baseList=allUsers.map(u=>{ const stats=userStats.find(s=>s.user===u.user); return stats?{...stats,group:u.group}:{user:u.user,group:u.group,totalCal:0,sessions:0}; });
           const filtered=memberGroup==="all"?baseList:baseList.filter(u=>u.group===memberGroup);
           const sorted=[...filtered].sort((a,b)=>memberSort==="cal"?b.totalCal-a.totalCal:b.sessions-a.sessions);
           return (
