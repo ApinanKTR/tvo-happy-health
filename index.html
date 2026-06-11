@@ -1306,27 +1306,23 @@ const handleRegister = async () => {
                           </div>
                         )}
                         {/* admin: inline comment input */}
-                        {!log.verified && isAdmin && (()=>{
-                          const draft = commentDrafts[log.id] !== undefined ? commentDrafts[log.id] : (log.adminComment || '');
-                          const changed = draft !== (log.adminComment || '');
-                          return (
-                            <div style={{ marginTop:5, display:"flex", gap:6, alignItems:"center" }}>
-                              <span style={{ fontSize:12, flexShrink:0 }}>💬</span>
-                              <input
-                                value={draft}
-                                onChange={e => setCommentDrafts(p => ({ ...p, [log.id]: e.target.value }))}
-                                placeholder="Comment ถึง user..."
-                                style={{ flex:1, fontSize:11, padding:"4px 8px", borderRadius:8, border:"1px solid #FDE047", background:"#FFFBEB", outline:"none", fontFamily:"inherit" }}
-                              />
-                              {changed && (
-                                <button onClick={()=>handleSaveComment(log.id)}
-                                  style={{ fontSize:11, padding:"4px 10px", borderRadius:8, background:"#F59E0B", color:"#fff", border:"none", cursor:"pointer", fontWeight:700, flexShrink:0 }}>
-                                  บันทึก
-                                </button>
-                              )}
-                            </div>
-                          );
-                        })()}
+                        {!log.verified && isAdmin && (
+                          <div style={{ marginTop:5, display:"flex", gap:6, alignItems:"center" }}>
+                            <span style={{ fontSize:12, flexShrink:0 }}>💬</span>
+                            <input
+                              value={commentDrafts[log.id] !== undefined ? commentDrafts[log.id] : (log.adminComment || '')}
+                              onChange={e => setCommentDrafts(p => ({ ...p, [log.id]: e.target.value }))}
+                              placeholder="Comment ถึง user..."
+                              style={{ flex:1, fontSize:11, padding:"4px 8px", borderRadius:8, border:"1px solid #FDE047", background:"#FFFBEB", outline:"none", fontFamily:"inherit" }}
+                            />
+                            {(commentDrafts[log.id] !== undefined ? commentDrafts[log.id] : (log.adminComment || '')) !== (log.adminComment || '') && (
+                              <button onClick={()=>handleSaveComment(log.id)}
+                                style={{ fontSize:11, padding:"4px 10px", borderRadius:8, background:"#F59E0B", color:"#fff", border:"none", cursor:"pointer", fontWeight:700, flexShrink:0 }}>
+                                บันทึก
+                              </button>
+                            )}
+                          </div>
+                        )}
                         <div style={{ marginTop:8, display:"flex", alignItems:"center", gap:8 }}>
                           {isAdmin?(
                             <button onClick={()=>handleVerify(log.id)} title={log.verified?"ตรวจสอบแล้ว — กดเพื่อยกเลิก":"ทำเครื่องหมายตรวจสอบแล้ว"}
