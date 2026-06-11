@@ -120,6 +120,7 @@ const sbFetchLogs = async () => {
     calories: Number(i.calories) || 0, date: i.log_date || '',
     note: i.note || '', likes: Number(i.likes) || 0, photo: i.photo || null,
     verified: i.verified || false,
+    adminComment: i.admin_comment || '',
   }));
 };
 
@@ -185,6 +186,11 @@ async function sbGetLikers(logId) {
 const sbRemoveLog = async (id) => {
   if (!id) return;
   await supabase.from('exercise_logs').delete().eq('id', id);
+};
+
+const sbUpdateLog = async (id, fields) => {
+  const { error } = await supabase.from('exercise_logs').update(fields).eq('id', id);
+  if (error) throw new Error(error.message);
 };
 
 // ─── User Profiles API ───────────────────────────────────────
@@ -386,6 +392,8 @@ function CalorieTracker() {
   const [grpForm, setGrpForm] = useState({ name: "", color: "#16A34A", image: null });
   const [editingGrp, setEditingGrp] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [editLogModal, setEditLogModal] = useState(null); // { log, form, saving }
+  const editLogPhotoRef = React.useRef(null);
   const exImgRef = useRef();
   const grpImgRef = useRef();
   const [zoomPhoto, setZoomPhoto] = useState(null);
@@ -556,6 +564,28 @@ const handleAdd = async () => {
     const next = !log.verified;
     setLogs(p => p.map(l => l.id === logId ? { ...l, verified: next } : l));
     sbSetVerified(logId, next).catch(e => console.error("Verify sync error:", e));
+  };
+
+  const openEditLog = (log) => setEditLogModal({ log, form: { exercise: log.exercise, date: log.date, duration: log.duration, calories: log.calories, photo: log.photo }, saving: false });
+
+  const handleEditLogSave = async () => {
+    const { log, form } = editLogModal;
+    setEditLogModal(p => ({ ...p, saving: true }));
+    try {
+      await sbUpdateLog(log.id, {
+        exercise: form.exercise,
+        log_date: form.date,
+        duration: form.duration,
+        calories: form.calories,
+        photo: form.photo || null,
+      });
+      setLogs(p => p.map(l => l.id === log.id ? { ...l, exercise: form.exercise, date: form.date, duration: form.duration, calories: form.calories, photo: form.photo } : l));
+      setEditLogModal(null);
+      toast("แก้ไขสำเร็จ ✅");
+    } catch(e) {
+      setEditLogModal(p => ({ ...p, saving: false }));
+      toast("❌ บันทึกไม่สำเร็จ: " + e.message);
+    }
   };
 
   const handleShowLikers = async (logId) => {
@@ -956,6 +986,96 @@ const handleRegister = async () => {
         </div>
       )}
 
+      {/* Edit Log Modal */}
+      {editLogModal && (
+        <div className="v2-ovl" onClick={()=>!editLogModal.saving&&setEditLogModal(null)} style={{ zIndex:700 }}>
+          <div onClick={e=>e.stopPropagation()} style={{ background:"#fff", borderRadius:20, padding:"20px 20px 24px", width:"92%", maxWidth:400, boxShadow:"0 12px 48px rgba(0,0,0,0.25)", maxHeight:"90vh", overflowY:"auto" }}>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16 }}>
+              <div style={{ fontFamily:"'Prompt'", fontWeight:800, fontSize:16, color:"#111827" }}>✏️ แก้ไขกิจกรรม</div>
+              <button onClick={()=>setEditLogModal(null)} style={{ background:"#F3F4F6", border:"none", borderRadius:8, width:28, height:28, cursor:"pointer", fontSize:14, color:"#6B7280" }}>✕</button>
+            </div>
+            <div style={{ fontSize:12, color:"#9CA3AF", marginBottom:16 }}>{editLogModal.log.user}</div>
+
+            {/* Exercise type */}
+            <div style={{ marginBottom:14 }}>
+              <label style={{ fontSize:12, fontWeight:700, color:"#374151", display:"block", marginBottom:6 }}>🏃 ประเภทกิจกรรม</label>
+              <div style={{ display:"flex", flexWrap:"wrap", gap:7 }}>
+                {exercises.map(ex=>{
+                  const sel = editLogModal.form.exercise === ex.name;
+                  return (
+                    <button key={ex.name} onClick={()=>setEditLogModal(p=>({...p,form:{...p.form,exercise:ex.name}}))}
+                      style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 10px", borderRadius:10, border: sel?"2px solid #16A34A":"1.5px solid #E5E7EB", background: sel?"#DCFCE7":"#F9FAFB", cursor:"pointer", fontSize:12, fontWeight: sel?700:400, color: sel?"#15803D":"#374151", transition:"all .15s" }}>
+                      <span style={{ fontSize:14 }}>{ex.icon}</span>{ex.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Date */}
+            <div style={{ marginBottom:14 }}>
+              <label style={{ fontSize:12, fontWeight:700, color:"#374151", display:"block", marginBottom:6 }}>📅 วันที่</label>
+              <input type="date" value={editLogModal.form.date} max={thaiDate()}
+                onChange={e=>setEditLogModal(p=>({...p,form:{...p.form,date:e.target.value}}))}
+                style={{ width:"100%", padding:"10px 14px", borderRadius:12, border:"1.5px solid #D1FAE5", fontSize:14, color:"#15803D", fontWeight:600, outline:"none" }} />
+            </div>
+
+            {/* Duration + Cal */}
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:14 }}>
+              <div>
+                <label style={{ fontSize:12, fontWeight:700, color:"#374151", display:"block", marginBottom:6 }}>⏱️ เวลา (นาที)</label>
+                <div style={{ display:"flex", alignItems:"center", background:"#F0FDF4", borderRadius:12, border:"1.5px solid #D1FAE5", overflow:"hidden" }}>
+                  <button onClick={()=>setEditLogModal(p=>({...p,form:{...p.form,duration:Math.max(1,p.form.duration-1)}}))} style={{ background:"none", border:"none", padding:"0 10px", fontSize:18, color:"#16A34A", cursor:"pointer", height:44 }}>−</button>
+                  <input type="number" min={1} max={480} value={editLogModal.form.duration}
+                    onChange={e=>setEditLogModal(p=>({...p,form:{...p.form,duration:Math.max(1,Math.min(480,+e.target.value||1))}}))}
+                    style={{ flex:1, background:"transparent", border:"none", fontSize:18, fontWeight:800, color:"#16A34A", textAlign:"center", outline:"none", padding:"6px 0" }} />
+                  <button onClick={()=>setEditLogModal(p=>({...p,form:{...p.form,duration:Math.min(480,p.form.duration+1)}}))} style={{ background:"none", border:"none", padding:"0 10px", fontSize:18, color:"#16A34A", cursor:"pointer", height:44 }}>+</button>
+                </div>
+              </div>
+              <div>
+                <label style={{ fontSize:12, fontWeight:700, color:"#374151", display:"block", marginBottom:6 }}>🔥 Calories</label>
+                <div style={{ display:"flex", alignItems:"center", background:"#F0FDF4", borderRadius:12, border:"1.5px solid #D1FAE5", overflow:"hidden" }}>
+                  <button onClick={()=>setEditLogModal(p=>({...p,form:{...p.form,calories:Math.max(1,p.form.calories-1)}}))} style={{ background:"none", border:"none", padding:"0 10px", fontSize:18, color:"#16A34A", cursor:"pointer", height:44 }}>−</button>
+                  <input type="number" min={1} max={9999} value={editLogModal.form.calories}
+                    onChange={e=>setEditLogModal(p=>({...p,form:{...p.form,calories:Math.max(1,Math.min(9999,+e.target.value||1))}}))}
+                    style={{ flex:1, background:"transparent", border:"none", fontSize:18, fontWeight:800, color:"#16A34A", textAlign:"center", outline:"none", padding:"6px 0" }} />
+                  <button onClick={()=>setEditLogModal(p=>({...p,form:{...p.form,calories:Math.min(9999,p.form.calories+1)}}))} style={{ background:"none", border:"none", padding:"0 10px", fontSize:18, color:"#16A34A", cursor:"pointer", height:44 }}>+</button>
+                </div>
+              </div>
+            </div>
+
+            {/* Photo */}
+            <div style={{ marginBottom:18 }}>
+              <label style={{ fontSize:12, fontWeight:700, color:"#374151", display:"block", marginBottom:6 }}>📸 รูปแนบ</label>
+              {editLogModal.form.photo ? (
+                <div style={{ position:"relative" }}>
+                  <img src={editLogModal.form.photo} alt="" onClick={()=>setZoomPhoto(editLogModal.form.photo)}
+                    style={{ width:"100%", borderRadius:12, display:"block", objectFit:"contain", background:"#F0FDF4", cursor:"pointer" }} />
+                  <button onClick={()=>editLogPhotoRef.current?.click()} style={{ position:"absolute", bottom:8, right:8, background:"rgba(22,163,74,0.85)", border:"none", color:"#fff", borderRadius:8, padding:"5px 10px", cursor:"pointer", fontSize:11, fontFamily:"'Sarabun'", fontWeight:600 }}>เปลี่ยนรูป</button>
+                </div>
+              ) : (
+                <div onClick={()=>editLogPhotoRef.current?.click()}
+                  style={{ border:"2px dashed #D1FAE5", borderRadius:12, padding:"20px", textAlign:"center", cursor:"pointer", background:"#FAFFFE" }}>
+                  <div style={{ fontSize:24, marginBottom:4 }}>📸</div>
+                  <div style={{ fontSize:12, color:"#9CA3AF" }}>แตะเพื่อเลือกรูป</div>
+                </div>
+              )}
+              <input ref={editLogPhotoRef} type="file" accept="image/*" style={{ display:"none" }}
+                onChange={e=>{ const f=e.target.files?.[0]; if(!f) return; resizeImage(f).then(b64=>setEditLogModal(p=>({...p,form:{...p.form,photo:b64}}))); }} />
+            </div>
+
+            <div style={{ display:"flex", gap:10 }}>
+              <button onClick={()=>setEditLogModal(null)} disabled={editLogModal.saving}
+                style={{ flex:1, padding:12, borderRadius:14, border:"1.5px solid #E5E7EB", background:"#fff", cursor:"pointer", fontSize:14, color:"#6B7280", fontFamily:"'Sarabun'" }}>ยกเลิก</button>
+              <button onClick={handleEditLogSave} disabled={editLogModal.saving}
+                style={{ flex:2, padding:12, borderRadius:14, border:"none", background:"linear-gradient(135deg,#16A34A,#22C55E)", color:"#fff", cursor:"pointer", fontSize:14, fontFamily:"'Prompt'", fontWeight:700, opacity:editLogModal.saving?0.7:1 }}>
+                {editLogModal.saving?"กำลังบันทึก...":"💾 บันทึก"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Save confirm modal */}
       {showSaveConfirm && (()=>{
         const expectedCal = calcCalories(form.exercise, form.duration);
@@ -1046,7 +1166,23 @@ const handleRegister = async () => {
         {/* ── HEADER v2 ── */}
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:20, opacity:animateIn?1:0, transform:animateIn?"none":"translateY(-16px)", transition:"all .5s ease" }}>
           <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-            <div style={{ width:40, height:40, borderRadius:12, background:"#FFFFFF", boxShadow:"0 2px 10px rgba(22,163,74,0.20)", display:"flex", alignItems:"center", justifyContent:"center", overflow:"hidden" }}>
+            <div onClick={()=>{
+              setSpStatus("connecting");
+              sbFetchLogs().then(d=>{
+                if(d.length>0){
+                  const map=Object.fromEntries((lsGet("tvohh_allusers",[])||[]).map(u=>[u.user,u.group]));
+                  setLogs(d.map(l=>({...l,group:map[l.user]||l.group})));
+                }
+                setSpStatus("connected");
+                setSpLastSync(new Date().toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit"}));
+                toast("รีเฟรชแล้ว ✅");
+              }).catch(()=>{ setSpStatus("error"); toast("❌ รีเฟรชไม่สำเร็จ"); });
+            }} title="กดเพื่อรีเฟรชข้อมูล"
+              style={{ width:40, height:40, borderRadius:12, background:"#FFFFFF", boxShadow:"0 2px 10px rgba(22,163,74,0.20)", display:"flex", alignItems:"center", justifyContent:"center", overflow:"hidden", cursor:"pointer", transition:"transform .15s, box-shadow .15s" }}
+              onMouseDown={e=>e.currentTarget.style.transform="scale(0.92)"}
+              onMouseUp={e=>e.currentTarget.style.transform="scale(1)"}
+              onTouchStart={e=>e.currentTarget.style.transform="scale(0.92)"}
+              onTouchEnd={e=>e.currentTarget.style.transform="scale(1)"}>
               <img src="logo.png" alt="TVO" style={{ width:32, height:32, objectFit:"contain" }} />
             </div>
             <div>
@@ -1148,6 +1284,16 @@ const handleRegister = async () => {
                         </div>
                         <div style={{ color:"#6B7280", fontSize:12 }}>{log.exercise} · {log.duration} นาที · {log.date}{(()=>{ const r=calcCalRange(log.exercise,log.duration); return r?<span style={{ color:"#C4C4C4", marginLeft:4 }}>({r.min}–{r.max} kcal)</span>:null; })()}</div>
                         {log.note&&<div style={{ color:"#9CA3AF", fontSize:11, marginTop:3, fontStyle:"italic" }}>"{log.note}"</div>}
+                        {/* admin comment — เห็น owner + admin */}
+                        {!log.verified && log.adminComment && (log.user===authUser?.displayName || isAdmin) && (
+                          <div style={{ marginTop:5, background:"#FEF9C3", border:"1px solid #FDE047", borderRadius:10, padding:"6px 10px", display:"flex", alignItems:"flex-start", gap:6 }}>
+                            <span style={{ fontSize:13, flexShrink:0 }}>💬</span>
+                            <span style={{ fontSize:11, color:"#92400E", lineHeight:1.6 }}>
+                              {isAdmin && log.user!==authUser?.displayName && <><strong style={{ color:"#B45309" }}>→ {log.user}:</strong>{" "}</>}
+                              <strong>Admin:</strong> {log.adminComment}
+                            </span>
+                          </div>
+                        )}
                         <div style={{ marginTop:8, display:"flex", alignItems:"center", gap:8 }}>
                           {isAdmin?(
                             <button onClick={()=>handleVerify(log.id)} title={log.verified?"ตรวจสอบแล้ว — กดเพื่อยกเลิก":"ทำเครื่องหมายตรวจสอบแล้ว"}
@@ -1232,18 +1378,28 @@ const handleRegister = async () => {
                   style={{ width:"100%", padding:"12px 16px", borderRadius:14, fontSize:14, border:"1.5px solid #D1FAE5", color:"#15803D", fontWeight:600 }} />
               </div>
 
-              {/* Duration */}
-              <div style={{ marginBottom:20 }}>
-                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
-                  <label style={{ fontSize:12, color:"#374151", fontWeight:700 }}>⏱️ ระยะเวลา</label>
-                  <input
-                    type="number" min={15} max={480} value={form.duration}
-                    onChange={e => { const v = Math.max(15, Math.min(480, +e.target.value||15)); setForm(p=>({...p,duration:v})); }}
-                    style={{ width:72, padding:"4px 8px", borderRadius:10, border:"1.5px solid #D1FAE5", fontFamily:"'Prompt'", fontWeight:700, fontSize:15, color:"#16A34A", textAlign:"center", outline:"none", background:"#F0FDF4" }}
-                  />
+              {/* Duration + Cal — same row */}
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:20 }}>
+                <div>
+                  <label style={{ fontSize:12, color:"#374151", fontWeight:700, display:"block", marginBottom:8 }}>⏱️ ระยะเวลา (นาที)</label>
+                  <div style={{ display:"flex", alignItems:"center", gap:0, background:"#F0FDF4", borderRadius:14, border:"1.5px solid #D1FAE5", overflow:"hidden" }}>
+                    <button onClick={()=>setForm(p=>({...p,duration:Math.max(15,p.duration-1)}))} style={{ background:"none", border:"none", padding:"0 12px", fontSize:18, color:"#16A34A", cursor:"pointer", height:48 }}>−</button>
+                    <input type="number" min={15} max={480} value={form.duration}
+                      onChange={e=>{ const v=Math.max(15,Math.min(480,+e.target.value||15)); setForm(p=>({...p,duration:v})); }}
+                      style={{ flex:1, padding:"8px 0", background:"transparent", border:"none", fontSize:20, fontWeight:800, color:"#16A34A", textAlign:"center", boxShadow:"none", outline:"none" }} />
+                    <button onClick={()=>setForm(p=>({...p,duration:Math.min(480,p.duration+1)}))} style={{ background:"none", border:"none", padding:"0 12px", fontSize:18, color:"#16A34A", cursor:"pointer", height:48 }}>+</button>
+                  </div>
                 </div>
-                <input type="range" min={15} max={480} step={1} value={form.duration} onChange={e=>setForm(p=>({...p,duration:+e.target.value}))} style={{ width:"100%", accentColor:"#16A34A", borderRadius:999, border:"none", background:"transparent" }} />
-                <div style={{ display:"flex", justifyContent:"space-between", fontSize:10, color:"#9CA3AF", marginTop:4 }}><span>15 น.</span><span>480 น.</span></div>
+                <div>
+                  <label style={{ fontSize:12, color:"#374151", fontWeight:700, display:"block", marginBottom:8 }}>🔥 Calories (kcal)</label>
+                  <div style={{ display:"flex", alignItems:"center", gap:0, background:"#F0FDF4", borderRadius:14, border:"1.5px solid #D1FAE5", overflow:"hidden" }}>
+                    <button onClick={()=>setForm(p=>({...p,customCal:Math.max(1,p.customCal-1)}))} style={{ background:"none", border:"none", padding:"0 12px", fontSize:18, color:"#16A34A", cursor:"pointer", height:48 }}>−</button>
+                    <input type="number" min={1} max={9999} value={form.customCal}
+                      onChange={e=>setForm(p=>({...p,customCal:Math.min(9999,Math.max(1,+e.target.value||1))}))}
+                      style={{ flex:1, padding:"8px 0", background:"transparent", border:"none", fontSize:20, fontWeight:800, color:"#16A34A", textAlign:"center", boxShadow:"none", outline:"none" }} />
+                    <button onClick={()=>setForm(p=>({...p,customCal:Math.min(9999,p.customCal+1)}))} style={{ background:"none", border:"none", padding:"0 12px", fontSize:18, color:"#16A34A", cursor:"pointer", height:48 }}>+</button>
+                  </div>
+                </div>
               </div>
 
               {/* Note */}
@@ -1257,7 +1413,7 @@ const handleRegister = async () => {
                 <label style={{ fontSize:12, color:"#374151", display:"block", marginBottom:8, fontWeight:700 }}>📸 รูปการออกกำลังกาย <span style={{ color:"#DC2626", fontWeight:800 }}>*</span> <span style={{ color:"#9CA3AF", fontWeight:400, fontSize:11 }}>(บังคับ)</span></label>
                 {form.photo?(
                   <div style={{ position:"relative" }}>
-                    <img src={form.photo} alt="" onClick={()=>setZoomPhoto(form.photo)} className="v2-pthumb" style={{ width:"100%", maxHeight:200, objectFit:"cover", borderRadius:16, display:"block" }} />
+                    <img src={form.photo} alt="" onClick={()=>setZoomPhoto(form.photo)} className="v2-pthumb" style={{ width:"100%", borderRadius:16, display:"block", objectFit:"contain", background:"#F0FDF4" }} />
                     <button onClick={()=>setForm(p=>({...p,photo:null}))} style={{ position:"absolute", top:8, right:8, background:"rgba(0,0,0,0.65)", border:"none", color:"#fff", borderRadius:"50%", width:30, height:30, cursor:"pointer", fontSize:14, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
                     <button onClick={()=>addPhotoRef.current?.click()} style={{ position:"absolute", bottom:8, right:8, background:"rgba(22,163,74,0.85)", border:"none", color:"#fff", borderRadius:8, padding:"5px 12px", cursor:"pointer", fontSize:11, fontFamily:"'Sarabun'", fontWeight:600 }}>เปลี่ยนรูป</button>
                   </div>
@@ -1271,34 +1427,26 @@ const handleRegister = async () => {
                 <input ref={addPhotoRef} type="file" accept="image/*" style={{ display:"none" }} onChange={e=>handlePhotoUpload(e.target.files[0])} />
               </div>
 
-              {/* kcal entry */}
+              {/* kcal app links */}
               <div style={{ marginBottom:22 }}>
-                <div style={{ marginBottom:12 }}>
-                  <button onClick={()=>setShowAppLinks(p=>!p)} className="v2-btn-ghost" style={{ width:"100%", padding:"10px", fontSize:12, display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
-                    <span>📱 ดู kcal จากแอพวิ่ง</span><span>{showAppLinks?"▲":"▼"}</span>
-                  </button>
-                  {showAppLinks&&(
-                    <div style={{ marginTop:8, display:"flex", flexDirection:"column", gap:8 }}>
-                      {RUN_APPS.map(app=>(
-                        <a key={app.name} href={app.url} target="_blank" rel="noopener noreferrer"
-                          style={{ display:"flex", alignItems:"center", gap:12, background:"#FAFFFE", border:`1.5px solid ${app.color}22`, borderRadius:14, padding:"11px 14px", textDecoration:"none" }}>
-                          <div style={{ width:36, height:36, borderRadius:10, background:app.color+"18", display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, flexShrink:0 }}>{app.icon}</div>
-                          <div style={{ flex:1 }}>
-                            <div style={{ fontWeight:700, fontSize:13, color:app.color }}>{app.name}</div>
-                            <div style={{ fontSize:10, color:"#9CA3AF", marginTop:1 }}>{app.hint}</div>
-                          </div>
-                          <span style={{ fontSize:11, color:"#9CA3AF" }}>เปิด →</span>
-                        </a>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <label style={{ fontSize:12, color:"#374151", display:"block", marginBottom:10, fontWeight:700 }}>🔥 กรอก kcal</label>
-                <div style={{ display:"flex", alignItems:"center", gap:12, background:"#F0FDF4", borderRadius:18, padding:"8px 16px", border:"1.5px solid #D1FAE5" }}>
-                  <input type="number" min={1} max={9999} value={form.customCal} onChange={e=>setForm(p=>({...p,customCal:Math.min(9999,Math.max(1,+e.target.value||1))}))}
-                    style={{ flex:1, padding:"8px 4px", background:"transparent", border:"none", fontSize:28, fontWeight:800, color:"#16A34A", textAlign:"center", boxShadow:"none" }} />
-                  <span style={{ fontSize:14, color:"#6B7280", fontWeight:700 }}>kcal</span>
-                </div>
+                <button onClick={()=>setShowAppLinks(p=>!p)} className="v2-btn-ghost" style={{ width:"100%", padding:"10px", fontSize:12, display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
+                  <span>📱 ดู kcal จากแอพวิ่ง</span><span>{showAppLinks?"▲":"▼"}</span>
+                </button>
+                {showAppLinks&&(
+                  <div style={{ marginTop:8, display:"flex", flexDirection:"column", gap:8 }}>
+                    {RUN_APPS.map(app=>(
+                      <a key={app.name} href={app.url} target="_blank" rel="noopener noreferrer"
+                        style={{ display:"flex", alignItems:"center", gap:12, background:"#FAFFFE", border:`1.5px solid ${app.color}22`, borderRadius:14, padding:"11px 14px", textDecoration:"none" }}>
+                        <div style={{ width:36, height:36, borderRadius:10, background:app.color+"18", display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, flexShrink:0 }}>{app.icon}</div>
+                        <div style={{ flex:1 }}>
+                          <div style={{ fontWeight:700, fontSize:13, color:app.color }}>{app.name}</div>
+                          <div style={{ fontSize:10, color:"#9CA3AF", marginTop:1 }}>{app.hint}</div>
+                        </div>
+                        <span style={{ fontSize:11, color:"#9CA3AF" }}>เปิด →</span>
+                      </a>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {dailyFull?(
@@ -1337,6 +1485,27 @@ const handleRegister = async () => {
                     <div style={{ fontSize:11, color:"#9CA3AF", marginTop:2 }}>{profileUserData?.group}</div>
                   </div>
                 </div>
+
+                {/* Admin messages — เห็นเฉพาะ owner ของ log */}
+                {profileUser===authUser?.displayName && (()=>{
+                  const msgs = logs.filter(l=>l.user===authUser.displayName && !l.verified && l.adminComment);
+                  if (!msgs.length) return null;
+                  return (
+                    <div style={{ marginBottom:16, background:"#FFFBEB", border:"1.5px solid #FDE047", borderRadius:16, padding:"14px 16px" }}>
+                      <div style={{ fontFamily:"'Prompt'", fontWeight:700, fontSize:13, color:"#D97706", marginBottom:10 }}>
+                        💬 ข้อความจาก Admin ({msgs.length})
+                      </div>
+                      <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                        {msgs.map(l=>(
+                          <div key={l.id} style={{ background:"#fff", borderRadius:10, padding:"10px 12px", border:"1px solid #FEF3C7" }}>
+                            <div style={{ fontSize:11, color:"#9CA3AF", marginBottom:4 }}>{l.exercise} · {l.date}</div>
+                            <div style={{ fontSize:13, color:"#92400E", lineHeight:1.6 }}>{l.adminComment}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* Stats row */}
                 {profileUserData&&(
@@ -1516,6 +1685,15 @@ const handleRegister = async () => {
                                   <div style={{ flex:1, minWidth:0 }}>
                                     <div style={{ fontWeight:700, fontSize:13, color:"#111827" }}>{log.exercise}</div>
                                     <div style={{ fontSize:11, color:"#9CA3AF" }}>{log.duration} นาที{(()=>{ const r=calcCalRange(log.exercise,log.duration); return r?<span style={{ color:"#C4C4C4", marginLeft:4 }}>({r.min}–{r.max} kcal)</span>:null; })()}</div>
+                                    {!log.verified && log.adminComment && (log.user===authUser?.displayName || isAdmin) && (
+                                      <div style={{ marginTop:4, background:"#FEF9C3", border:"1px solid #FDE047", borderRadius:8, padding:"5px 8px", display:"flex", alignItems:"flex-start", gap:5 }}>
+                                        <span style={{ fontSize:12, flexShrink:0 }}>💬</span>
+                                        <span style={{ fontSize:11, color:"#92400E", lineHeight:1.5 }}>
+                                          {isAdmin && log.user!==authUser?.displayName && <><strong style={{ color:"#B45309" }}>→ {log.user}:</strong>{" "}</>}
+                                          <strong>Admin:</strong> {log.adminComment}
+                                        </span>
+                                      </div>
+                                    )}
                                     {log.note&&<div style={{ fontSize:11, color:"#6B7280", fontStyle:"italic", marginTop:2 }}>"{log.note}"</div>}
                                     <div style={{ marginTop:5, display:"flex", alignItems:"center", gap:7 }}>
                                       {isAdmin?(
@@ -1526,6 +1704,11 @@ const handleRegister = async () => {
                                       ):log.verified&&(
                                         <span title="ตรวจสอบโดย Admin แล้ว" style={{ fontSize:13, flexShrink:0 }}>✅</span>
                                       )}
+                                      {(isAdmin||log.user===authUser?.displayName)&&(<>
+                                        <button onClick={()=>openEditLog(log)} style={{ background:"#EFF6FF", border:"1px solid #BFDBFE", borderRadius:7, width:26, height:26, cursor:"pointer", fontSize:12, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, color:"#2563EB" }}>✏️</button>
+                                        <button onClick={()=>setDeleteConfirm({name:`${log.exercise} ${log.date}`,fn:async()=>{ await sbRemoveLog(log.id); setLogs(p=>p.filter(l=>l.id!==log.id)); setCalSelectedDate(null); setDeleteConfirm(null); }})}
+                                          style={{ background:"#FEE2E2", border:"1px solid #FECACA", borderRadius:7, width:26, height:26, cursor:"pointer", fontSize:12, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>🗑️</button>
+                                      </>)}
                                       <button className={`v2-like ${liked?"v2-like-on":""}`} onClick={()=>handleLike(log.id)}>{liked?"❤️":"🤍"}</button>
                                       <span onClick={()=>log.likes>0&&handleShowLikers(log.id)} style={{ fontSize:12, fontWeight:700, color:"#6B7280", cursor:log.likes>0?"pointer":"default" }}>{log.likes}</span>
                                       {log.photo&&<div className="v2-pthumb" onClick={()=>setZoomPhoto(log.photo)} style={{ width:28, height:28 }}><img src={log.photo} alt="" style={{ width:"100%", height:"100%", objectFit:"cover", borderRadius:7 }} /></div>}
@@ -1759,14 +1942,25 @@ const handleRegister = async () => {
               </div>
               <div style={{ fontSize:13, lineHeight:1.9, color:"#374151" }}>
                 <div>🔒 ส่งข้อมูลได้ไม่เกิน <strong>วันละ 4 ครั้ง</strong> (ระบบจะล็อคอัตโนมัติ)</div>
-                <div style={{ marginTop:8 }}>📸 แนบภาพหน้าจอจากแอปที่ใช้บันทึก โดยต้องแสดง:</div>
-                <div style={{ paddingLeft:16, marginTop:4, lineHeight:2 }}>
-                  <div>• ประเภทกิจกรรม</div>
-                  <div>• ระยะเวลาออกกำลังกาย</div>
-                  <div>• จำนวน Calories</div>
-                  <div>• ข้อมูลในภาพต้องตรงกับข้อมูลที่บันทึกในระบบ</div>
+                <div style={{ marginTop:10 }}>📸 แนบภาพหน้าจอจากแอปที่ใช้บันทึก โดยต้องแสดง:</div>
+                <div style={{ paddingLeft:4, marginTop:6, display:"flex", flexDirection:"column", gap:4 }}>
+                  {[
+                    { icon:"📅", text:"วันที่ออกกำลังกาย" },
+                    { icon:"🏃", text:"ประเภทกิจกรรม" },
+                    { icon:"⏱️", text:"ระยะเวลาออกกำลังกาย" },
+                    { icon:"🔥", text:"จำนวน Calories" },
+                    { icon:"🔗", text:"ข้อมูลในภาพต้องตรงกับข้อมูลที่บันทึกในระบบ" },
+                  ].map(item=>(
+                    <div key={item.text} style={{ display:"flex", alignItems:"flex-start", gap:8, background:"#F0FDF4", borderRadius:8, padding:"6px 10px" }}>
+                      <span style={{ fontSize:15, flexShrink:0 }}>{item.icon}</span>
+                      <span>{item.text}</span>
+                    </div>
+                  ))}
                 </div>
-                <div style={{ marginTop:8, color:"#D97706", fontSize:12 }}>⚠️ หากข้อมูลไม่ครบถ้วน ผู้ดูแลจะแจ้งลบรายการและให้บันทึกใหม่</div>
+                <div style={{ marginTop:12, background:"#FEF3C7", borderRadius:10, padding:"8px 12px", display:"flex", alignItems:"flex-start", gap:8 }}>
+                  <span style={{ fontSize:16, flexShrink:0 }}>⚠️</span>
+                  <span style={{ color:"#92400E", fontSize:12, lineHeight:1.7 }}>หากข้อมูลไม่ครบถ้วน ผู้ดูแลจะแจ้งลบรายการและให้บันทึกใหม่</span>
+                </div>
               </div>
             </div>
 
@@ -2115,7 +2309,10 @@ const handleRegister = async () => {
                             <div style={{ fontFamily:"'Prompt'", fontWeight:800, fontSize:14, color:c }}>{log.calories}</div>
                             <div style={{ fontSize:9, color:"#9CA3AF" }}>kcal</div>
                           </div>
-                          {log.spId&&authUser?.role==="admin"&&<button className="v2-btn-danger" onClick={()=>setDeleteConfirm({name:`${log.user} - ${log.exercise}`,fn:async()=>{ await sbRemoveLog(log.id); setLogs(p=>p.filter(l=>l.id!==log.id)); setDeleteConfirm(null); }})} style={{ padding:"4px 9px", fontSize:11 }}>🗑️</button>}
+                          {log.spId&&(isAdmin||log.user===authUser?.displayName)&&(<>
+                            <button onClick={()=>openEditLog(log)} style={{ background:"#EFF6FF", border:"1px solid #BFDBFE", borderRadius:8, padding:"4px 9px", fontSize:11, cursor:"pointer", color:"#2563EB" }}>✏️</button>
+                            <button className="v2-btn-danger" onClick={()=>setDeleteConfirm({name:`${log.user} - ${log.exercise}`,fn:async()=>{ await sbRemoveLog(log.id); setLogs(p=>p.filter(l=>l.id!==log.id)); setDeleteConfirm(null); }})} style={{ padding:"4px 9px", fontSize:11 }}>🗑️</button>
+                          </>)}
                         </div>
                       </div>
                     );
@@ -2131,12 +2328,18 @@ const handleRegister = async () => {
       {/* Bottom Nav */}
       <div style={{ position:"fixed", bottom:0, left:0, right:0, zIndex:50, background:"rgba(255,255,255,0.92)", backdropFilter:"blur(20px)", WebkitBackdropFilter:"blur(20px)", borderTop:"1px solid rgba(0,0,0,0.06)", paddingBottom:"env(safe-area-inset-bottom,0px)" }}>
         <div style={{ maxWidth:680, margin:"0 auto", display:"flex" }}>
-          {tabs.map(tab=>(
-            <button key={tab.id} onClick={()=>setActiveTab(tab.id)} className={`v2-nav-btn ${activeTab===tab.id?"v2-nav-on":""}`}>
-              <span style={{ fontSize:20 }}>{tab.icon}</span>
-              <span>{tab.label}</span>
-            </button>
-          ))}
+          {tabs.map(tab=>{
+            const hasAdminMsg = tab.id==="profile" && authUser &&
+              logs.some(l=>l.user===authUser.displayName && !l.verified && l.adminComment);
+            return (
+              <button key={tab.id} onClick={()=>setActiveTab(tab.id)} className={`v2-nav-btn ${activeTab===tab.id?"v2-nav-on":""}`}
+                style={{ position:"relative" }}>
+                <span style={{ fontSize:20 }}>{tab.icon}</span>
+                <span>{tab.label}</span>
+                {hasAdminMsg&&<span style={{ position:"absolute", top:4, right:"50%", transform:"translateX(10px)", width:8, height:8, background:"#EF4444", borderRadius:"50%", border:"2px solid #fff" }} />}
+              </button>
+            );
+          })}
         </div>
       </div>
 

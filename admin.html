@@ -122,11 +122,66 @@ async function sbGetLogs() {
     calories: Number(i.calories)||0, date: i.log_date||'',
     note: i.note||'', photo: i.photo||'', likes: Number(i.likes)||0,
     createdAt: i.created_at||'', verified: i.verified || false,
+    adminComment: i.admin_comment || '',
   }));
 }
 
 async function sbSetVerified(id, verified) {
   const { error } = await supabase.from('exercise_logs').update({ verified }).eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
+// ── CommentBox component (ใช้ได้ทั้ง LogRow และ Anomaly) ────────
+function CommentBox({ id, initial, onSave }) {
+  const [draft, setDraft] = React.useState(initial || '');
+  const changed = draft !== (initial || '');
+  return (
+    <div style={{ display:"flex", gap:8, alignItems:"center", marginTop:8 }}>
+      <span style={{ fontSize:12, color:"#D97706", flexShrink:0 }}>💬</span>
+      <input value={draft} onChange={e=>setDraft(e.target.value)} placeholder="Comment ถึง user..."
+        style={{ flex:1, fontSize:11, padding:"5px 10px", borderRadius:8, border:"1.5px solid #FDE68A", background:"#FFFBEB", fontFamily:"'Sarabun'" }} />
+      {changed && <button onClick={()=>onSave(draft)} style={{ background:"#16A34A", border:"none", color:"#fff", borderRadius:7, padding:"5px 10px", fontSize:11, cursor:"pointer", fontFamily:"'Prompt'", fontWeight:700, whiteSpace:"nowrap" }}>บันทึก</button>}
+    </div>
+  );
+}
+
+// ── LogRow component (แยกเพื่อให้ useState ใช้ใน map ได้) ──────
+function LogRow({ l, toggleVerified, saveComment, deleteLog, GREEN, isCalAnomaly }) {
+  return (
+    <React.Fragment>
+      <tr>
+        <td style={{ fontSize: 11, color: "#9CA3AF" }}>{l.date || "-"}</td>
+        <td style={{ fontWeight: 600 }}>{l.user}</td>
+        <td>{l.group}</td>
+        <td>{l.exercise}</td>
+        <td>{l.duration} น.</td>
+        <td style={{ color: GREEN, fontWeight: 700 }}>
+          {l.calories?.toLocaleString()}
+          {isCalAnomaly(l.exercise, l.duration, l.calories) && <span title="แคลสูงกว่ามาตรฐาน" style={{ marginLeft: 4 }}>👀</span>}
+        </td>
+        <td>
+          <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+            <button onClick={() => toggleVerified(l.id, l.verified)} title={l.verified?"ยกเลิกตรวจสอบ":"ทำเครื่องหมายตรวจสอบแล้ว"}
+              style={{ background: l.verified?"#DCFCE7":"#F3F4F6", border: l.verified?"1.5px solid #22C55E":"1.5px solid #D1D5DB", borderRadius:8, width:30, height:30, cursor:"pointer", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center", transition:"all .15s" }}>
+              {l.verified ? "✅" : "⬜"}
+            </button>
+            <button onClick={() => deleteLog(l.id || l.spId)} style={{ background:"linear-gradient(135deg,#DC2626,#EF4444)", border:"none", cursor:"pointer", color:"#fff", fontFamily:"'Prompt'", fontWeight:600, borderRadius:10, padding:"4px 9px", fontSize:12 }}>🗑 ลบ</button>
+          </div>
+        </td>
+      </tr>
+      {!l.verified && (
+        <tr style={{ background:"#FFFBEB" }}>
+          <td colSpan={7} style={{ padding:"4px 12px 8px" }}>
+            <CommentBox id={l.id} initial={l.adminComment} onSave={(txt)=>saveComment(l.id,txt)} />
+          </td>
+        </tr>
+      )}
+    </React.Fragment>
+  );
+}
+
+async function sbSetComment(id, comment) {
+  const { error } = await supabase.from('exercise_logs').update({ admin_comment: comment || null }).eq('id', id);
   if (error) throw new Error(error.message);
 }
 
@@ -292,6 +347,14 @@ function AdminApp() {
       await sbSetVerified(id, !current);
       setLogs(prev => prev.map(l => l.id === id ? { ...l, verified: !current } : l));
     } catch(e) { showToast("❌ บันทึกไม่สำเร็จ: " + e.message); }
+  };
+
+  const saveComment = async (id, comment) => {
+    try {
+      await sbSetComment(id, comment);
+      setLogs(prev => prev.map(l => l.id === id ? { ...l, adminComment: comment } : l));
+      showToast("💬 บันทึก comment แล้ว");
+    } catch(e) { showToast("❌ " + e.message); }
   };
 
   const deleteLog = async (id) => {
@@ -539,23 +602,7 @@ function AdminApp() {
                   </thead>
                   <tbody>
                     {logs.map((l, i) => (
-                      <tr key={i}>
-                        <td style={{ fontSize: 11, color: "#9CA3AF" }}>{l.date || "-"}</td>
-                        <td style={{ fontWeight: 600 }}>{l.user}</td>
-                        <td>{l.group}</td>
-                        <td>{l.exercise}</td>
-                        <td>{l.duration} น.</td>
-                        <td style={{ color: GREEN, fontWeight: 700 }}>{l.calories?.toLocaleString()}{isCalAnomaly(l.exercise, l.duration, l.calories) && <span title="แคลสูงกว่ามาตรฐาน" style={{ marginLeft: 4 }}>👀</span>}</td>
-                        <td>
-                          <div style={{ display:"flex", gap:6, alignItems:"center" }}>
-                            <button onClick={() => toggleVerified(l.id, l.verified)} title={l.verified?"ยกเลิกตรวจสอบ":"ทำเครื่องหมายตรวจสอบแล้ว"}
-                              style={{ background: l.verified?"#DCFCE7":"#F3F4F6", border: l.verified?"1.5px solid #22C55E":"1.5px solid #D1D5DB", borderRadius:8, width:30, height:30, cursor:"pointer", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center", transition:"all .15s" }}>
-                              {l.verified ? "✅" : "⬜"}
-                            </button>
-                            <button className="btn-r" onClick={() => deleteLog(l.id || l.spId)}>🗑 ลบ</button>
-                          </div>
-                        </td>
-                      </tr>
+                      <LogRow key={l.id||i} l={l} toggleVerified={toggleVerified} saveComment={saveComment} deleteLog={deleteLog} GREEN={GREEN} isCalAnomaly={isCalAnomaly} />
                     ))}
                   </tbody>
                 </table>
@@ -630,6 +677,8 @@ function AdminApp() {
                             {l.date} · {l.createdAt ? new Date(l.createdAt).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) : ''}
                           </div>
                           {l.note && <div style={{ fontSize: 12, color: "#6B7280", marginTop: 4, fontStyle: "italic" }}>"{l.note}"</div>}
+                          {/* Admin comment */}
+                          {!l.verified && <CommentBox id={l.id} initial={l.adminComment} onSave={(txt)=>saveComment(l.id,txt)} />}
                         </div>
                         <div style={{ display:"flex", flexDirection:"column", gap:6, flexShrink:0 }}>
                           <button onClick={() => toggleVerified(l.id, l.verified)} title={l.verified?"ยกเลิก":"ตรวจสอบแล้ว"}
