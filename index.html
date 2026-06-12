@@ -1383,7 +1383,7 @@ const handleRegister = async () => {
                           <button className={`v2-like ${liked?"v2-like-on":""}`} onClick={()=>handleLike(log.id)}>
                             {liked?"❤️":"🤍"}
                           </button>
-                          <span onClick={()=>log.likes>0&&handleShowLikers(log.id)} style={{ fontSize:12, fontWeight:700, color:"#6B7280", cursor:log.likes>0?"pointer":"default", minWidth:16 }}>{log.likes}</span>
+                          {log.likes>0&&<span onClick={()=>handleShowLikers(log.id)} style={{ fontSize:12, fontWeight:700, color:"#6B7280", cursor:"pointer" }}>{log.likes}</span>}
                           {log.photo&&<div className="v2-pthumb" onClick={()=>setZoomPhoto(log.photo)} style={{ width:30, height:30 }}><img src={log.photo} alt="" style={{ width:"100%", height:"100%", objectFit:"cover", borderRadius:8 }} /></div>}
                         </div>
                       </div>
@@ -1801,7 +1801,7 @@ const handleRegister = async () => {
                                           style={{ background:"#FEE2E2", border:"1px solid #FECACA", borderRadius:7, width:26, height:26, cursor:"pointer", fontSize:12, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>🗑️</button>
                                       </>)}
                                       <button className={`v2-like ${liked?"v2-like-on":""}`} onClick={()=>handleLike(log.id)}>{liked?"❤️":"🤍"}</button>
-                                      <span onClick={()=>log.likes>0&&handleShowLikers(log.id)} style={{ fontSize:12, fontWeight:700, color:"#6B7280", cursor:log.likes>0?"pointer":"default" }}>{log.likes}</span>
+                                      {log.likes>0&&<span onClick={()=>handleShowLikers(log.id)} style={{ fontSize:12, fontWeight:700, color:"#6B7280", cursor:"pointer" }}>{log.likes}</span>}
                                       {log.photo&&<div className="v2-pthumb" onClick={()=>setZoomPhoto(log.photo)} style={{ width:28, height:28 }}><img src={log.photo} alt="" style={{ width:"100%", height:"100%", objectFit:"cover", borderRadius:7 }} /></div>}
                                     </div>
                                   </div>
