@@ -179,13 +179,16 @@ async function sbGetMyLikes(empId) {
   return new Set((data || []).map(l => l.log_id));
 }
 
-async function sbGetLikers(logId) {
+async function sbGetLikers(logId, allUsers = []) {
   const { data } = await supabase
     .from('log_likes')
     .select('employee_id, user_profiles(display_name)')
     .eq('log_id', logId)
     .order('created_at', { ascending: true });
-  return (data || []).map(l => l.user_profiles?.display_name || l.employee_id);
+  const userMap = Object.fromEntries(allUsers.filter(u=>u.empId).map(u=>[u.empId, u.user]));
+  return (data || [])
+    .map(l => l.user_profiles?.display_name || userMap[l.employee_id] || null)
+    .filter(Boolean);
 }
 
 const sbRemoveLog = async (id) => {
@@ -200,12 +203,17 @@ const sbUpdateLog = async (id, fields) => {
 
 // ─── User Profiles API ───────────────────────────────────────
 const sbFetchUsersOnce = async () => {
-  const { data, error } = await supabase.from('user_profiles').select('display_name,group_name,employee_id,photo');
+  const { data, error } = await supabase.from('user_profiles').select('display_name,group_name,employee_id,photo,profile_icon');
   if (error) return { allUsers: [], avatars: {} };
-  const allUsers = (data||[]).map(u => ({ user: u.display_name, group: u.group_name||'', empId: u.employee_id }));
+  const allUsers = (data||[]).map(u => ({ user: u.display_name, group: u.group_name||'', empId: u.employee_id, profileIcon: u.profile_icon || null }));
   const avatars = {};
   (data||[]).forEach(u => { if (u.photo) avatars[u.display_name] = u.photo; });
   return { allUsers, avatars };
+};
+
+const sbUpdateProfileIcon = async (empId, icon) => {
+  const { error } = await supabase.from('user_profiles').update({ profile_icon: icon || null }).eq('employee_id', empId);
+  if (error) throw new Error(error.message);
 };
 const sbFetchUserPhotos = async () => { const { avatars } = await sbFetchUsersOnce(); return avatars; };
 const sbFetchAllUsers   = async () => { const { allUsers } = await sbFetchUsersOnce(); return allUsers; };
@@ -227,7 +235,7 @@ const sbLoginUser = async (empId, password) => {
   if (error || !data) throw new Error('รหัสพนักงานหรือรหัสผ่านไม่ถูกต้อง');
 if (password !== data.password_hash) throw new Error('รหัสพนักงานหรือรหัสผ่านไม่ถูกต้อง');
   return { empId: data.employee_id, displayName: data.display_name,
-    group: data.group_name || 'A : ใส่ใจลูกค้า', role: data.role || 'user', photo: data.photo || null };
+    group: data.group_name || 'A : ใส่ใจลูกค้า', role: data.role || 'user', photo: data.photo || null, profileIcon: data.profile_icon || null };
 };
 
 const sbUpdatePass = async (empId, oldPass, newPass) => {
@@ -299,6 +307,46 @@ const BADGE_DEFS = [
 const getBadges = (totalCal, sessions, userLogs = []) => {
   const longSessions = userLogs.filter(l => l.duration >= 30).length;
   return BADGE_DEFS.filter(b => b.check(totalCal, sessions, longSessions));
+};
+
+// ── Special Event Icons ──────────────────────────────────────────
+const SPECIAL_EVENTS = [
+  {
+    id: "pride_jun2026",
+    icon: "🌈",
+    name: "Pride Month",
+    desc: "ออกกำลังกาย 15+ นาที อย่างน้อย 2 วัน ระหว่าง 13–20 มิ.ย.",
+    check: (userLogs) => {
+      const days = new Set(
+        userLogs
+          .filter(l => l.duration >= 15 && l.date >= "2026-06-13" && l.date <= "2026-06-20")
+          .map(l => l.date)
+      );
+      return days.size >= 2;
+    },
+  },
+];
+
+const SPECIAL_ICON_SET = new Set(SPECIAL_EVENTS.map(e => e.icon));
+
+// render ชื่อ: ถ้า icon เป็น special event → สีรุ้งวิ่งไปมา
+const WiggleName = ({ name, icon }) => {
+  if (!icon || !SPECIAL_ICON_SET.has(icon)) return React.createElement(React.Fragment, null, name);
+  return React.createElement('span', { className: 'pride-name' }, name);
+};
+
+// คืน array ของ special icons ที่ user ปลดล็อกแล้ว
+const getSpecialIcons = (userLogs) =>
+  SPECIAL_EVENTS.filter(e => e.check(userLogs));
+
+// icons ทั้งหมดที่ user ปลดล็อก (badge + special)
+const getAllUnlockedIcons = (totalCal, sessions, userLogs, isAdmin = false) => {
+  const badges = getBadges(totalCal, sessions, userLogs);
+  const specials = isAdmin ? SPECIAL_EVENTS : getSpecialIcons(userLogs);
+  return [
+    ...badges.map(b => ({ icon: b.icon, name: b.name, type: "badge" })),
+    ...specials.map(e => ({ icon: e.icon, name: e.name, type: "special" })),
+  ];
 };
 
 const getLast7Days = (userLogs) => {
@@ -410,6 +458,8 @@ function CalorieTracker() {
   const grpImgRef = useRef();
   const [zoomPhoto, setZoomPhoto] = useState(null);
   const [commentDrafts, setCommentDrafts] = useState({}); // { [logId]: text }
+  // profileIconMap: { displayName → icon emoji | null }
+  const [profileIconMap, setProfileIconMap] = useState(() => lsGet("tvohh_profileicons", {}));
 
   // Persist exercises/groups เท่านั้น — logs ไม่ cache (ดึงสดจาก SP)
   // useEffect(() => { lsSet("tvohh_logs", logs); }, [logs]); // disabled
@@ -421,7 +471,15 @@ function CalorieTracker() {
   const [avatars, setAvatars] = useState(() => lsGet("tvohh_avatars", {}));
   // allUsers — ดึงจาก localStorage ก่อน (ใช้ทันที) แล้ว refresh จาก SharePoint ทีหลัง
   const [allUsers, setAllUsers] = useState(() => lsGet("tvohh_allusers", []));
-  const syncAllUsers = (users) => { if (users.length) { lsSet("tvohh_allusers", users); setAllUsers(users); } };
+  const syncAllUsers = (users) => {
+    if (!users.length) return;
+    lsSet("tvohh_allusers", users);
+    setAllUsers(users);
+    // sync profileIconMap จาก DB
+    const iconMap = {};
+    users.forEach(u => { if (u.profileIcon) iconMap[u.user] = u.profileIcon; });
+    setProfileIconMap(prev => { const merged = { ...prev, ...iconMap }; lsSet("tvohh_profileicons", merged); return merged; });
+  };
   useEffect(() => {
     sbFetchUserPhotos().then(avs => { if (avs) setAvatars(avs); });
     sbFetchAllUsers().then(syncAllUsers);
@@ -620,7 +678,7 @@ const handleAdd = async () => {
 
   const handleShowLikers = async (logId) => {
     setLikersModal({ logId, names: [], loading: true });
-    const names = await sbGetLikers(logId).catch(() => []);
+    const names = await sbGetLikers(logId, allUsers).catch(() => []);
     setLikersModal({ logId, names, loading: false });
   };
 
@@ -921,6 +979,8 @@ const handleRegister = async () => {
         @keyframes v2tin{from{opacity:0;transform:translateY(-14px) translateX(-50%)}to{opacity:1;transform:translateY(0) translateX(-50%)}}
         @keyframes v2tout{to{opacity:0;transform:translateY(-14px) translateX(-50%)}}
         @keyframes v2pulse{0%,100%{opacity:1}50%{opacity:.4}}
+        @keyframes rainbow-slide{0%{background-position:0% 50%}100%{background-position:200% 50%}}
+        .pride-name{color:#e85d04;background:linear-gradient(90deg,#ff4e50,#fc913a,#f9d62e,#4caf50,#2196f3,#9c27b0,#ff4e50);background-size:200% auto;-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;animation:rainbow-slide 1.8s linear infinite;display:inline;}
 
         /* Like button */
         .v2-like{background:none;border:1.5px solid #E5E7EB;border-radius:999px;cursor:pointer;display:inline-flex;align-items:center;gap:4px;padding:4px 12px;font-size:12px;color:#6B7280;transition:all .2s;font-family:'Sarabun'}
@@ -1341,7 +1401,7 @@ const handleRegister = async () => {
                       {/* Info */}
                       <div style={{ flex:1, minWidth:0 }}>
                         <div style={{ display:"flex", alignItems:"center", gap:7, marginBottom:3, flexWrap:"wrap" }}>
-                          <span onClick={()=>{ setProfileUser(log.user); setProfileFilter("all"); setActiveTab("profile"); }} style={{ fontWeight:700, fontFamily:"'Prompt'", fontSize:14, cursor:"pointer", color:"#111827" }}>{log.user}</span>
+                          <span onClick={()=>{ setProfileUser(log.user); setProfileFilter("all"); setActiveTab("profile"); }} style={{ fontWeight:700, fontFamily:"'Prompt'", fontSize:14, cursor:"pointer", color:"#111827" }}>{profileIconMap[log.user]&&<span style={{ marginRight:3, fontSize:13 }}>{profileIconMap[log.user]}</span>}<WiggleName name={log.user} icon={profileIconMap[log.user]} /></span>
                           <span style={{ fontSize:10, background:`${color}18`, color, borderRadius:999, padding:"2px 8px", fontWeight:700 }}>{grpLabel(log.group)}</span>
                         </div>
                         <div style={{ color:"#6B7280", fontSize:12 }}>{log.exercise} · {log.duration} นาที · {log.date}{(()=>{ const r=calcCalRange(log.exercise,log.duration); return r?<span style={{ color:"#C4C4C4", marginLeft:4 }}>({r.min}–{r.max} kcal)</span>:null; })()}</div>
@@ -1572,7 +1632,9 @@ const handleRegister = async () => {
                       :<div style={{ width:60, height:60, borderRadius:"50%", background:"linear-gradient(135deg,#16A34A,#4ADE80)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:28, boxShadow:"0 4px 16px #16A34A25" }}>👤</div>}
                   </div>
                   <div>
-                    <div style={{ fontFamily:"'Prompt'", fontWeight:800, fontSize:20, color:"#111827" }}>{profileUser}</div>
+                    <div style={{ fontFamily:"'Prompt'", fontWeight:800, fontSize:20, color:"#111827" }}>
+                      {profileIconMap[profileUser] && <span style={{ marginRight:5, fontSize:18 }}>{profileIconMap[profileUser]}</span>}<WiggleName name={profileUser} icon={profileIconMap[profileUser]} />
+                    </div>
                     <div style={{ fontSize:11, color:"#9CA3AF", marginTop:2 }}>{profileUserData?.group}</div>
                   </div>
                 </div>
@@ -1669,12 +1731,12 @@ const handleRegister = async () => {
                   </div>
                 </div>
 
-                {/* Badges */}
+                {/* Badges + Special Events */}
                 <div className="v2-card" style={{ padding:18, marginBottom:14 }}>
                   <div style={{ fontFamily:"'Prompt'", fontWeight:700, fontSize:13, color:"#374151", marginBottom:14 }}>🏅 รางวัลที่ได้รับ</div>
-                  <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
+                  <div style={{ display:"flex", flexWrap:"wrap", gap:8, marginBottom:12 }}>
                     {BADGE_DEFS.map(b=>{
-                      const earned=b.check(profileUserData?.totalCal||0,profileUserData?.sessions||0,logs.filter(l=>l.user===profileUser&&l.duration>=30).length);
+                      const earned=b.check(profileUserData?.totalCal||0,profileUserData?.sessions||0,verifiedLogs.filter(l=>l.user===profileUser&&l.duration>=30).length);
                       return (
                         <div key={b.name} className="v2-badge" style={{ opacity:earned?1:0.3, filter:earned?"none":"grayscale(1)" }} title={b.desc}>
                           <span style={{ fontSize:18 }}>{b.icon}</span>
@@ -1686,6 +1748,58 @@ const handleRegister = async () => {
                       );
                     })}
                   </div>
+                  {/* Special Events */}
+                  {SPECIAL_EVENTS.length > 0 && (
+                    <div>
+                      <div style={{ fontSize:11, fontWeight:700, color:"#7C3AED", marginBottom:8 }}>✨ Special Icons</div>
+                      <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
+                        {SPECIAL_EVENTS.map(e=>{
+                          const earned = e.check(logs.filter(l=>l.user===profileUser));
+                          return (
+                            <div key={e.id} className="v2-badge" style={{ opacity:earned?1:0.3, filter:earned?"none":"grayscale(1)", border:earned?"1.5px solid #C4B5FD":"1.5px solid #E5E7EB", background:earned?"#F5F3FF":"#F9FAFB" }} title={e.desc}>
+                              <span style={{ fontSize:18 }}>{e.icon}</span>
+                              <div>
+                                <div style={{ fontSize:11, fontWeight:700, color:earned?"#7C3AED":"#9CA3AF" }}>{e.name}</div>
+                                <div style={{ fontSize:9.5, color:"#9CA3AF" }}>{e.desc}</div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                  {/* Icon Picker — เฉพาะ profile ตัวเอง */}
+                  {profileUser===authUser?.displayName && (()=>{
+                    const uLogs = logs.filter(l=>l.user===profileUser);
+                    const unlocked = getAllUnlockedIcons(profileUserData?.totalCal||0, profileUserData?.sessions||0, uLogs, authUser?.role==="admin");
+                    const current = profileIconMap[profileUser] || null;
+                    if (!unlocked.length) return null;
+                    const handlePickIcon = async (icon) => {
+                      const next = icon === current ? null : icon;
+                      setProfileIconMap(prev => { const m={...prev}; if(next) m[profileUser]=next; else delete m[profileUser]; lsSet("tvohh_profileicons",m); return m; });
+                      try { await sbUpdateProfileIcon(authUser.empId, next); }
+                      catch(e) { console.warn("icon save failed:", e.message); }
+                    };
+                    return (
+                      <div style={{ marginTop:14, borderTop:"1px solid #F3F4F6", paddingTop:12 }}>
+                        <div style={{ fontSize:11, fontWeight:700, color:"#374151", marginBottom:8 }}>🎨 เลือก Icon แสดงข้างชื่อ</div>
+                        <div style={{ display:"flex", flexWrap:"wrap", gap:8, alignItems:"center" }}>
+                          {/* ไม่ใช้ */}
+                          <div onClick={()=>handlePickIcon(null)}
+                            style={{ width:40, height:40, borderRadius:12, border:!current?"2.5px solid #16A34A":"1.5px solid #E5E7EB", background:!current?"#DCFCE7":"#F9FAFB", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", fontSize:11, color:"#9CA3AF", fontWeight:700 }}>
+                            ไม่ใช้
+                          </div>
+                          {unlocked.map(u=>(
+                            <div key={u.icon} onClick={()=>handlePickIcon(u.icon)} title={u.name}
+                              style={{ width:40, height:40, borderRadius:12, border:current===u.icon?"2.5px solid #7C3AED":"1.5px solid #E5E7EB", background:current===u.icon?"#F5F3FF":"#F9FAFB", display:"flex", alignItems:"center", justifyContent:"center", fontSize:22, cursor:"pointer", transition:"all .15s", boxShadow:current===u.icon?"0 0 0 3px #C4B5FD55":"none" }}>
+                              {u.icon}
+                            </div>
+                          ))}
+                        </div>
+                        {current && <div style={{ fontSize:10, color:"#9CA3AF", marginTop:6 }}>กำลังใช้: {current} — กดซ้ำเพื่อยกเลิก</div>}
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* ── Calendar ── */}
@@ -1904,7 +2018,7 @@ const handleRegister = async () => {
                     </div>
                     <div style={{ flex:1, minWidth:0 }}>
                       <div style={{ display:"flex", alignItems:"center", gap:7, marginBottom:5, flexWrap:"wrap" }}>
-                        <span style={{ fontWeight:700, fontFamily:"'Prompt'", fontSize:13, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{u.user}</span>
+                        <span style={{ fontWeight:700, fontFamily:"'Prompt'", fontSize:13, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{profileIconMap[u.user]&&<span style={{ marginRight:3 }}>{profileIconMap[u.user]}</span>}<WiggleName name={u.user} icon={profileIconMap[u.user]} /></span>
                         <span style={{ fontSize:10, background:color+"18", color, borderRadius:999, padding:"1px 7px", fontWeight:700 }}>{grpLabel(u.group)}</span>
                       </div>
                       <div className="v2-bar-bg" style={{ height:6 }}>
@@ -1947,7 +2061,7 @@ const handleRegister = async () => {
                         {rankAv
                           ?<img src={rankAv} style={{ width:40, height:40, borderRadius:"50%", objectFit:"cover", border:`2.5px solid ${mc}`, marginBottom:4, flexShrink:0 }} alt="av" />
                           :<div style={{ width:40, height:40, borderRadius:"50%", background:mc+"22", border:`2.5px solid ${mc}`, marginBottom:4, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18 }}>👤</div>}
-                        <div style={{ fontSize:11, fontFamily:"'Prompt'", fontWeight:700, color:mc, marginBottom:2, textAlign:"center", width:"100%", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", padding:"0 4px" }}>{u.user}</div>
+                        <div style={{ fontSize:11, fontFamily:"'Prompt'", fontWeight:700, color:mc, marginBottom:2, textAlign:"center", width:"100%", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", padding:"0 4px" }}>{profileIconMap[u.user]&&<span style={{ marginRight:2 }}>{profileIconMap[u.user]}</span>}<WiggleName name={u.user} icon={profileIconMap[u.user]} /></div>
                         <div style={{ fontSize:10, color:"#6B7280", marginBottom:6, textAlign:"center", fontWeight:600 }}>{u.totalCal.toLocaleString()}</div>
                         <div style={{ width:"100%", height:barH, background:`linear-gradient(180deg,${mc}30,${mc}10)`, border:`1.5px solid ${mc}44`, borderRadius:"10px 10px 0 0", display:"flex", alignItems:"flex-start", justifyContent:"center", paddingTop:10 }}>
                           <span style={{ fontSize:26 }}>{["🥇","🥈","🥉"][idx]}</span>
@@ -1973,7 +2087,7 @@ const handleRegister = async () => {
                     </div>
                     <div style={{ flex:1, minWidth:0 }}>
                       <div style={{ display:"flex", alignItems:"center", gap:7, marginBottom:5, flexWrap:"wrap" }}>
-                        <span style={{ fontWeight:700, fontFamily:"'Prompt'", fontSize:13 }}>{u.user}</span>
+                        <span style={{ fontWeight:700, fontFamily:"'Prompt'", fontSize:13 }}>{profileIconMap[u.user]&&<span style={{ marginRight:3 }}>{profileIconMap[u.user]}</span>}<WiggleName name={u.user} icon={profileIconMap[u.user]} /></span>
                         <span style={{ fontSize:10, background:color+"18", color, borderRadius:999, padding:"2px 8px", fontWeight:700 }}>{grpLabel(u.group)}</span>
                         {badges.slice(0,2).map(b=><span key={b.name} style={{ fontSize:13 }}>{b.icon}</span>)}
                       </div>
@@ -2171,7 +2285,7 @@ const handleRegister = async () => {
                       <div key={u.user} style={{ display:"flex", alignItems:"center", gap:11, background:i===0?"rgba(255,255,255,0.15)":"rgba(255,255,255,0.08)", borderRadius:12, padding:"11px 14px" }}>
                         <span style={{ fontSize:22, width:28 }}>{["🥇","🥈","🥉"][i]}</span>
                         <div style={{ flex:1 }}>
-                          <div style={{ fontWeight:700, fontSize:13, color:"#fff" }}>{u.user}</div>
+                          <div style={{ fontWeight:700, fontSize:13, color:"#fff" }}>{profileIconMap[u.user]&&<span style={{ marginRight:3 }}>{profileIconMap[u.user]}</span>}<WiggleName name={u.user} icon={profileIconMap[u.user]} /></div>
                           <div style={{ fontSize:11, color:"#A7F3D0" }}>{u.group}</div>
                         </div>
                         <div style={{ fontFamily:"'Prompt'", fontWeight:800, fontSize:16, color:i===0?"#4ADE80":"#fff" }}>{u.totalCal.toLocaleString()} kcal</div>
@@ -2194,7 +2308,7 @@ const handleRegister = async () => {
                         <div style={{ fontFamily:"'Prompt'", fontWeight:800, fontSize:16, width:28, textAlign:"center", color:i<3?medalColors[i]:"#9CA3AF" }}>{i<3?["🥇","🥈","🥉"][i]:i+1}</div>
                         <div style={{ flex:1 }}>
                           <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
-                            <span style={{ fontWeight:700, fontSize:13, color:isMe?"#16A34A":"#111827" }}>{u.user}</span>
+                            <span style={{ fontWeight:700, fontSize:13, color:isMe?"#16A34A":"#111827" }}>{profileIconMap[u.user]&&<span style={{ marginRight:3 }}>{profileIconMap[u.user]}</span>}<WiggleName name={u.user} icon={profileIconMap[u.user]} /></span>
                             {isMe&&<span style={{ fontSize:10, background:"#16A34A1a", color:"#16A34A", borderRadius:999, padding:"1px 7px", fontWeight:700 }}>คุณ</span>}
                             <span style={{ fontSize:10, background:color+"18", color, borderRadius:999, padding:"1px 7px" }}>{u.group}</span>
                           </div>
@@ -2321,6 +2435,53 @@ const handleRegister = async () => {
               </div>
             )}
 
+            {adminSection==="logs"&&(
+              <div>
+                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}>
+                  <div style={{ fontSize:12, color:"#9CA3AF" }}>{logs.length} รายการทั้งหมด · ยังไม่ตรวจสอบ {logs.filter(l=>!l.verified).length} รายการ</div>
+                  <button className="v2-btn-teal" onClick={exportCSV} style={{ padding:"5px 12px", fontSize:11 }}>📥 Export CSV</button>
+                </div>
+                <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                  {[...logs].sort((a,b)=>{
+                    if(!a.verified && b.verified) return -1;
+                    if(a.verified && !b.verified) return 1;
+                    return b.date>a.date?1:b.date<a.date?-1:0;
+                  }).map(log=>{
+                    const c=getGroupColor(log.group);
+                    return (
+                      <div key={log.id} style={{ background:"#FFFFFF", border:`1.5px solid ${log.verified?"#BBF7D0":"#F3F4F6"}`, borderRadius:12, padding:"12px 14px" }}>
+                        <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
+                          {profileIconMap[log.user]&&<span style={{ fontSize:12 }}>{profileIconMap[log.user]}</span>}
+                          <span style={{ fontWeight:700, fontSize:13, color:"#111827" }}>{log.user}</span>
+                          <span style={{ fontSize:9, background:c+"18", color:c, borderRadius:999, padding:"1px 7px", fontWeight:700 }}>{grpLabel(log.group)}</span>
+                          <span style={{ marginLeft:"auto", fontSize:11, color:"#6B7280" }}>{log.date}</span>
+                        </div>
+                        <div style={{ fontSize:12, color:"#6B7280", marginBottom:8 }}>{log.exercise} · {log.duration} นาที · {log.calories} kcal</div>
+                        <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+                          <button onClick={()=>handleVerify(log.id)}
+                            style={{ background:log.verified?"#DCFCE7":"#F3F4F6", border:log.verified?"1.5px solid #22C55E":"1.5px solid #D1D5DB", borderRadius:8, padding:"3px 10px", fontSize:11, cursor:"pointer", fontWeight:700, color:log.verified?"#16A34A":"#6B7280" }}>
+                            {log.verified?"✅ ตรวจสอบแล้ว":"⬜ รอตรวจสอบ"}
+                          </button>
+                          <div style={{ flex:1, display:"flex", gap:6, alignItems:"center" }}>
+                            <input
+                              value={commentDrafts[log.id]!==undefined?commentDrafts[log.id]:(log.adminComment||'')}
+                              onChange={e=>setCommentDrafts(p=>({...p,[log.id]:e.target.value}))}
+                              placeholder="💬 Comment ถึง user..."
+                              style={{ flex:1, fontSize:11, padding:"4px 8px", borderRadius:8, border:"1px solid #FDE047", background:"#FFFBEB", outline:"none", fontFamily:"inherit" }}
+                            />
+                            {(commentDrafts[log.id]!==undefined?commentDrafts[log.id]:(log.adminComment||''))!==(log.adminComment||'')&&(
+                              <button onClick={()=>handleSaveComment(log.id)} style={{ fontSize:11, padding:"4px 10px", borderRadius:8, background:"#F59E0B", color:"#fff", border:"none", cursor:"pointer", fontWeight:700, flexShrink:0 }}>บันทึก</button>
+                            )}
+                          </div>
+                          {log.spId&&<button className="v2-btn-danger" onClick={()=>setDeleteConfirm({name:`${log.user} - ${log.exercise}`,fn:async()=>{ await sbRemoveLog(log.id); setLogs(p=>p.filter(l=>l.id!==log.id)); setDeleteConfirm(null); }})} style={{ padding:"4px 9px", fontSize:11 }}>🗑️</button>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {logs.length===0&&<div style={{ textAlign:"center", padding:40, color:"#9CA3AF", fontSize:13 }}>ยังไม่มีข้อมูล</div>}
+                </div>
+              </div>
+            )}
 
             {adminSection==="anomaly"&&(()=>{
               const anomalyLogs = logs.filter(l => isCalAnomaly(l.exercise, l.duration, l.calories));
@@ -2365,52 +2526,6 @@ const handleRegister = async () => {
               );
             })()}
 
-            {adminSection==="logs"&&(
-              <div>
-                <div style={{ display:"flex", alignItems:"center", gap:8, background:spStatus==="connected"?"#F0FDF4":"#FEF2F2", border:`1px solid ${spStatus==="connected"?"#D1FAE5":"#FEE2E2"}`, borderRadius:13, padding:"10px 14px", marginBottom:12 }}>
-                  <span>{spStatus==="connected"?"🟢":spStatus==="connecting"?"🟡":"🔴"}</span>
-                  <div style={{ flex:1 }}>
-
-                    <div style={{ fontSize:12, fontWeight:600, color:spStatus==="connected"?"#16A34A":"#DC2626" }}>{spStatus==="connected"?`Supabase ✓ sync ${spLastSync}`:spStatus==="connecting"?"กำลังเชื่อมต่อ...":"เชื่อมต่อไม่ได้"}</div>
-                  </div>
-                  <button className="v2-btn-teal" style={{ padding:"5px 12px", fontSize:11 }} onClick={()=>{ setSpStatus("connecting"); sbFetchLogs().then(d=>{ if(d.length>0)setLogs(d); setSpStatus("connected"); setSpLastSync(new Date().toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit"})); }).catch(()=>setSpStatus("error")); }}>🔄 Sync</button>
-                </div>
-                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
-                  <div style={{ fontSize:11, color:"#9CA3AF" }}>{logs.length} รายการ</div>
-                  <div style={{ display:"flex", gap:7 }}>
-                    <button className="v2-btn-teal" onClick={exportCSV} style={{ padding:"6px 12px", fontSize:11 }}>⬇️ CSV</button>
-                    <button className="v2-btn-danger" onClick={()=>setDeleteConfirm({name:"ประวัติทั้งหมด",fn:()=>{ setLogs([]); setDeleteConfirm(null); }})} style={{ padding:"6px 12px", fontSize:11 }}>🗑️ ล้าง</button>
-                  </div>
-                </div>
-                <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
-                  {logs.map(log=>{
-                    const c=getGroupColor(log.group);
-                    return (
-                      <div key={log.id} style={{ background:"#FFFFFF", border:"1px solid #F3F4F6", borderRadius:12, padding:"9px 13px", display:"flex", alignItems:"center", gap:9 }}>
-                        {log.photo&&<div className="v2-pthumb" onClick={()=>setZoomPhoto(log.photo)} style={{ width:36, height:36, flexShrink:0 }}><img src={log.photo} alt="" style={{ width:"100%", height:"100%", objectFit:"cover", borderRadius:8 }} /></div>}
-                        <div style={{ flex:1, minWidth:0 }}>
-                          <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:2 }}>
-                            <span onClick={()=>{ setProfileUser(log.user); setProfileFilter("all"); setActiveTab("profile"); }} style={{ fontWeight:700, fontSize:12, cursor:"pointer", textDecoration:"underline dotted", color:"#111827" }}>{log.user}</span>
-                            <span style={{ fontSize:9, background:c+"18", color:c, borderRadius:999, padding:"1px 6px", fontWeight:700 }}>{grpLabel(log.group)}</span>
-                          </div>
-                          <div style={{ color:"#9CA3AF", fontSize:10 }}>{log.exercise} · {log.duration}น. · {log.date}</div>
-                        </div>
-                        <div style={{ display:"flex", alignItems:"center", gap:8, flexShrink:0 }}>
-                          <div style={{ textAlign:"right" }}>
-                            <div style={{ fontFamily:"'Prompt'", fontWeight:800, fontSize:14, color:c }}>{log.calories}</div>
-                            <div style={{ fontSize:9, color:"#9CA3AF" }}>kcal</div>
-                          </div>
-                          {log.spId&&(isAdmin||log.user===authUser?.displayName)&&(<>
-                            <button onClick={()=>openEditLog(log)} style={{ background:"#EFF6FF", border:"1px solid #BFDBFE", borderRadius:8, padding:"4px 9px", fontSize:11, cursor:"pointer", color:"#2563EB" }}>✏️</button>
-                            <button className="v2-btn-danger" onClick={()=>setDeleteConfirm({name:`${log.user} - ${log.exercise}`,fn:async()=>{ await sbRemoveLog(log.id); setLogs(p=>p.filter(l=>l.id!==log.id)); setDeleteConfirm(null); }})} style={{ padding:"4px 9px", fontSize:11 }}>🗑️</button>
-                          </>)}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
           </div>
         )}
 
@@ -2419,18 +2534,12 @@ const handleRegister = async () => {
       {/* Bottom Nav */}
       <div style={{ position:"fixed", bottom:0, left:0, right:0, zIndex:50, background:"rgba(255,255,255,0.92)", backdropFilter:"blur(20px)", WebkitBackdropFilter:"blur(20px)", borderTop:"1px solid rgba(0,0,0,0.06)", paddingBottom:"env(safe-area-inset-bottom,0px)" }}>
         <div style={{ maxWidth:680, margin:"0 auto", display:"flex" }}>
-          {tabs.map(tab=>{
-            const hasAdminMsg = tab.id==="profile" && authUser &&
-              logs.some(l=>l.user===authUser.displayName && !l.verified && l.adminComment);
-            return (
-              <button key={tab.id} onClick={()=>setActiveTab(tab.id)} className={`v2-nav-btn ${activeTab===tab.id?"v2-nav-on":""}`}
-                style={{ position:"relative" }}>
-                <span style={{ fontSize:20 }}>{tab.icon}</span>
-                <span>{tab.label}</span>
-                {hasAdminMsg&&<span style={{ position:"absolute", top:4, right:"50%", transform:"translateX(10px)", width:8, height:8, background:"#EF4444", borderRadius:"50%", border:"2px solid #fff" }} />}
-              </button>
-            );
-          })}
+          {tabs.map(tab=>(
+            <button key={tab.id} onClick={()=>setActiveTab(tab.id)} className={`v2-nav-btn ${activeTab===tab.id?"v2-nav-on":""}`}>
+              <span style={{ fontSize:20 }}>{tab.icon}</span>
+              <span>{tab.label}</span>
+            </button>
+          ))}
         </div>
       </div>
 
