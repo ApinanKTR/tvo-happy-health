@@ -354,6 +354,7 @@ function CalorieTracker() {
   const [spStatus, setSpStatus] = useState("local");
   const [spLastSync, setSpLastSync] = useState(null);
   const [dashSort, setDashSort] = useState("newest");
+  const [dashFilter, setDashFilter] = useState("all"); // "all" | "pending"
 
   // Add form
   const [form, setForm] = useState(() => { const s = lsGet("tvohh_session", null); const sg = s?.group; const cleanGrp = sg?.Value ?? (typeof sg === "string" && !sg.trim().startsWith("{") ? sg : "A : ใส่ใจลูกค้า"); return { user: s?.displayName || "", group: cleanGrp, exercise: "วิ่ง", duration: 30, date: thaiDate(), note: "", photo: null, customCal: 300 }; });
@@ -433,11 +434,19 @@ function CalorieTracker() {
   }, [authUser?.empId]);
   // (ลบ useEffect ที่ fetch ซ้ำตอน connected — mount ครั้งแรกดึงไปแล้ว ไม่ต้องซ้ำ)
 
+  // helper: สร้าง group map จาก allUsers — ใช้ empId ก่อน fallback display_name
+  const buildGroupMap = (users) => ({
+    byId:   Object.fromEntries(users.filter(u=>u.empId).map(u=>[u.empId, u.group])),
+    byName: Object.fromEntries(users.map(u=>[u.user, u.group])),
+  });
+  const remapGroup = (l, gmap) =>
+    (l.empId && gmap.byId[l.empId]) || gmap.byName[l.user] || l.group;
+
   // เมื่อ allUsers อัปเดต → remap group ใน logs ทั้งหมดให้ตรงกับทีมปัจจุบัน
   useEffect(() => {
     if (!allUsers.length) return;
-    const map = Object.fromEntries(allUsers.map(u => [u.user, u.group]));
-    setLogs(prev => prev.map(l => ({ ...l, group: map[l.user] || l.group })));
+    const gmap = buildGroupMap(allUsers);
+    setLogs(prev => prev.map(l => ({ ...l, group: remapGroup(l, gmap) })));
   }, [allUsers]);
 
   // ดึง allUsers ใหม่เมื่อเปิด tab สมาชิก — แต่ cooldown 30 วิ ไม่ fetch ซ้ำถี่เกินไป
@@ -462,9 +471,10 @@ function CalorieTracker() {
       sbFetchLogs()
         .then(d => {
           if (d.length > 0) {
-            // remap group จาก allUsers ที่โหลดไว้ (ป้องกันทีมเก่าค้างใน log)
-            const map = Object.fromEntries((lsGet("tvohh_allusers",[]) || []).map(u => [u.user, u.group]));
-            setLogs(d.map(l => ({ ...l, group: map[l.user] || l.group })));
+            // remap group — empId ก่อน, fallback display_name (ป้องกันทีมเก่าค้างใน log)
+            const cached = lsGet("tvohh_allusers",[]) || [];
+            const gmap = buildGroupMap(cached);
+            setLogs(d.map(l => ({ ...l, group: remapGroup(l, gmap) })));
           }
           setSpStatus("connected");
           setSpLastSync(new Date().toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit"}));
@@ -762,15 +772,18 @@ const handleRegister = async () => {
   };
 
   // ใช้ทีมปัจจุบันจาก user_profiles เสมอ (ไม่ใช้ทีมที่เก็บใน log เก่า)
-  const userGroupMap = Object.fromEntries(allUsers.map(u => [u.user, u.group]));
-  const currentGroup = (log) => userGroupMap[log.user] || log.group;
+  const _gmap = buildGroupMap(allUsers);
+  const currentGroup = (log) => remapGroup(log, _gmap);
+
+  // คำนวณเฉพาะ log ที่ admin verified แล้ว
+  const verifiedLogs = logs.filter(l => l.verified);
 
   const groupStats = groups.map(g => {
-    const gl = logs.filter(l => currentGroup(l) === g.name);
+    const gl = verifiedLogs.filter(l => currentGroup(l) === g.name);
     return { ...g, totalCal: gl.reduce((s, l) => s + l.calories, 0), totalMin: gl.reduce((s, l) => s + l.duration, 0), memberCount: [...new Set(gl.map(l => l.user))].length };
   }).sort((a, b) => b.totalCal - a.totalCal);
 
-  const userStats = Object.values(logs.reduce((acc, l) => {
+  const userStats = Object.values(verifiedLogs.reduce((acc, l) => {
     const grp = currentGroup(l);
     if (!acc[l.user]) acc[l.user] = { user: l.user, group: grp, totalCal: 0, sessions: 0 };
     acc[l.user].totalCal += l.calories; acc[l.user].sessions++; return acc;
@@ -783,8 +796,8 @@ const handleRegister = async () => {
 
   const profileUserData = userStats.find(u => u.user === profileUser);
   const profileLogs = profileUser ? logs.filter(l => l.user === profileUser && (profileFilter === "all" || l.exercise === profileFilter)) : [];
-  const profileBadges = profileUserData ? getBadges(profileUserData.totalCal, profileUserData.sessions, logs.filter(l => l.user === profileUser)) : [];
-  const profileChart = profileUser ? getLast7Days(logs.filter(l => l.user === profileUser)) : [];
+  const profileBadges = profileUserData ? getBadges(profileUserData.totalCal, profileUserData.sessions, verifiedLogs.filter(l => l.user === profileUser)) : [];
+  const profileChart = profileUser ? getLast7Days(verifiedLogs.filter(l => l.user === profileUser)) : [];
   const chartMax = Math.max(1, ...profileChart.map(d => d.cal));
   const weeklyGoal = profileUser ? getGoal(profileUser) : null;
   const weeklyTotal = profileUser ? profileChart.reduce((s, d) => s + d.cal, 0) : 0;
@@ -1243,7 +1256,7 @@ const handleRegister = async () => {
 
         {/* ── STATS BAR v2 ── */}
         {(() => {
-          const totalCal = logs.reduce((s,l)=>s+l.calories,0);
+          const totalCal = verifiedLogs.reduce((s,l)=>s+l.calories,0);
           const TARGET = 1000000;
           const pct = Math.min(100, (totalCal / TARGET) * 100);
           const calDisplay = totalCal.toLocaleString();
@@ -1261,13 +1274,13 @@ const handleRegister = async () => {
               {/* Session card */}
               <div className="v2-card" style={{ padding:"14px 8px", textAlign:"center" }}>
                 <div style={{ width:36, height:36, borderRadius:11, background:"linear-gradient(135deg,#0891B2,#06B6D4)", margin:"0 auto 8px", display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, boxShadow:"0 4px 12px rgba(8,145,178,0.22)" }}>⚡</div>
-                <div style={{ fontFamily:"'Prompt'", fontSize:20, fontWeight:800, color:"#111827", lineHeight:1 }}>{logs.length}</div>
-                <div style={{ fontSize:9.5, color:"#9CA3AF", marginTop:4, lineHeight:1.3 }}>ครั้ง<br/>เซสชั่น</div>
+                <div style={{ fontFamily:"'Prompt'", fontSize:20, fontWeight:800, color:"#111827", lineHeight:1 }}>{verifiedLogs.length}</div>
+                <div style={{ fontSize:9.5, color:"#9CA3AF", marginTop:4, lineHeight:1.3 }}>ครั้ง<br/>ตรวจแล้ว</div>
               </div>
               {/* Members card */}
               <div className="v2-card" style={{ padding:"14px 8px", textAlign:"center" }}>
                 <div style={{ width:36, height:36, borderRadius:11, background:"linear-gradient(135deg,#7C3AED,#8B5CF6)", margin:"0 auto 8px", display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, boxShadow:"0 4px 12px rgba(124,58,237,0.22)" }}>👥</div>
-                <div style={{ fontFamily:"'Prompt'", fontSize:20, fontWeight:800, color:"#111827", lineHeight:1 }}>{[...new Set(logs.map(l=>l.user))].length}</div>
+                <div style={{ fontFamily:"'Prompt'", fontSize:20, fontWeight:800, color:"#111827", lineHeight:1 }}>{[...new Set(verifiedLogs.map(l=>l.user))].length}</div>
                 <div style={{ fontSize:9.5, color:"#9CA3AF", marginTop:4, lineHeight:1.3 }}>คน<br/>ผู้เข้าร่วม</div>
               </div>
             </div>
@@ -1279,26 +1292,41 @@ const handleRegister = async () => {
         {/* ───── DASHBOARD ───── */}
         {activeTab==="dashboard" && (
           <div className="v2-in-anim">
-            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
               <h2 className="v2-section-title" style={{ marginBottom:0 }}>📋 บันทึกล่าสุด</h2>
-              <div className="tab-scroll" style={{ gap:5 }}>
-                {[{id:"newest",label:"ใหม่สุด"},{id:"oldest",label:"เก่าสุด"},{id:"name",label:"ชื่อ"},{id:"exercise",label:"กีฬา"},{id:"calories",label:"kcal🔥"}].map(s=>(
-                  <button key={s.id} className="v2-sort" onClick={()=>setDashSort(s.id)}
-                    style={{ background:dashSort===s.id?"#16A34A":"#FFFFFF", color:dashSort===s.id?"#fff":"#6B7280", border:dashSort===s.id?"none":"1px solid #E5E7EB", fontWeight:dashSort===s.id?700:500 }}>
-                    {s.label}
-                  </button>
-                ))}
+              <div style={{ display:"flex", gap:6 }}>
+                <button onClick={()=>setDashFilter("all")}
+                  style={{ fontSize:11, padding:"4px 10px", borderRadius:20, border:"none", cursor:"pointer", fontWeight:700, background:dashFilter==="all"?"#16A34A":"#F3F4F6", color:dashFilter==="all"?"#fff":"#6B7280" }}>
+                  ทั้งหมด
+                </button>
+                <button onClick={()=>setDashFilter("pending")}
+                  style={{ fontSize:11, padding:"4px 10px", borderRadius:20, border:"none", cursor:"pointer", fontWeight:700, background:dashFilter==="pending"?"#F59E0B":"#F3F4F6", color:dashFilter==="pending"?"#fff":"#6B7280", display:"flex", alignItems:"center", gap:4 }}>
+                  ⏳ รอตรวจสอบ
+                  {logs.filter(l=>!l.verified).length > 0 && (
+                    <span style={{ background:dashFilter==="pending"?"#ffffff40":"#F59E0B", color:dashFilter==="pending"?"#fff":"#fff", borderRadius:999, fontSize:10, padding:"1px 6px", fontWeight:800 }}>
+                      {logs.filter(l=>!l.verified).length}
+                    </span>
+                  )}
+                </button>
               </div>
             </div>
+            <div className="tab-scroll" style={{ gap:5, marginBottom:12 }}>
+              {[{id:"newest",label:"ใหม่สุด"},{id:"oldest",label:"เก่าสุด"},{id:"name",label:"ชื่อ"},{id:"exercise",label:"กีฬา"},{id:"calories",label:"kcal🔥"}].map(s=>(
+                <button key={s.id} className="v2-sort" onClick={()=>setDashSort(s.id)}
+                  style={{ background:dashSort===s.id?"#16A34A":"#FFFFFF", color:dashSort===s.id?"#fff":"#6B7280", border:dashSort===s.id?"none":"1px solid #E5E7EB", fontWeight:dashSort===s.id?700:500 }}>
+                  {s.label}
+                </button>
+              ))}
+            </div>
             <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-              {[...logs].sort((a,b)=>{
+              {[...(dashFilter==="pending" ? logs.filter(l=>!l.verified) : logs)].sort((a,b)=>{
                 if(dashSort==="newest") return b.date>a.date?1:b.date<a.date?-1:0;
                 if(dashSort==="oldest") return a.date>b.date?1:a.date<b.date?-1:0;
                 if(dashSort==="name") return a.user.localeCompare(b.user,"th");
                 if(dashSort==="exercise") return a.exercise.localeCompare(b.exercise,"th");
                 if(dashSort==="calories") return b.calories-a.calories;
                 return 0;
-              }).slice(0,30).map(log=>{
+              }).slice(0,50).map(log=>{
                 const ex=exercises.find(e=>e.name===log.exercise);
                 const color=getGroupColor(log.group);
                 const liked=likedLogs.has(log.id);
@@ -1709,7 +1737,7 @@ const handleRegister = async () => {
                           const isToday = cell.ds === todayStr;
                           const isSelected = cell.ds === calSelectedDate;
                           const haslogs = cell.logs.length > 0;
-                          const dayTotal = cell.logs.reduce((s,l)=>s+(Number(l.calories)||0),0);
+                          const dayTotal = cell.logs.filter(l=>l.verified).reduce((s,l)=>s+(Number(l.calories)||0),0);
                           return (
                             <div key={cell.ds} onClick={()=>haslogs&&setCalSelectedDate(isSelected?null:cell.ds)}
                               style={{ borderRadius:10, padding:"6px 2px 5px", textAlign:"center", cursor:haslogs?"pointer":"default",
