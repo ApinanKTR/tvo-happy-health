@@ -446,6 +446,7 @@ function CalorieTracker() {
   const [grpForm, setGrpForm] = useState({ name: "", color: "#16A34A", image: null });
   const [editingGrp, setEditingGrp] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [badgePopup, setBadgePopup] = useState(null); // { icon, name, desc }
   const [editLogModal, setEditLogModal] = useState(null); // { log, form, saving }
   const editLogPhotoRef = React.useRef(null);
   const holdRef = useRef(null);
@@ -602,6 +603,13 @@ const handleAdd = async () => {
       date: form.date || thaiDate(),
       likes: 0
     };
+
+    // ตรวจสอบ badge ก่อน-หลัง เพื่อ popup แจ้งเตือน
+    const userLogsNow = logs.filter(l => l.user === form.user);
+    const badgesBefore = new Set(getBadges(userLogsNow.reduce((s,l)=>s+l.calories,0), userLogsNow.length, userLogsNow).map(b=>b.name));
+    const userLogsAfter = [newLog, ...userLogsNow];
+    const newBadges = getBadges(userLogsAfter.reduce((s,l)=>s+l.calories,0), userLogsAfter.length, userLogsAfter).filter(b=>!badgesBefore.has(b.name));
+    if (newBadges.length > 0) setTimeout(() => setBadgePopup(newBadges[0]), 800);
 
     // อัปเดตข้อมูลขึ้นหน้าจอ UI ทันที
     setLogs(prev => [newLog, ...prev]);
@@ -989,6 +997,7 @@ const handleRegister = async () => {
         @keyframes v2tout{to{opacity:0;transform:translateY(-14px) translateX(-50%)}}
         @keyframes v2pulse{0%,100%{opacity:1}50%{opacity:.4}}
         @keyframes rainbow-slide{0%{background-position:0% 50%}100%{background-position:200% 50%}}
+        @keyframes pop-in{from{opacity:0;transform:scale(.7)}to{opacity:1;transform:scale(1)}}
         .pride-name{color:#e85d04;background:linear-gradient(90deg,#ff4e50,#fc913a,#f9d62e,#4caf50,#2196f3,#9c27b0,#ff4e50);background-size:200% auto;-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;animation:rainbow-slide 1.8s linear infinite;display:inline;}
 
         /* Like button */
@@ -1058,6 +1067,22 @@ const handleRegister = async () => {
         <div className="v2-ovl" onClick={()=>setZoomPhoto(null)} style={{ zIndex:600 }}>
           <div style={{ maxWidth:500, width:"100%", borderRadius:20, overflow:"hidden", boxShadow:"0 24px 64px rgba(0,0,0,0.5)" }}>
             <img src={zoomPhoto} alt="" style={{ width:"100%", display:"block" }} />
+          </div>
+        </div>
+      )}
+
+      {/* Badge unlock popup */}
+      {badgePopup && (
+        <div className="v2-ovl" style={{ zIndex:700, alignItems:"center", justifyContent:"center" }} onClick={()=>setBadgePopup(null)}>
+          <div onClick={e=>e.stopPropagation()} style={{ background:"#fff", borderRadius:28, padding:"32px 28px", maxWidth:320, width:"90%", textAlign:"center", boxShadow:"0 24px 64px rgba(0,0,0,0.18)", animation:"pop-in .35s cubic-bezier(.34,1.56,.64,1)" }}>
+            <div style={{ fontSize:64, lineHeight:1, marginBottom:12 }}>{badgePopup.icon}</div>
+            <div style={{ fontFamily:"'Prompt'", fontWeight:800, fontSize:20, color:"#111827", marginBottom:4 }}>ปลดล็อครางวัลใหม่!</div>
+            <div style={{ fontFamily:"'Prompt'", fontWeight:700, fontSize:16, color:"#16A34A", marginBottom:6 }}>{badgePopup.name}</div>
+            <div style={{ fontSize:13, color:"#6B7280", marginBottom:20 }}>{badgePopup.desc}</div>
+            <div style={{ background:"#F0FDF4", borderRadius:14, padding:"12px 16px", marginBottom:20, fontSize:12, color:"#15803D", lineHeight:1.6 }}>
+              🎨 คุณสามารถเลือกใช้ icon นี้แสดงข้างหน้าชื่อได้<br/>ที่หน้า <strong>โปรไฟล์ → เลือก Icon แสดงข้างชื่อ</strong>
+            </div>
+            <button className="v2-btn-primary" onClick={()=>setBadgePopup(null)} style={{ width:"100%", padding:13, fontSize:14 }}>เยี่ยมเลย! 🎉</button>
           </div>
         </div>
       )}
@@ -2231,7 +2256,7 @@ const handleRegister = async () => {
                   <div style={{ display:"flex", alignItems:"center", gap:11, marginBottom:16 }}>
                     {authUser?.avatar?<img src={authUser.avatar} style={{ width:46, height:46, borderRadius:"50%", objectFit:"cover", border:"2.5px solid #22C55E" }} alt="av" />:<div style={{ width:46, height:46, borderRadius:"50%", background:"linear-gradient(135deg,#16A34A,#4ADE80)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:22 }}>👤</div>}
                     <div>
-                      <div style={{ fontFamily:"'Prompt'", fontWeight:700, fontSize:15, color:"#16A34A" }}>{authUser?.displayName}</div>
+                      <div style={{ fontFamily:"'Prompt'", fontWeight:700, fontSize:15, color:"#16A34A" }}>{profileIconMap[authUser?.displayName]&&<span style={{marginRight:4}}>{profileIconMap[authUser?.displayName]}</span>}<WiggleName name={authUser?.displayName} icon={profileIconMap[authUser?.displayName]} /></div>
                       <div style={{ fontSize:11, color:"#9CA3AF" }}>{authUser?.group} · {myLogs.length} กิจกรรม</div>
                     </div>
                   </div>
@@ -2260,7 +2285,7 @@ const handleRegister = async () => {
             {shareSection==="totalCal"&&(
               <div>
                 <div style={{ background:"linear-gradient(135deg,#15803D,#16A34A,#22C55E)", borderRadius:24, padding:"30px 22px", textAlign:"center", marginBottom:16, boxShadow:"0 12px 36px #16A34A35" }}>
-                  <div style={{ fontSize:13, color:"#D1FAE5", marginBottom:6 }}>🌿 {authUser?.displayName} สะสมแล้ว</div>
+                  <div style={{ fontSize:13, color:"#D1FAE5", marginBottom:6 }}>🌿 {profileIconMap[authUser?.displayName]&&<span style={{marginRight:3}}>{profileIconMap[authUser?.displayName]}</span>}{authUser?.displayName} สะสมแล้ว</div>
                   <div style={{ fontFamily:"'Prompt'", fontWeight:900, fontSize:56, color:"#fff", lineHeight:1, marginBottom:4 }}>{(myStats?.totalCal||0).toLocaleString()}</div>
                   <div style={{ fontSize:16, color:"#A7F3D0", marginBottom:20 }}>kcal</div>
                   <div style={{ display:"flex", justifyContent:"center", gap:24 }}>
@@ -2512,20 +2537,19 @@ const handleRegister = async () => {
                       return (
                         <div key={log.id} style={{ background:"#FFFBEB", border:"1.5px solid #FDE68A", borderRadius:13, padding:"12px 14px" }}>
                           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6 }}>
-                            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                            <div>
                               <span style={{ fontWeight:700, fontSize:13, color:"#111827" }}>{log.user}</span>
-                              <span style={{ fontSize:10, background:c+"18", color:c, borderRadius:999, padding:"1px 7px", fontWeight:700 }}>{grpLabel(log.group)}</span>
+                              <span style={{ fontSize:11, color:c, marginLeft:6, fontWeight:600 }}>{log.group}</span>
                             </div>
-                            <span style={{ background:"#FEF3C7", border:"1px solid #FCD34D", borderRadius:8, padding:"2px 8px", fontSize:11, fontWeight:700, color:"#B45309" }}>+{overPct}% เกินสูงสุด</span>
+                            <div style={{ fontSize:11, color:"#9CA3AF" }}>{log.date}</div>
                           </div>
-                          <div style={{ fontSize:12, color:"#6B7280", marginBottom:4 }}>{log.exercise} · {log.duration} นาที · {log.date}</div>
-                          <div style={{ display:"flex", alignItems:"center", gap:12, fontSize:12 }}>
-                            <span>บันทึก: <strong style={{ color:"#DC2626" }}>{log.calories} kcal</strong></span>
-                            <span style={{ color:"#9CA3AF" }}>|</span>
-                            <span style={{ color:"#6B7280" }}>ช่วงมาตรฐาน: {r?`${Math.round(r.min)}–${Math.round(r.max)}`:"?"} kcal</span>
+                          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+                            <div style={{ fontSize:12, color:"#6B7280" }}>{log.exercise} · {log.duration} นาที</div>
+                            <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                              <span style={{ fontFamily:"'Prompt'", fontWeight:700, fontSize:13, color:"#D97706" }}>{log.calories} kcal</span>
+                              {r&&<span style={{ fontSize:10, background:"#FEF3C7", color:"#92400E", borderRadius:999, padding:"1px 7px", fontWeight:700 }}>+{overPct}%</span>}
+                            </div>
                           </div>
-                          {log.note&&<div style={{ fontSize:11, color:"#9CA3AF", marginTop:4, fontStyle:"italic" }}>"{log.note}"</div>}
-                          {log.photo&&<img src={log.photo} alt="" onClick={()=>setZoomPhoto(log.photo)} style={{ marginTop:8, width:56, height:56, objectFit:"cover", borderRadius:8, cursor:"zoom-in", border:"1px solid #FDE68A" }} />}
                         </div>
                       );
                     })}
@@ -2537,10 +2561,8 @@ const handleRegister = async () => {
 
           </div>
         )}
-
       </div>
 
-      {/* Bottom Nav */}
       <div style={{ position:"fixed", bottom:0, left:0, right:0, zIndex:50, background:"rgba(255,255,255,0.92)", backdropFilter:"blur(20px)", WebkitBackdropFilter:"blur(20px)", borderTop:"1px solid rgba(0,0,0,0.06)", paddingBottom:"env(safe-area-inset-bottom,0px)" }}>
         <div style={{ maxWidth:680, margin:"0 auto", display:"flex" }}>
           {tabs.map(tab=>(
