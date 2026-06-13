@@ -854,7 +854,13 @@ const handleRegister = async () => {
 
   const profileUserData = userStats.find(u => u.user === profileUser);
   const profileLogs = profileUser ? logs.filter(l => l.user === profileUser && (profileFilter === "all" || l.exercise === profileFilter)) : [];
-  const profileBadges = profileUserData ? getBadges(profileUserData.totalCal, profileUserData.sessions, verifiedLogs.filter(l => l.user === profileUser)) : [];
+  // badge ใช้ ALL logs (ไม่ต้องรอ admin verify) — เพื่อให้ปลดล็อคทันทีเมื่อบันทึก
+  const allProfileLogs = profileUser ? logs.filter(l => l.user === profileUser) : [];
+  const profileBadges = getBadges(
+    allProfileLogs.reduce((s,l)=>s+l.calories,0),
+    allProfileLogs.length,
+    allProfileLogs
+  );
   const profileChart = profileUser ? getLast7Days(verifiedLogs.filter(l => l.user === profileUser)) : [];
   const chartMax = Math.max(1, ...profileChart.map(d => d.cal));
   const weeklyGoal = profileUser ? getGoal(profileUser) : null;
@@ -1736,7 +1742,7 @@ const handleRegister = async () => {
                   <div style={{ fontFamily:"'Prompt'", fontWeight:700, fontSize:13, color:"#374151", marginBottom:14 }}>🏅 รางวัลที่ได้รับ</div>
                   <div style={{ display:"flex", flexWrap:"wrap", gap:8, marginBottom:12 }}>
                     {BADGE_DEFS.map(b=>{
-                      const earned=b.check(profileUserData?.totalCal||0,profileUserData?.sessions||0,verifiedLogs.filter(l=>l.user===profileUser&&l.duration>=30).length);
+                      const earned=b.check(allProfileLogs.reduce((s,l)=>s+l.calories,0),allProfileLogs.length,allProfileLogs.filter(l=>l.duration>=30).length);
                       return (
                         <div key={b.name} className="v2-badge" style={{ opacity:earned?1:0.3, filter:earned?"none":"grayscale(1)" }} title={b.desc}>
                           <span style={{ fontSize:18 }}>{b.icon}</span>
@@ -1771,7 +1777,8 @@ const handleRegister = async () => {
                   {/* Icon Picker — เฉพาะ profile ตัวเอง */}
                   {profileUser===authUser?.displayName && (()=>{
                     const uLogs = logs.filter(l=>l.user===profileUser);
-                    const unlocked = getAllUnlockedIcons(profileUserData?.totalCal||0, profileUserData?.sessions||0, uLogs, authUser?.role==="admin");
+                    const uTotalCal = uLogs.reduce((s,l)=>s+l.calories,0);
+                    const unlocked = getAllUnlockedIcons(uTotalCal, uLogs.length, uLogs, authUser?.role==="admin");
                     const current = profileIconMap[profileUser] || null;
                     if (!unlocked.length) return null;
                     const handlePickIcon = async (icon) => {
@@ -2089,7 +2096,6 @@ const handleRegister = async () => {
                       <div style={{ display:"flex", alignItems:"center", gap:7, marginBottom:5, flexWrap:"wrap" }}>
                         <span style={{ fontWeight:700, fontFamily:"'Prompt'", fontSize:13 }}>{profileIconMap[u.user]&&<span style={{ marginRight:3 }}>{profileIconMap[u.user]}</span>}<WiggleName name={u.user} icon={profileIconMap[u.user]} /></span>
                         <span style={{ fontSize:10, background:color+"18", color, borderRadius:999, padding:"2px 8px", fontWeight:700 }}>{grpLabel(u.group)}</span>
-                        {badges.slice(0,2).map(b=><span key={b.name} style={{ fontSize:13 }}>{b.icon}</span>)}
                       </div>
                       <div className="v2-bar-bg" style={{ height:6 }}>
                         <div className="v2-bar-fill" style={{ width:`${(u.totalCal/maxUserCal)*100}%`, background:i===0?`linear-gradient(90deg,#4ADE80,#22C55E)`:`linear-gradient(90deg,${color}66,${color})` }} />
