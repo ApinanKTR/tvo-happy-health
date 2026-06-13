@@ -449,10 +449,13 @@ function CalorieTracker() {
   const [editLogModal, setEditLogModal] = useState(null); // { log, form, saving }
   const editLogPhotoRef = React.useRef(null);
   const holdRef = useRef(null);
+  const lastTouchRef = React.useRef(0);
   const startHold = (fn) => {
     fn();
     holdRef.current = setTimeout(() => { holdRef.current = setInterval(fn, 300); }, 500);
   };
+  const startHoldTouch = (fn) => { lastTouchRef.current = Date.now(); startHold(fn); };
+  const startHoldMouse = (fn) => { if (Date.now() - lastTouchRef.current < 600) return; startHold(fn); };
   const stopHold = () => { clearTimeout(holdRef.current); clearInterval(holdRef.current); };
   const exImgRef = useRef();
   const grpImgRef = useRef();
@@ -1125,16 +1128,16 @@ const handleRegister = async () => {
                 <label style={{ fontSize:12, fontWeight:700, color:"#374151", display:"block", marginBottom:6 }}>⏱️ เวลา (นาที)</label>
                 <div style={{ display:"flex", alignItems:"center", background:"#F0FDF4", borderRadius:12, border:"1.5px solid #D1FAE5", overflow:"hidden" }}>
                   <button
-                    onMouseDown={()=>startHold(()=>setEditLogModal(p=>({...p,form:{...p.form,duration:Math.max(1,p.form.duration-1)}})))} onMouseUp={stopHold} onMouseLeave={stopHold}
-                    onTouchStart={e=>{e.preventDefault();startHold(()=>setEditLogModal(p=>({...p,form:{...p.form,duration:Math.max(1,p.form.duration-1)}})));}} onTouchEnd={stopHold}
+                    onMouseDown={()=>startHoldMouse(()=>setEditLogModal(p=>({...p,form:{...p.form,duration:Math.max(1,p.form.duration-1)}})))} onMouseUp={stopHold} onMouseLeave={stopHold}
+                    onTouchStart={e=>{e.preventDefault();startHoldTouch(()=>setEditLogModal(p=>({...p,form:{...p.form,duration:Math.max(1,p.form.duration-1)}})));}} onTouchEnd={stopHold}
                     style={{ background:"none", border:"none", padding:"0 10px", fontSize:18, color:"#16A34A", cursor:"pointer", height:44, userSelect:"none" }}>−</button>
                   <input type="number" min={1} max={480} value={editLogModal.form.duration}
                     onChange={e=>setEditLogModal(p=>({...p,form:{...p.form,duration:Math.min(480,Math.max(0,+e.target.value||0))}}))}
                     onBlur={()=>setEditLogModal(p=>({...p,form:{...p.form,duration:Math.max(1,p.form.duration||1)}}))}
                     style={{ flex:1, background:"transparent", border:"none", fontSize:18, fontWeight:800, color:"#16A34A", textAlign:"center", outline:"none", padding:"6px 0" }} />
                   <button
-                    onMouseDown={()=>startHold(()=>setEditLogModal(p=>({...p,form:{...p.form,duration:Math.min(480,p.form.duration+1)}})))} onMouseUp={stopHold} onMouseLeave={stopHold}
-                    onTouchStart={e=>{e.preventDefault();startHold(()=>setEditLogModal(p=>({...p,form:{...p.form,duration:Math.min(480,p.form.duration+1)}})));}} onTouchEnd={stopHold}
+                    onMouseDown={()=>startHoldMouse(()=>setEditLogModal(p=>({...p,form:{...p.form,duration:Math.min(480,p.form.duration+1)}})))} onMouseUp={stopHold} onMouseLeave={stopHold}
+                    onTouchStart={e=>{e.preventDefault();startHoldTouch(()=>setEditLogModal(p=>({...p,form:{...p.form,duration:Math.min(480,p.form.duration+1)}})));}} onTouchEnd={stopHold}
                     style={{ background:"none", border:"none", padding:"0 10px", fontSize:18, color:"#16A34A", cursor:"pointer", height:44, userSelect:"none" }}>+</button>
                 </div>
               </div>
@@ -1142,16 +1145,16 @@ const handleRegister = async () => {
                 <label style={{ fontSize:12, fontWeight:700, color:"#374151", display:"block", marginBottom:6 }}>🔥 Calories</label>
                 <div style={{ display:"flex", alignItems:"center", background:"#F0FDF4", borderRadius:12, border:"1.5px solid #D1FAE5", overflow:"hidden" }}>
                   <button
-                    onMouseDown={()=>startHold(()=>setEditLogModal(p=>({...p,form:{...p.form,calories:Math.max(1,p.form.calories-1)}})))} onMouseUp={stopHold} onMouseLeave={stopHold}
-                    onTouchStart={e=>{e.preventDefault();startHold(()=>setEditLogModal(p=>({...p,form:{...p.form,calories:Math.max(1,p.form.calories-1)}})));}} onTouchEnd={stopHold}
+                    onMouseDown={()=>startHoldMouse(()=>setEditLogModal(p=>({...p,form:{...p.form,calories:Math.max(1,p.form.calories-1)}})))} onMouseUp={stopHold} onMouseLeave={stopHold}
+                    onTouchStart={e=>{e.preventDefault();startHoldTouch(()=>setEditLogModal(p=>({...p,form:{...p.form,calories:Math.max(1,p.form.calories-1)}})));}} onTouchEnd={stopHold}
                     style={{ background:"none", border:"none", padding:"0 10px", fontSize:18, color:"#16A34A", cursor:"pointer", height:44, userSelect:"none" }}>−</button>
                   <input type="number" min={1} max={9999} value={editLogModal.form.calories}
                     onChange={e=>setEditLogModal(p=>({...p,form:{...p.form,calories:Math.min(9999,Math.max(0,+e.target.value||0))}}))}
                     onBlur={()=>setEditLogModal(p=>({...p,form:{...p.form,calories:Math.max(1,p.form.calories||1)}}))}
                     style={{ flex:1, background:"transparent", border:"none", fontSize:18, fontWeight:800, color:"#16A34A", textAlign:"center", outline:"none", padding:"6px 0" }} />
                   <button
-                    onMouseDown={()=>startHold(()=>setEditLogModal(p=>({...p,form:{...p.form,calories:Math.min(9999,p.form.calories+1)}})))} onMouseUp={stopHold} onMouseLeave={stopHold}
-                    onTouchStart={e=>{e.preventDefault();startHold(()=>setEditLogModal(p=>({...p,form:{...p.form,calories:Math.min(9999,p.form.calories+1)}})));}} onTouchEnd={stopHold}
+                    onMouseDown={()=>startHoldMouse(()=>setEditLogModal(p=>({...p,form:{...p.form,calories:Math.min(9999,p.form.calories+1)}})))} onMouseUp={stopHold} onMouseLeave={stopHold}
+                    onTouchStart={e=>{e.preventDefault();startHoldTouch(()=>setEditLogModal(p=>({...p,form:{...p.form,calories:Math.min(9999,p.form.calories+1)}})));}} onTouchEnd={stopHold}
                     style={{ background:"none", border:"none", padding:"0 10px", fontSize:18, color:"#16A34A", cursor:"pointer", height:44, userSelect:"none" }}>+</button>
                 </div>
               </div>
@@ -1527,16 +1530,16 @@ const handleRegister = async () => {
                   <label style={{ fontSize:12, color:"#374151", fontWeight:700, display:"block", marginBottom:8 }}>⏱️ ระยะเวลา (นาที)</label>
                   <div style={{ display:"flex", alignItems:"center", gap:0, background:"#F0FDF4", borderRadius:14, border:"1.5px solid #D1FAE5", overflow:"hidden" }}>
                     <button
-                      onMouseDown={()=>startHold(()=>setForm(p=>({...p,duration:Math.max(1,p.duration-1)})))} onMouseUp={stopHold} onMouseLeave={stopHold}
-                      onTouchStart={e=>{e.preventDefault();startHold(()=>setForm(p=>({...p,duration:Math.max(1,p.duration-1)})));}} onTouchEnd={stopHold}
+                      onMouseDown={()=>startHoldMouse(()=>setForm(p=>({...p,duration:Math.max(1,p.duration-1)})))} onMouseUp={stopHold} onMouseLeave={stopHold}
+                      onTouchStart={e=>{e.preventDefault();startHoldTouch(()=>setForm(p=>({...p,duration:Math.max(1,p.duration-1)})));}} onTouchEnd={stopHold}
                       style={{ background:"none", border:"none", padding:"0 12px", fontSize:18, color:"#16A34A", cursor:"pointer", height:48, userSelect:"none" }}>−</button>
                     <input type="number" min={1} max={480} value={form.duration}
                       onChange={e=>setForm(p=>({...p,duration:Math.min(480,Math.max(0,+e.target.value||0))}))}
                       onBlur={()=>setForm(p=>({...p,duration:Math.max(1,p.duration||1)}))}
                       style={{ flex:1, padding:"8px 0", background:"transparent", border:"none", fontSize:20, fontWeight:800, color:"#16A34A", textAlign:"center", boxShadow:"none", outline:"none" }} />
                     <button
-                      onMouseDown={()=>startHold(()=>setForm(p=>({...p,duration:Math.min(480,p.duration+1)})))} onMouseUp={stopHold} onMouseLeave={stopHold}
-                      onTouchStart={e=>{e.preventDefault();startHold(()=>setForm(p=>({...p,duration:Math.min(480,p.duration+1)})));}} onTouchEnd={stopHold}
+                      onMouseDown={()=>startHoldMouse(()=>setForm(p=>({...p,duration:Math.min(480,p.duration+1)})))} onMouseUp={stopHold} onMouseLeave={stopHold}
+                      onTouchStart={e=>{e.preventDefault();startHoldTouch(()=>setForm(p=>({...p,duration:Math.min(480,p.duration+1)})));}} onTouchEnd={stopHold}
                       style={{ background:"none", border:"none", padding:"0 12px", fontSize:18, color:"#16A34A", cursor:"pointer", height:48, userSelect:"none" }}>+</button>
                   </div>
                 </div>
@@ -1544,16 +1547,16 @@ const handleRegister = async () => {
                   <label style={{ fontSize:12, color:"#374151", fontWeight:700, display:"block", marginBottom:8 }}>🔥 Calories (kcal)</label>
                   <div style={{ display:"flex", alignItems:"center", gap:0, background:"#F0FDF4", borderRadius:14, border:"1.5px solid #D1FAE5", overflow:"hidden" }}>
                     <button
-                      onMouseDown={()=>startHold(()=>setForm(p=>({...p,customCal:Math.max(1,p.customCal-1)})))} onMouseUp={stopHold} onMouseLeave={stopHold}
-                      onTouchStart={e=>{e.preventDefault();startHold(()=>setForm(p=>({...p,customCal:Math.max(1,p.customCal-1)})));}} onTouchEnd={stopHold}
+                      onMouseDown={()=>startHoldMouse(()=>setForm(p=>({...p,customCal:Math.max(1,p.customCal-1)})))} onMouseUp={stopHold} onMouseLeave={stopHold}
+                      onTouchStart={e=>{e.preventDefault();startHoldTouch(()=>setForm(p=>({...p,customCal:Math.max(1,p.customCal-1)})));}} onTouchEnd={stopHold}
                       style={{ background:"none", border:"none", padding:"0 12px", fontSize:18, color:"#16A34A", cursor:"pointer", height:48, userSelect:"none" }}>−</button>
                     <input type="number" min={1} max={9999} value={form.customCal}
                       onChange={e=>setForm(p=>({...p,customCal:Math.min(9999,Math.max(0,+e.target.value||0))}))}
                       onBlur={()=>setForm(p=>({...p,customCal:Math.max(1,p.customCal||1)}))}
                       style={{ flex:1, padding:"8px 0", background:"transparent", border:"none", fontSize:20, fontWeight:800, color:"#16A34A", textAlign:"center", boxShadow:"none", outline:"none" }} />
                     <button
-                      onMouseDown={()=>startHold(()=>setForm(p=>({...p,customCal:Math.min(9999,p.customCal+1)})))} onMouseUp={stopHold} onMouseLeave={stopHold}
-                      onTouchStart={e=>{e.preventDefault();startHold(()=>setForm(p=>({...p,customCal:Math.min(9999,p.customCal+1)})));}} onTouchEnd={stopHold}
+                      onMouseDown={()=>startHoldMouse(()=>setForm(p=>({...p,customCal:Math.min(9999,p.customCal+1)})))} onMouseUp={stopHold} onMouseLeave={stopHold}
+                      onTouchStart={e=>{e.preventDefault();startHoldTouch(()=>setForm(p=>({...p,customCal:Math.min(9999,p.customCal+1)})));}} onTouchEnd={stopHold}
                       style={{ background:"none", border:"none", padding:"0 12px", fontSize:18, color:"#16A34A", cursor:"pointer", height:48, userSelect:"none" }}>+</button>
                   </div>
                 </div>
