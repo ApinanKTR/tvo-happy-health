@@ -451,7 +451,7 @@ function CalorieTracker() {
   const holdRef = useRef(null);
   const startHold = (fn) => {
     fn();
-    holdRef.current = setTimeout(() => { holdRef.current = setInterval(fn, 150); }, 400);
+    holdRef.current = setTimeout(() => { holdRef.current = setInterval(fn, 300); }, 500);
   };
   const stopHold = () => { clearTimeout(holdRef.current); clearInterval(holdRef.current); };
   const exImgRef = useRef();
