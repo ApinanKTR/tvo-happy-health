@@ -273,7 +273,7 @@ const INIT_EXERCISES = [
   { id: 9,  name: "แบดมินตัน",     icon: "🏸",  calPerMin: 7,  calMin: 5,  calMax: 10, image: null },
   { id: 10, name: "ฟุตบอล",         icon: "⚽",  calPerMin: 8,  calMin: 6,  calMax: 11, image: null },
   { id: 11, name: "พายเรือ",        icon: "🚣",  calPerMin: 7,  calMin: 5,  calMax: 10, image: null },
-  { id: 12, name: "เข้ายิม",        icon: "💪",  calPerMin: 6,  calMin: 4,  calMax: 9,  image: null },
+  { id: 12, name: "เต้น",            icon: "💃",  calPerMin: 6,  calMin: 4,  calMax: 9,  image: null },
   { id: 13, name: "มวย",            icon: "🥊",  calPerMin: 10, calMin: 7,  calMax: 13, image: null },
   { id: 14, name: "กอล์ฟ",          icon: "⛳",  calPerMin: 3,  calMin: 2,  calMax: 5,  image: null },
   { id: 15, name: "อื่นๆ",          icon: "🤸",  calPerMin: 5,  calMin: 3,  calMax: 8,  image: null },
@@ -852,7 +852,7 @@ const handleRegister = async () => {
     return { ...g, totalCal: gl.reduce((s, l) => s + l.calories, 0), totalMin: gl.reduce((s, l) => s + l.duration, 0), memberCount: [...new Set(gl.map(l => l.user))].length };
   }).sort((a, b) => b.totalCal - a.totalCal);
 
-  const userStats = Object.values(verifiedLogs.reduce((acc, l) => {
+  const userStats = Object.values(verifiedLogs.filter(l => l.user && l.user.trim()).reduce((acc, l) => {
     const grp = currentGroup(l);
     if (!acc[l.user]) acc[l.user] = { user: l.user, group: grp, totalCal: 0, sessions: 0 };
     acc[l.user].totalCal += l.calories; acc[l.user].sessions++; return acc;
@@ -2016,8 +2016,13 @@ const handleRegister = async () => {
         {/* ───── MEMBERS ───── */}
         {activeTab==="members" && (() => {
           const TEAM_NAMES=["all","A : ใส่ใจลูกค้า","B : ร่วมแรงร่วมใจ","C : ยืดหยุ่นคล่องตัว","D : ว่องไวเป็นเลิศ"];
-          // ใช้เฉพาะ user_profiles เท่านั้น (ไม่รวม orphan จาก logs)
-          const baseList=allUsers.map(u=>{ const stats=userStats.find(s=>s.user===u.user); return stats?{...stats,group:u.group}:{user:u.user,group:u.group,totalCal:0,sessions:0}; });
+          // รวม user จาก profiles (มีชื่อ) + log users ที่ไม่มีใน profiles
+          const profileMap=Object.fromEntries(allUsers.filter(u=>u.user&&u.user.trim()).map(u=>[u.user,u]));
+          const logUsers=userStats.filter(u=>!profileMap[u.user]);
+          const baseList=[
+            ...allUsers.filter(u=>u.user&&u.user.trim()).map(u=>{ const s=userStats.find(x=>x.user===u.user); return s?{...s,group:u.group}:{user:u.user,group:u.group,totalCal:0,sessions:0}; }),
+            ...logUsers.map(u=>({...u})),
+          ];
           const filtered=memberGroup==="all"?baseList:baseList.filter(u=>u.group===memberGroup);
           const sorted=[...filtered].sort((a,b)=>memberSort==="cal"?b.totalCal-a.totalCal:b.sessions-a.sessions);
           return (
