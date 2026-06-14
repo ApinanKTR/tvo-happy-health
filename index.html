@@ -27,7 +27,7 @@ const lsGet = (key, fallback) => { try { const v = localStorage.getItem(key); re
 const lsSet = (key, val) => { try { localStorage.setItem(key, JSON.stringify(val)); } catch(_e) {} };
 
 // บีบอัดรูปให้ไม่เกิน 300KB — ลด quality ซ้ำจนถึงขนาดที่กำหนด
-const resizeImage = (file, maxPx = 800, maxBytes = 300000) => new Promise(resolve => {
+const resizeImage = (file, maxPx = 1200, maxBytes = 500000) => new Promise(resolve => {
   const img = new Image();
   const blobUrl = URL.createObjectURL(file);
   img.onload = () => {
@@ -1549,6 +1549,25 @@ const handleRegister = async () => {
                   style={{ width:"100%", padding:"12px 16px", borderRadius:14, fontSize:14, border:"1.5px solid #D1FAE5", color:"#15803D", fontWeight:600 }} />
               </div>
 
+              {/* Photo — แนบก่อนใส่นาทีและแคล */}
+              <div style={{ marginBottom:20 }}>
+                <label style={{ fontSize:12, color:"#374151", display:"block", marginBottom:8, fontWeight:700 }}>📸 รูปการออกกำลังกาย <span style={{ color:"#DC2626", fontWeight:800 }}>*</span> <span style={{ color:"#9CA3AF", fontWeight:400, fontSize:11 }}>(บังคับ)</span></label>
+                {form.photo?(
+                  <div style={{ position:"relative" }}>
+                    <img src={form.photo} alt="" onClick={()=>setZoomPhoto(form.photo)} className="v2-pthumb" style={{ width:"100%", borderRadius:16, display:"block", objectFit:"contain", background:"#F0FDF4" }} />
+                    <button onClick={()=>setForm(p=>({...p,photo:null}))} style={{ position:"absolute", top:8, right:8, background:"rgba(0,0,0,0.65)", border:"none", color:"#fff", borderRadius:"50%", width:30, height:30, cursor:"pointer", fontSize:14, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
+                    <button onClick={()=>addPhotoRef.current?.click()} style={{ position:"absolute", bottom:8, right:8, background:"rgba(22,163,74,0.85)", border:"none", color:"#fff", borderRadius:8, padding:"5px 12px", cursor:"pointer", fontSize:11, fontFamily:"'Sarabun'", fontWeight:600 }}>เปลี่ยนรูป</button>
+                  </div>
+                ):(
+                  <div className="v2-upload" onClick={()=>addPhotoRef.current?.click()} style={{ padding:"26px 16px" }}>
+                    <div style={{ fontSize:30, marginBottom:6 }}>📸</div>
+                    <div style={{ fontSize:13, color:"#6B7280" }}>แตะเพื่อเลือกรูปภาพ</div>
+                    <div style={{ fontSize:10, color:"#9CA3AF", marginTop:3 }}>PNG / JPG / WEBP · บีบอัดอัตโนมัติ ≤ 500 KB</div>
+                  </div>
+                )}
+                <input ref={addPhotoRef} type="file" accept="image/*" style={{ display:"none" }} onChange={e=>handlePhotoUpload(e.target.files[0])} />
+              </div>
+
               {/* Duration + Cal — same row */}
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:20 }}>
                 <div>
@@ -1591,25 +1610,6 @@ const handleRegister = async () => {
               <div style={{ marginBottom:20 }}>
                 <label style={{ fontSize:12, color:"#374151", display:"block", marginBottom:8, fontWeight:700 }}>📝 บันทึก</label>
                 <textarea value={form.note} onChange={e=>setForm(p=>({...p,note:e.target.value}))} placeholder="เช่น วิ่งตอนเช้า รู้สึกดีมาก..." rows={2} style={{ width:"100%", padding:"12px 14px", borderRadius:14, fontSize:13 }} />
-              </div>
-
-              {/* Photo */}
-              <div style={{ marginBottom:20 }}>
-                <label style={{ fontSize:12, color:"#374151", display:"block", marginBottom:8, fontWeight:700 }}>📸 รูปการออกกำลังกาย <span style={{ color:"#DC2626", fontWeight:800 }}>*</span> <span style={{ color:"#9CA3AF", fontWeight:400, fontSize:11 }}>(บังคับ)</span></label>
-                {form.photo?(
-                  <div style={{ position:"relative" }}>
-                    <img src={form.photo} alt="" onClick={()=>setZoomPhoto(form.photo)} className="v2-pthumb" style={{ width:"100%", borderRadius:16, display:"block", objectFit:"contain", background:"#F0FDF4" }} />
-                    <button onClick={()=>setForm(p=>({...p,photo:null}))} style={{ position:"absolute", top:8, right:8, background:"rgba(0,0,0,0.65)", border:"none", color:"#fff", borderRadius:"50%", width:30, height:30, cursor:"pointer", fontSize:14, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
-                    <button onClick={()=>addPhotoRef.current?.click()} style={{ position:"absolute", bottom:8, right:8, background:"rgba(22,163,74,0.85)", border:"none", color:"#fff", borderRadius:8, padding:"5px 12px", cursor:"pointer", fontSize:11, fontFamily:"'Sarabun'", fontWeight:600 }}>เปลี่ยนรูป</button>
-                  </div>
-                ):(
-                  <div className="v2-upload" onClick={()=>addPhotoRef.current?.click()} style={{ padding:"26px 16px" }}>
-                    <div style={{ fontSize:30, marginBottom:6 }}>📸</div>
-                    <div style={{ fontSize:13, color:"#6B7280" }}>แตะเพื่อเลือกรูปภาพ</div>
-                    <div style={{ fontSize:10, color:"#9CA3AF", marginTop:3 }}>PNG / JPG / WEBP (บีบอัดอัตโนมัติ)</div>
-                  </div>
-                )}
-                <input ref={addPhotoRef} type="file" accept="image/*" style={{ display:"none" }} onChange={e=>handlePhotoUpload(e.target.files[0])} />
               </div>
 
               {/* kcal app links */}
