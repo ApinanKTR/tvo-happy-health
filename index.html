@@ -1422,7 +1422,8 @@ const handleRegister = async () => {
                 return 0;
               }).slice(0,50).map(log=>{
                 const ex=exercises.find(e=>e.name===log.exercise);
-                const color=getGroupColor(log.group);
+                const logGroup=currentGroup(log);
+                const color=getGroupColor(logGroup);
                 const liked=likedLogs.has(log.id);
                 const logAv=avatars[log.user];
                 return (
@@ -1436,7 +1437,7 @@ const handleRegister = async () => {
                       <div style={{ flex:1, minWidth:0 }}>
                         <div style={{ display:"flex", alignItems:"center", gap:7, marginBottom:3, flexWrap:"wrap" }}>
                           <span onClick={()=>{ setProfileUser(log.user); setProfileFilter("all"); setActiveTab("profile"); }} style={{ fontWeight:700, fontFamily:"'Prompt'", fontSize:14, cursor:"pointer", color:"#111827" }}>{profileIconMap[log.user]&&<span style={{ marginRight:3, fontSize:13 }}>{profileIconMap[log.user]}</span>}<WiggleName name={log.user} icon={profileIconMap[log.user]} /></span>
-                          <span style={{ fontSize:10, background:`${color}18`, color, borderRadius:999, padding:"2px 8px", fontWeight:700 }}>{grpLabel(log.group)}</span>
+                          <span style={{ fontSize:10, background:`${color}18`, color, borderRadius:999, padding:"2px 8px", fontWeight:700 }}>{grpLabel(logGroup)}</span>
                         </div>
                         <div style={{ color:"#6B7280", fontSize:12 }}>{log.exercise} · {log.duration} นาที · {log.date}{(()=>{ const r=calcCalRange(log.exercise,log.duration); return r?<span style={{ color:"#C4C4C4", marginLeft:4 }}>({r.min}–{r.max} kcal)</span>:null; })()}</div>
                         {log.note&&<div style={{ color:"#9CA3AF", fontSize:11, marginTop:3, fontStyle:"italic" }}>"{log.note}"</div>}
