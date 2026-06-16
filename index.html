@@ -202,10 +202,18 @@ const sbUpdateLog = async (id, fields) => {
 };
 
 // ─── User Profiles API ───────────────────────────────────────
+// group_name อาจเก็บเป็น JSON string จากระบบเก่า เช่น '{"Value":"A : ..."}'
+const cleanGroupName = (v) => {
+  if (!v) return '';
+  if (typeof v === 'string' && v.trim().startsWith('{')) {
+    try { const p = JSON.parse(v); return (p?.Value || '').trim(); } catch {}
+  }
+  return v.trim();
+};
 const sbFetchUsersOnce = async () => {
   const { data, error } = await supabase.from('user_profiles').select('display_name,group_name,employee_id,photo,profile_icon');
   if (error) return { allUsers: [], avatars: {} };
-  const allUsers = (data||[]).map(u => ({ user: u.display_name, group: u.group_name||'', empId: u.employee_id, profileIcon: u.profile_icon || null }));
+  const allUsers = (data||[]).map(u => ({ user: (u.display_name||'').trim(), group: cleanGroupName(u.group_name), empId: u.employee_id, profileIcon: u.profile_icon || null }));
   const avatars = {};
   (data||[]).forEach(u => { if (u.photo) avatars[u.display_name] = u.photo; });
   return { allUsers, avatars };
@@ -280,10 +288,10 @@ const INIT_EXERCISES = [
 ];
 
 const INIT_GROUPS = [
-  { id: 1, name: "A : ใส่ใจลูกค้า",      color: "#16A34A", image: null },
-  { id: 2, name: "B : ร่วมแรงร่วมใจ",    color: "#0EA5E9", image: null },
-  { id: 3, name: "C : ยืดหยุ่นคล่องตัว", color: "#8B5CF6", image: null },
-  { id: 4, name: "D : ว่องไวเป็นเลิศ",   color: "#F59E0B", image: null },
+  { id: 1, name: "A : ใส่ใจลูกค้า",      color: "#16A34A", image: null, subtitle: "Customer Centric",             desc: "ชอบดูแลลูกค้า เพื่อนร่วมงานและคนรอบตัว เวลาออกกำลังกายชอบดูแลใส่ใจเพื่อนๆ ข้างๆ 🤝" },
+  { id: 2, name: "B : ร่วมแรงร่วมใจ",    color: "#0EA5E9", image: null, subtitle: "Collaboration",                desc: "ร่วมกันฝ่าฟัน ชักชวนกันทำงาน ชวนกันออกกำลังกายเป็นกลุ่ม ไม่เหงา 👫" },
+  { id: 3, name: "C : ยืดหยุ่นคล่องตัว", color: "#8B5CF6", image: null, subtitle: "Adaptability & Agility",      desc: "ยืดหยุ่นในการทำงาน เสนอทางเลือกหลากหลาย ออกกำลังกายหลายอย่าง ดูตื่นเต้นไปหมด 🥏" },
+  { id: 4, name: "D : ว่องไวเป็นเลิศ",   color: "#F59E0B", image: null, subtitle: "Speed with Operation Excellence", desc: "ทำงานไวแต่มีประสิทธิภาพ ออกกำลังกายไม่เน้นเวลานาน เน้นเผาผลาญแคลอรีสูดๆ 🔥" },
 ];
 
 const PALETTE = ["#16A34A","#16A34A","#10B981","#4ADE80","#FF69B4","#BA68C8","#F06292","#4FC3F7","#81C784","#FFB74D","#E57373","#64B5F6"];
@@ -498,17 +506,22 @@ function CalorieTracker() {
 
   // helper: สร้าง group map จาก allUsers — ใช้ empId ก่อน fallback display_name
   const buildGroupMap = (users) => ({
-    byId:   Object.fromEntries(users.filter(u=>u.empId).map(u=>[u.empId, u.group])),
-    byName: Object.fromEntries(users.map(u=>[u.user, u.group])),
+    byId:   Object.fromEntries(users.filter(u=>u.empId).map(u=>[String(u.empId).trim(), u.group])),
+    byName: Object.fromEntries(users.filter(u=>u.user).map(u=>[(u.user||'').trim(), u.group])),
   });
   const remapGroup = (l, gmap) =>
-    (l.empId && gmap.byId[l.empId]) || gmap.byName[l.user] || l.group;
+    (l.empId && gmap.byId[String(l.empId).trim()]) || gmap.byName[(l.user||'').trim()] || l.group;
 
-  // เมื่อ allUsers อัปเดต → remap group ใน logs ทั้งหมดให้ตรงกับทีมปัจจุบัน
+  // เมื่อ allUsers อัปเดต → remap group + ชื่อปัจจุบัน ใน logs ทั้งหมด
   useEffect(() => {
     if (!allUsers.length) return;
     const gmap = buildGroupMap(allUsers);
-    setLogs(prev => prev.map(l => ({ ...l, group: remapGroup(l, gmap) })));
+    const nmap = Object.fromEntries(allUsers.filter(u=>u.empId).map(u=>[String(u.empId).trim(), u.user]));
+    setLogs(prev => prev.map(l => ({
+      ...l,
+      group: remapGroup(l, gmap),
+      user: (l.empId && nmap[String(l.empId).trim()]) || l.user,
+    })));
   }, [allUsers]);
 
   // ดึง allUsers ใหม่เมื่อเปิด tab สมาชิก — แต่ cooldown 30 วิ ไม่ fetch ซ้ำถี่เกินไป
@@ -533,10 +546,15 @@ function CalorieTracker() {
       sbFetchLogs()
         .then(d => {
           if (d.length > 0) {
-            // remap group — empId ก่อน, fallback display_name (ป้องกันทีมเก่าค้างใน log)
+            // remap group + ชื่อปัจจุบัน — empId ก่อน, fallback display_name
             const cached = lsGet("tvohh_allusers",[]) || [];
             const gmap = buildGroupMap(cached);
-            setLogs(d.map(l => ({ ...l, group: remapGroup(l, gmap) })));
+            const nmap = Object.fromEntries(cached.filter(u=>u.empId).map(u=>[String(u.empId).trim(), u.user]));
+            setLogs(d.map(l => ({
+              ...l,
+              group: remapGroup(l, gmap),
+              user: (l.empId && nmap[String(l.empId).trim()]) || l.user,
+            })));
           }
           setSpStatus("connected");
           setSpLastSync(new Date().toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit"}));
@@ -935,14 +953,63 @@ const handleRegister = async () => {
 
         {/* Card */}
         <div style={{ background:"#FFFFFF", borderRadius:28, padding:"28px 24px", boxShadow:"0 12px 48px rgba(0,0,0,0.10), 0 2px 8px rgba(0,0,0,0.06)" }}>
-          <label style={{ fontSize:11.5, color:"#374151", fontWeight:700, display:"block", marginBottom:6 }}>รหัสพนักงาน</label>
-          <input className="v2-in" placeholder="เช่น 1234" value={authForm.empId} onChange={e=>setAuthForm(p=>({...p,empId:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&handleLogin()} />
-          <label style={{ fontSize:11.5, color:"#374151", fontWeight:700, display:"block", marginBottom:6 }}>รหัสผ่าน</label>
-          <input className={"v2-in"+(authError?" shake":"")} type="password" placeholder="รหัสผ่านของคุณ" value={authForm.password} onChange={e=>setAuthForm(p=>({...p,password:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&handleLogin()} />
-          {authError && <div style={{ color:"#DC2626", fontSize:12, textAlign:"center", marginBottom:12, marginTop:-8 }}>{authError}</div>}
-          <button onClick={handleLogin} disabled={authLoading} style={{ width:"100%", padding:"15px", fontSize:15, borderRadius:16, border:"none", cursor:"pointer", fontFamily:"'Prompt'", fontWeight:700, background: authLoading?"#D1FAE5":"linear-gradient(135deg,#16A34A,#22C55E)", color: authLoading?"#6B7280":"#fff", boxShadow:"0 4px 16px #16A34A30", transition:"all .2s" }}>
-            {authLoading ? "⏳ กำลังเข้าสู่ระบบ..." : "🔑 เข้าสู่ระบบ"}
-          </button>
+          {authScreen === "login" ? (<>
+            <label style={{ fontSize:11.5, color:"#374151", fontWeight:700, display:"block", marginBottom:6 }}>รหัสพนักงาน</label>
+            <input className="v2-in" placeholder="เช่น 1234" value={authForm.empId} onChange={e=>setAuthForm(p=>({...p,empId:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&handleLogin()} />
+            <label style={{ fontSize:11.5, color:"#374151", fontWeight:700, display:"block", marginBottom:6 }}>รหัสผ่าน</label>
+            <input className={"v2-in"+(authError?" shake":"")} type="password" placeholder="รหัสผ่านของคุณ" value={authForm.password} onChange={e=>setAuthForm(p=>({...p,password:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&handleLogin()} />
+            {authError && <div style={{ color:"#DC2626", fontSize:12, textAlign:"center", marginBottom:12, marginTop:-8 }}>{authError}</div>}
+            <button onClick={handleLogin} disabled={authLoading} style={{ width:"100%", padding:"15px", fontSize:15, borderRadius:16, border:"none", cursor:"pointer", fontFamily:"'Prompt'", fontWeight:700, background: authLoading?"#D1FAE5":"linear-gradient(135deg,#16A34A,#22C55E)", color: authLoading?"#6B7280":"#fff", boxShadow:"0 4px 16px #16A34A30", transition:"all .2s" }}>
+              {authLoading ? "⏳ กำลังเข้าสู่ระบบ..." : "🔑 เข้าสู่ระบบ"}
+            </button>
+            {/* register link ปิดชั่วคราว */}
+          </>) : (<>
+            <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:18 }}>
+              <button onClick={()=>{setAuthScreen("login");setAuthError("");}} style={{ background:"none", border:"none", cursor:"pointer", fontSize:18, color:"#6B7280" }}>←</button>
+              <span style={{ fontFamily:"'Prompt'", fontWeight:700, fontSize:15, color:"#111827" }}>สมัครสมาชิก</span>
+            </div>
+            <label style={{ fontSize:11.5, color:"#374151", fontWeight:700, display:"block", marginBottom:6 }}>รหัสพนักงาน</label>
+            <input className="v2-in" placeholder="เช่น 1234" value={authForm.empId} onChange={e=>setAuthForm(p=>({...p,empId:e.target.value}))} />
+            <label style={{ fontSize:11.5, color:"#374151", fontWeight:700, display:"block", marginBottom:6 }}>ชื่อ-นามสกุล (ที่จะแสดงในแอพ)</label>
+            <input className="v2-in" placeholder="เช่น สมชาย ใจดี" value={authForm.displayName} onChange={e=>setAuthForm(p=>({...p,displayName:e.target.value}))} />
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6 }}>
+              <label style={{ fontSize:11.5, color:"#374151", fontWeight:700 }}>ทีม</label>
+              <span onClick={()=>setShowTeamInfo(p=>!p)} style={{ fontSize:11, color:"#16A34A", fontWeight:700, cursor:"pointer" }}>
+                {showTeamInfo ? "ซ่อนรายละเอียด ▲" : "ดูรายละเอียดทีม ▼"}
+              </span>
+            </div>
+            <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:16 }}>
+              {groups.map(g=>{
+                const sel=authForm.group===g.name;
+                return(
+                  <div key={g.id} onClick={()=>setAuthForm(p=>({...p,group:g.name}))}
+                    style={{ borderRadius:14, border:`2px solid ${sel?g.color:"#E5E7EB"}`, padding:"12px 14px", cursor:"pointer", background:sel?g.color+"0D":"#FAFAFA", transition:"all .15s" }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:g.desc?6:0 }}>
+                      <div style={{ width:32, height:32, borderRadius:9, background:g.color, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, boxShadow:sel?`0 4px 12px ${g.color}50`:"none", transition:"all .15s" }}>
+                        <span style={{ color:"#fff", fontWeight:900, fontSize:13 }}>{g.name[0]}</span>
+                      </div>
+                      <div style={{ flex:1 }}>
+                        <div style={{ fontSize:13, fontWeight:700, color:sel?g.color:"#111827" }}>{g.name.slice(4)}</div>
+                        {g.subtitle&&<div style={{ fontSize:10.5, color:g.color, fontWeight:600 }}>{g.subtitle}</div>}
+                      </div>
+                      {sel&&<div style={{ fontSize:12, color:g.color, fontWeight:700 }}>✓</div>}
+                    </div>
+                    {showTeamInfo&&g.desc&&(
+                      <div style={{ fontSize:11.5, color:"#4B5563", lineHeight:1.6, paddingLeft:42 }}>{g.desc}</div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            <label style={{ fontSize:11.5, color:"#374151", fontWeight:700, display:"block", marginBottom:6 }}>รหัสผ่าน (อย่างน้อย 4 ตัว)</label>
+            <input className="v2-in" type="password" placeholder="ตั้งรหัสผ่าน" value={authForm.password} onChange={e=>setAuthForm(p=>({...p,password:e.target.value}))} />
+            <label style={{ fontSize:11.5, color:"#374151", fontWeight:700, display:"block", marginBottom:6 }}>ยืนยันรหัสผ่าน</label>
+            <input className={"v2-in"+(authError?" shake":"")} type="password" placeholder="กรอกรหัสผ่านอีกครั้ง" value={authForm.confirmPass} onChange={e=>setAuthForm(p=>({...p,confirmPass:e.target.value}))} />
+            {authError && <div style={{ color:"#DC2626", fontSize:12, textAlign:"center", marginBottom:12, marginTop:-8 }}>{authError}</div>}
+            <button onClick={handleRegister} disabled={authLoading} style={{ width:"100%", padding:"15px", fontSize:15, borderRadius:16, border:"none", cursor:"pointer", fontFamily:"'Prompt'", fontWeight:700, background: authLoading?"#D1FAE5":"linear-gradient(135deg,#16A34A,#22C55E)", color: authLoading?"#6B7280":"#fff", boxShadow:"0 4px 16px #16A34A30", transition:"all .2s" }}>
+              {authLoading ? "⏳ กำลังลงทะเบียน..." : "✅ สมัครสมาชิก"}
+            </button>
+          </>)}
         </div>
         <p style={{ textAlign:"center", marginTop:20, fontSize:11, color:"#6B7280", lineHeight:1.8 }}>ข้อมูลเชื่อมต่อกับ Supabase · <a href="admin.html" style={{ color:"#16A34A", fontWeight:600, textDecoration:"none" }}>Admin Panel</a></p>
       </div>
@@ -1311,8 +1378,10 @@ const handleRegister = async () => {
               setSpStatus("connecting");
               sbFetchLogs().then(d=>{
                 if(d.length>0){
-                  const map=Object.fromEntries((lsGet("tvohh_allusers",[])||[]).map(u=>[u.user,u.group]));
-                  setLogs(d.map(l=>({...l,group:map[l.user]||l.group})));
+                  const cached=lsGet("tvohh_allusers",[])||[];
+                  const gmap=buildGroupMap(cached);
+                  const nmap=Object.fromEntries(cached.filter(u=>u.empId).map(u=>[String(u.empId).trim(),u.user]));
+                  setLogs(d.map(l=>({...l,group:remapGroup(l,gmap),user:(l.empId&&nmap[String(l.empId).trim()])||l.user})));
                 }
                 setSpStatus("connected");
                 setSpLastSync(new Date().toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit"}));
@@ -2529,32 +2598,27 @@ const handleRegister = async () => {
               <div>
                 <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:14 }}>
                   <div style={{ fontFamily:"'Prompt'", fontWeight:700, fontSize:14, color:"#D97706" }}>🔍 แคลอรี่ผิดปกติ</div>
-                  <div style={{ background:"#FEF3C7", border:"1px solid #FDE68A", borderRadius:999, padding:"2px 10px", fontSize:11, fontWeight:700, color:"#92400E" }}>{anomalyLogs.length} รายการ</div>
+                  <div style={{ background:"#FEF3C7", border:"1px solid #FDE68A", borderRadius:8, padding:"3px 10px", fontSize:12, color:"#92400E", fontWeight:700 }}>{anomalyLogs.length} รายการ</div>
                 </div>
-                <div style={{ fontSize:11, color:"#9CA3AF", marginBottom:14 }}>เกณฑ์: แคลอรี่ที่บันทึก &gt; ค่าสูงสุดมาตรฐาน × 1.5</div>
                 {anomalyLogs.length===0?(
-                  <div style={{ textAlign:"center", padding:"40px 0", color:"#9CA3AF", fontSize:13 }}>✅ ไม่พบข้อมูลผิดปกติ</div>
+                  <div style={{ textAlign:"center", color:"#9CA3AF", padding:"30px 0", fontSize:13 }}>ไม่พบรายการผิดปกติ ✅</div>
                 ):(
                   <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-                    {anomalyLogs.map(log=>{
-                      const r = calcCalRange(log.exercise, log.duration);
-                      const c = getGroupColor(log.group);
-                      const overPct = r ? Math.round(((log.calories - r.max) / r.max) * 100) : 0;
-                      return (
-                        <div key={log.id} style={{ background:"#FFFBEB", border:"1.5px solid #FDE68A", borderRadius:13, padding:"12px 14px" }}>
-                          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6 }}>
-                            <div>
-                              <span style={{ fontWeight:700, fontSize:13, color:"#111827" }}>{log.user}</span>
-                              <span style={{ fontSize:11, color:c, marginLeft:6, fontWeight:600 }}>{log.group}</span>
-                            </div>
-                            <div style={{ fontSize:11, color:"#9CA3AF" }}>{log.date}</div>
-                          </div>
-                          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-                            <div style={{ fontSize:12, color:"#6B7280" }}>{log.exercise} · {log.duration} นาที</div>
+                    {anomalyLogs.map(l=>{
+                      const range=calcCalRange(l.exercise,l.duration);
+                      const color=getGroupColor(currentGroup(l));
+                      return(
+                        <div key={l.id} className="v2-card" style={{ padding:"12px 14px", borderLeft:"3px solid #F59E0B" }}>
+                          <div style={{ display:"flex", justifyContent:"spaceBeween", alignItems:"center", marginBottom:4 }}>
                             <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                              <span style={{ fontFamily:"'Prompt'", fontWeight:700, fontSize:13, color:"#D97706" }}>{log.calories} kcal</span>
-                              {r&&<span style={{ fontSize:10, background:"#FEF3C7", color:"#92400E", borderRadius:999, padding:"1px 7px", fontWeight:700 }}>+{overPct}%</span>}
+                              <span style={{ fontWeight:700, fontSize:13 }}>{profileIconMap[l.user]&&<span style={{ marginRight:2 }}>{profileIconMap[l.user]}</span>}{l.user}</span>
+                              <span style={{ fontSize:10, background:color+"18", color, borderRadius:999, padding:"1px 7px", fontWeight:700 }}>{grpLabel(currentGroup(l))}</span>
                             </div>
+                            <span style={{ fontSize:11, color:"#6B7280" }}>{l.date}</span>
+                          </div>
+                          <div style={{ fontSize:12, color:"#6B7280" }}>
+                            {l.exercise} · {l.duration} นาที · <strong style={{ color:"#D97706" }}>{l.calories} kcal</strong>
+                            {range&&<span style={{ color:"#9CA3AF", marginLeft:6 }}>(ปกติ {range.min}–{range.max})</span>}
                           </div>
                         </div>
                       );
@@ -2569,17 +2633,18 @@ const handleRegister = async () => {
         )}
       </div>
 
+      {/* Bottom Nav */}
       <div style={{ position:"fixed", bottom:0, left:0, right:0, zIndex:50, background:"rgba(255,255,255,0.92)", backdropFilter:"blur(20px)", WebkitBackdropFilter:"blur(20px)", borderTop:"1px solid rgba(0,0,0,0.06)", paddingBottom:"env(safe-area-inset-bottom,0px)" }}>
-        <div style={{ maxWidth:680, margin:"0 auto", display:"flex" }}>
+        <div style={{ maxWidth:680, margin:"0 auto", display:"flex", overflowX:"auto" }}>
           {tabs.map(tab=>(
-            <button key={tab.id} onClick={()=>setActiveTab(tab.id)} className={`v2-nav-btn ${activeTab===tab.id?"v2-nav-on":""}`}>
+            <button key={tab.id} onClick={()=>setActiveTab(tab.id)}
+              className={`v2-nav-btn${activeTab===tab.id?" v2-nav-on":""}`}>
               <span style={{ fontSize:20 }}>{tab.icon}</span>
               <span>{tab.label}</span>
             </button>
           ))}
         </div>
       </div>
-
     </div>
   );
 }
