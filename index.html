@@ -337,10 +337,10 @@ const SPECIAL_EVENTS = [
     id: "special_day_jun18",
     icon: "🎂",
     name: "Special Day",
-    desc: "ออกกำลังกายรวม 42+ นาที ในวันที่ 18 มิ.ย.",
+    desc: "ออกกำลังกายรวม 42+ นาที ระหว่างวันที่ 18–19 มิ.ย.",
     check: (userLogs) => {
       const total = userLogs
-        .filter(l => l.date === "2026-06-18")
+        .filter(l => l.date >= "2026-06-18" && l.date <= "2026-06-19")
         .reduce((s, l) => s + (Number(l.duration) || 0), 0);
       return total >= 42;
     },
