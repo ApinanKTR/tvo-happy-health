@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#16A34A" />
+<title>สมัครสมาชิก — TVO Happy Health</title>
+<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;600;700;900&family=Sarabun:wght@400;600&display=swap" rel="stylesheet" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:linear-gradient(160deg,#F0FDF4 0%,#DCFCE7 100%);min-height:100vh;font-family:'Sarabun',sans-serif}
+  .inp{width:100%;padding:13px 16px;border-radius:14px;border:1.5px solid #D1FAE5;background:#fff;color:#111827;font-family:'Sarabun';font-size:14px;outline:none;transition:border .2s,box-shadow .2s;display:block;margin-bottom:14px}
+  .inp:focus{border-color:#16A34A;box-shadow:0 0 0 3px #16A34A18}
+  .shake{animation:sh .4s}
+  @keyframes sh{0%,100%{transform:translateX(0)}25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-presets="env,react">
+const { useState, useRef } = React;
+
+// ── Supabase ──────────────────────────────────────────────────
+const SUPABASE_URL      = 'https://lnqtszvqglqdsdvzncbe.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxucXRzenZxZ2xxZHNkdnpuY2JlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA0NTAyODcsImV4cCI6MjA5NjAyNjI4N30.vhsbuZYK_lfnZEWbmCPmskWUk64ya1jxllRbc2_078w';
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// ── Groups ────────────────────────────────────────────────────
+const GROUPS = [
+  { id:1, name:"A : ใส่ใจลูกค้า",      color:"#16A34A", subtitle:"Customer Centric",             desc:"ชอบดูแลลูกค้า เพื่อนร่วมงานและคนรอบตัว เวลาออกกำลังกายชอบดูแลใส่ใจเพื่อนๆ ข้างๆ 🤝" },
+  { id:2, name:"B : ร่วมแรงร่วมใจ",    color:"#0EA5E9", subtitle:"Collaboration",                desc:"ร่วมกันฝ่าฟัน ชักชวนกันทำงาน ชวนกันออกกำลังกายเป็นกลุ่ม ไม่เหงา 👫" },
+  { id:3, name:"C : ยืดหยุ่นคล่องตัว", color:"#8B5CF6", subtitle:"Adaptability & Agility",      desc:"ยืดหยุ่นในการทำงาน เสนอทางเลือกหลากหลาย ออกกำลังกายหลายอย่าง ดูตื่นเต้นไปหมด 🥏" },
+  { id:4, name:"D : ว่องไวเป็นเลิศ",   color:"#F59E0B", subtitle:"Speed with Operation Excellence", desc:"ทำงานไวแต่มีประสิทธิภาพ ออกกำลังกายไม่เน้นเวลานาน เน้นเผาผลาญแคลอรีสูดๆ 🔥" },
+];
+
+// ── Helpers ───────────────────────────────────────────────────
+const lsSet = (k,v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+
+const resizeImage = (file, maxPx=1200, maxBytes=500000) => new Promise(resolve => {
+  const img = new Image();
+  const url = URL.createObjectURL(file);
+  img.onload = () => {
+    const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
+    const c = document.createElement("canvas");
+    c.width  = Math.round(img.width  * scale);
+    c.height = Math.round(img.height * scale);
+    c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+    URL.revokeObjectURL(url);
+    let q = 0.8, b64 = c.toDataURL("image/jpeg", q);
+    while (b64.length * 0.75 > maxBytes && q > 0.1) { q = Math.max(0.1, q-0.1); b64 = c.toDataURL("image/jpeg", q); }
+    resolve(b64);
+  };
+  img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+  img.src = url;
+});
+
+const uploadAvatar = async (base64Str) => {
+  if (!base64Str) return null;
+  try {
+    const parts = base64Str.split(';base64,');
+    const mime  = parts[0].split(':')[1];
+    const raw   = window.atob(parts[1]);
+    const arr   = new Uint8Array(raw.length);
+    for (let i=0; i<raw.length; i++) arr[i] = raw.charCodeAt(i);
+    const blob  = new Blob([arr], { type: mime });
+    const name  = `avatars-${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`;
+    const { error } = await sb.storage.from('exercise-photos').upload(name, blob, { contentType:'image/jpeg', upsert:true });
+    if (error) throw error;
+    return sb.storage.from('exercise-photos').getPublicUrl(name).data.publicUrl;
+  } catch(e) { console.error("Upload error:", e.message); return null; }
+};
+
+const sbRegister = async (empId, displayName, group, password, photo=null) => {
+  // ตรวจ user_profiles
+  const { data: ex1 } = await sb.from('user_profiles').select('employee_id').eq('employee_id', empId).single();
+  if (ex1) throw new Error('รหัสพนักงานนี้มีบัญชีอยู่แล้ว');
+  // ตรวจ waiting_profile (รอการอนุมัติ)
+  const { data: ex2 } = await sb.from('waiting_profile').select('employee_id').eq('employee_id', empId).single();
+  if (ex2) throw new Error('รหัสพนักงานนี้รออนุมัติอยู่แล้ว กรุณาติดต่อ Admin');
+  // บันทึกลง waiting_profile
+  const { error } = await sb.from('waiting_profile').insert({
+    employee_id: empId, display_name: displayName, group_name: group,
+    password_hash: password, photo: photo || null,
+  });
+  if (error) throw new Error(error.message || 'สมัครไม่สำเร็จ');
+};
+
+// ── Component ─────────────────────────────────────────────────
+function RegisterPage() {
+  const [form, setForm] = useState({ empId:'', displayName:'', group:'A : ใส่ใจลูกค้า', password:'', confirmPass:'', avatar:null });
+  const [loading, setLoading] = useState(false);
+  const [error, setError]     = useState('');
+  const [shake, setShake]     = useState(false);
+  const [showTeam, setShowTeam] = useState(false);
+  const [done, setDone]       = useState(false);
+  const [doneName, setDoneName] = useState('');
+  const avatarRef = useRef(null);
+
+  const triggerShake = () => { setShake(true); setTimeout(()=>setShake(false), 500); };
+
+  const handleSubmit = async () => {
+    setError('');
+    if (!form.empId.trim() || !form.displayName.trim() || !form.password) {
+      setError('กรุณากรอกข้อมูลให้ครบ'); triggerShake(); return;
+    }
+    if (form.password !== form.confirmPass) {
+      setError('รหัสผ่านไม่ตรงกัน'); triggerShake(); return;
+    }
+    if (form.password.length < 4) {
+      setError('รหัสผ่านต้องมีอย่างน้อย 4 ตัวอักษร'); triggerShake(); return;
+    }
+    setLoading(true);
+    try {
+      let photoUrl = form.avatar;
+      if (photoUrl && photoUrl.startsWith('data:image')) {
+        photoUrl = await uploadAvatar(photoUrl) || null;
+      }
+      await sbRegister(form.empId.trim(), form.displayName.trim(), form.group, form.password, photoUrl);
+      setDoneName(form.displayName.trim());
+      setDone(true);
+    } catch(e) {
+      setError(e.message); triggerShake();
+    } finally { setLoading(false); }
+  };
+
+  // ── Success screen ──────────────────────────────────────────
+  if (done) return (
+    <div style={{ minHeight:'100vh', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'24px 16px' }}>
+      <div style={{ width:'100%', maxWidth:420, background:'#fff', borderRadius:28, padding:'36px 28px', boxShadow:'0 12px 48px rgba(0,0,0,0.10)', textAlign:'center' }}>
+        <div style={{ fontSize:64, marginBottom:16 }}>🎉</div>
+        <h2 style={{ fontFamily:"'Prompt'", fontWeight:900, fontSize:20, color:'#16A34A', marginBottom:10 }}>สมัครสำเร็จแล้ว!</h2>
+        <p style={{ fontSize:14, color:'#374151', lineHeight:1.8, marginBottom:8 }}>
+          <strong>{doneName}</strong> ได้รับการลงทะเบียนเรียบร้อย
+        </p>
+        <div style={{ background:'#FEF9C3', border:'1px solid #FDE047', borderRadius:14, padding:'14px 18px', marginBottom:24, fontSize:13, color:'#713F12', lineHeight:1.8 }}>
+          ⏳ <strong>รอการอนุมัติจาก Admin</strong><br/>
+          เมื่อ Admin อนุมัติแล้วจึงสามารถเข้าสู่ระบบได้<br/>
+          <span style={{ fontSize:11, color:'#92400E' }}>กรุณาติดต่อ Admin หากใช้เวลานาน</span>
+        </div>
+        <a href="index.html" style={{ display:'block', width:'100%', padding:'14px', fontSize:14, borderRadius:14, background:'linear-gradient(135deg,#16A34A,#22C55E)', color:'#fff', fontFamily:"'Prompt'", fontWeight:700, textDecoration:'none', boxShadow:'0 4px 16px #16A34A30' }}>
+          ← กลับหน้าหลัก
+        </a>
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{ minHeight:'100vh', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'24px 16px' }}>
+      {/* Header */}
+      <div style={{ textAlign:'center', marginBottom:24 }}>
+        <div style={{ fontSize:48, marginBottom:8 }}>🌿</div>
+        <h1 style={{ fontFamily:"'Prompt'", fontWeight:900, fontSize:24, background:'linear-gradient(135deg,#15803D,#22C55E)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', marginBottom:4 }}>
+          TVO Happy Health
+        </h1>
+        <p style={{ fontSize:13, color:'#4B5563' }}>สมัครสมาชิกเพื่อร่วมพิชิตเป้าหมายสุขภาพปี 2026 💪</p>
+      </div>
+
+      {/* Card */}
+      <div style={{ width:'100%', maxWidth:420, background:'#fff', borderRadius:28, padding:'28px 24px 32px', boxShadow:'0 12px 48px rgba(0,0,0,0.10)' }}>
+
+        {/* Avatar */}
+        <div style={{ textAlign:'center', marginBottom:20 }}>
+          <div onClick={()=>avatarRef.current?.click()} style={{ width:88, height:88, borderRadius:'50%', margin:'0 auto 8px', cursor:'pointer', border:'3px dashed #D1FAE5', overflow:'hidden', background:'#F0FDF4', display:'flex', alignItems:'center', justifyContent:'center', position:'relative' }}>
+            {form.avatar
+              ? <img src={form.avatar} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} />
+              : <span style={{ fontSize:32 }}>📷</span>}
+            <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0)', transition:'background .2s' }} />
+          </div>
+          <div style={{ fontSize:11, color:'#9CA3AF' }}>แตะเพื่อเพิ่มรูปโปรไฟล์ (ไม่บังคับ)</div>
+          <input ref={avatarRef} type="file" accept="image/*" style={{ display:'none' }}
+            onChange={e=>{ const f=e.target.files?.[0]; if(!f) return; resizeImage(f).then(b64=>{ if(b64) setForm(p=>({...p,avatar:b64})); }); }} />
+        </div>
+
+        {/* Fields */}
+        <label style={{ fontSize:11.5, color:'#374151', fontWeight:700, display:'block', marginBottom:6 }}>รหัสพนักงาน *</label>
+        <input className="inp" placeholder="เช่น 1234" value={form.empId}
+          onChange={e=>setForm(p=>({...p,empId:e.target.value}))} />
+
+        <label style={{ fontSize:11.5, color:'#374151', fontWeight:700, display:'block', marginBottom:6 }}>ชื่อ-นามสกุล (ที่จะแสดงในแอพ) *</label>
+        <input className="inp" placeholder="เช่น สมชาย ใจดี" value={form.displayName}
+          onChange={e=>setForm(p=>({...p,displayName:e.target.value}))} />
+
+        {/* Team */}
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
+          <label style={{ fontSize:11.5, color:'#374151', fontWeight:700 }}>ทีม *</label>
+          <span onClick={()=>setShowTeam(p=>!p)} style={{ fontSize:11, color:'#16A34A', fontWeight:700, cursor:'pointer' }}>
+            {showTeam ? 'ซ่อนรายละเอียด ▲' : 'ดูรายละเอียดทีม ▼'}
+          </span>
+        </div>
+        <div style={{ display:'flex', flexDirection:'column', gap:8, marginBottom:16 }}>
+          {GROUPS.map(g => {
+            const sel = form.group === g.name;
+            return (
+              <div key={g.id} onClick={()=>setForm(p=>({...p,group:g.name}))}
+                style={{ borderRadius:14, border:`2px solid ${sel?g.color:'#E5E7EB'}`, padding:'12px 14px', cursor:'pointer', background:sel?g.color+'0D':'#FAFAFA', transition:'all .15s' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:showTeam&&g.desc?6:0 }}>
+                  <div style={{ width:32, height:32, borderRadius:9, background:g.color, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, boxShadow:sel?`0 4px 12px ${g.color}50`:'none' }}>
+                    <span style={{ color:'#fff', fontWeight:900, fontSize:13 }}>{g.name[0]}</span>
+                  </div>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontSize:13, fontWeight:700, color:sel?g.color:'#111827' }}>{g.name.slice(4)}</div>
+                    {g.subtitle && <div style={{ fontSize:10.5, color:g.color, fontWeight:600 }}>{g.subtitle}</div>}
+                  </div>
+                  {sel && <div style={{ fontSize:12, color:g.color, fontWeight:700 }}>✓</div>}
+                </div>
+                {showTeam && g.desc && (
+                  <div style={{ fontSize:11.5, color:'#4B5563', lineHeight:1.6, paddingLeft:42 }}>{g.desc}</div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        <label style={{ fontSize:11.5, color:'#374151', fontWeight:700, display:'block', marginBottom:6 }}>รหัสผ่าน (อย่างน้อย 4 ตัว) *</label>
+        <input className="inp" type="password" placeholder="ตั้งรหัสผ่าน" value={form.password}
+          onChange={e=>setForm(p=>({...p,password:e.target.value}))} />
+
+        <label style={{ fontSize:11.5, color:'#374151', fontWeight:700, display:'block', marginBottom:6 }}>ยืนยันรหัสผ่าน *</label>
+        <input className={"inp"+(shake?' shake':'')} type="password" placeholder="กรอกรหัสผ่านอีกครั้ง" value={form.confirmPass}
+          onChange={e=>setForm(p=>({...p,confirmPass:e.target.value}))}
+          onKeyDown={e=>e.key==='Enter'&&handleSubmit()} />
+
+        {error && (
+          <div style={{ color:'#DC2626', fontSize:12, textAlign:'center', marginBottom:14, marginTop:-6, background:'#FEF2F2', padding:'8px 12px', borderRadius:10 }}>
+            {error}
+          </div>
+        )}
+
+        <button onClick={handleSubmit} disabled={loading}
+          style={{ width:'100%', padding:'15px', fontSize:15, borderRadius:16, border:'none', cursor:'pointer', fontFamily:"'Prompt'", fontWeight:700, background:loading?'#D1FAE5':'linear-gradient(135deg,#16A34A,#22C55E)', color:loading?'#6B7280':'#fff', boxShadow:'0 4px 16px #16A34A30', transition:'all .2s' }}>
+          {loading ? '⏳ กำลังลงทะเบียน...' : '✅ สมัครสมาชิก'}
+        </button>
+
+        <p style={{ textAlign:'center', marginTop:18, fontSize:12, color:'#6B7280' }}>
+          มีบัญชีแล้ว?{' '}
+          <a href="index.html" style={{ color:'#16A34A', fontWeight:700, textDecoration:'none' }}>เข้าสู่ระบบ</a>
+        </p>
+      </div>
+
+      <p style={{ marginTop:20, fontSize:11, color:'#9CA3AF', textAlign:'center' }}>
+        TVO Happy Health 2026 · <a href="admin.html" style={{ color:'#9CA3AF' }}>Admin</a>
+      </p>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<RegisterPage />);
+</script>
+</body>
+</html>

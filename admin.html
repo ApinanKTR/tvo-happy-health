@@ -246,6 +246,34 @@ async function sbUpdatePassword(empId, newPassword) {
   if (error) throw new Error(error.message);
 }
 
+async function sbGetWaiting() {
+  const { data, error } = await supabase.from('waiting_profile')
+    .select('*').order('created_at', { ascending: false });
+  if (error) throw new Error(error.message);
+  return data || [];
+}
+
+async function sbActivateUser(w) {
+  // copy to user_profiles
+  const { error: e1 } = await supabase.from('user_profiles').insert({
+    employee_id: w.employee_id,
+    display_name: w.display_name,
+    group_name:   w.group_name,
+    password_hash: w.password_hash,
+    photo:        w.photo || null,
+    role:         'user',
+  });
+  if (e1) throw new Error(e1.message);
+  // remove from waiting_profile
+  const { error: e2 } = await supabase.from('waiting_profile').delete().eq('employee_id', w.employee_id);
+  if (e2) throw new Error(e2.message);
+}
+
+async function sbRejectWaiting(empId) {
+  const { error } = await supabase.from('waiting_profile').delete().eq('employee_id', empId);
+  if (error) throw new Error(error.message);
+}
+
 // ── Main App ─────────────────────────────────────────────────
 function AdminApp() {
   const [authUser, setAuthUser] = useState(() => lsGet("tvohh_admin_session", null));
@@ -328,6 +356,7 @@ function AdminApp() {
     if (!authUser) return;
     if (activeTab === "users")   loadUsers();
     if (activeTab === "logs" || activeTab === "anomaly") loadLogs();
+    if (activeTab === "waiting") loadWaiting();
   }, [authUser, activeTab]);
 
   // ── Delete User + ดึง logs สด แล้วลบทั้งหมดของ user ──────────
@@ -408,6 +437,38 @@ function AdminApp() {
     const next = { ...adminGoals }; delete next[user];
     setAdminGoals(next); lsSet("tvohh_goals", next);
     showToast("ลบเป้าหมายแล้ว");
+  };
+
+  // ── Waiting Members ──────────────────────────────────────
+  const [waiting, setWaiting]         = useState([]);
+  const [waitingLoading, setWaitingLoading] = useState(false);
+
+  const loadWaiting = useCallback(async () => {
+    setWaitingLoading(true);
+    try {
+      const data = await sbGetWaiting();
+      setWaiting(data);
+    } catch(e) { showToast("โหลด waiting_profile ไม่สำเร็จ: " + e.message); }
+    finally { setWaitingLoading(false); }
+  }, []);
+
+  const activateUser = async (w) => {
+    if (!window.confirm(`อนุมัติ "${w.display_name}" (${w.employee_id}) เข้าสู่ระบบ?`)) return;
+    try {
+      await sbActivateUser(w);
+      showToast(`✅ อนุมัติ ${w.display_name} สำเร็จ`);
+      loadWaiting();
+      if (activeTab === "users") loadUsers();
+    } catch(e) { showToast("❌ " + e.message); }
+  };
+
+  const rejectWaiting = async (w) => {
+    if (!window.confirm(`ปฏิเสธและลบ "${w.display_name}" ออกจากรายการรออนุมัติ?`)) return;
+    try {
+      await sbRejectWaiting(w.employee_id);
+      showToast(`ลบ ${w.display_name} ออกจากรายการแล้ว`);
+      loadWaiting();
+    } catch(e) { showToast("❌ " + e.message); }
   };
 
   const handleAddUser = async () => {
@@ -494,6 +555,7 @@ function AdminApp() {
   // ════════════════════════════════════════════════════════════
   const tabs = [
     { id: "users",   icon: "👥", label: "จัดการ Users" },
+    { id: "waiting", icon: "⏳", label: "รออนุมัติ" },
     { id: "adduser", icon: "➕", label: "เพิ่ม User" },
     { id: "logs",    icon: "📋", label: "Logs ทั้งหมด" },
     { id: "anomaly", icon: "🔍", label: "ตรวจสอบ" },
@@ -531,8 +593,14 @@ function AdminApp() {
         {/* Tab nav */}
         <div className="tb-wrap">
           {tabs.map(t => (
-            <button key={t.id} className={`tb-btn ${activeTab === t.id ? "on" : ""}`} onClick={() => setActiveTab(t.id)}>
+            <button key={t.id} className={`tb-btn ${activeTab === t.id ? "on" : ""}`} onClick={() => setActiveTab(t.id)}
+              style={{ position:"relative" }}>
               {t.icon} {t.label}
+              {t.id === "waiting" && waiting.length > 0 && (
+                <span style={{ position:"absolute", top:2, right:2, background:"#EF4444", color:"#fff", borderRadius:"50%", width:16, height:16, fontSize:9, fontWeight:700, display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1 }}>
+                  {waiting.length}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -594,6 +662,67 @@ function AdminApp() {
                   </tbody>
                 </table>
                 <div style={{ marginTop: 12, fontSize: 12, color: "#9CA3AF" }}>รวม {users.length} Users</div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── WAITING TAB ── */}
+        {activeTab === "waiting" && (
+          <div className="card" style={{ padding:22 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:18 }}>
+              <h3 style={{ fontFamily:"'Prompt'", fontWeight:700, color:"#D97706", fontSize:15 }}>⏳ สมาชิกรออนุมัติ</h3>
+              <button className="btn-g" onClick={loadWaiting} disabled={waitingLoading}
+                style={{ background:"linear-gradient(135deg,#D97706,#F59E0B)" }}>
+                {waitingLoading ? "กำลังโหลด..." : "🔄 รีเฟรช"}
+              </button>
+            </div>
+            {waiting.length === 0 ? (
+              <div style={{ textAlign:"center", color:"#9CA3AF", padding:"30px 0", fontSize:13 }}>
+                {waitingLoading ? "กำลังโหลด..." : "✅ ไม่มีสมาชิกรออนุมัติ"}
+              </div>
+            ) : (
+              <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+                {waiting.map((w, i) => {
+                  const teamColors = {
+                    "A : ใส่ใจลูกค้า": "#16A34A",
+                    "B : ร่วมแรงร่วมใจ": "#0EA5E9",
+                    "C : ยืดหยุ่นคล่องตัว": "#8B5CF6",
+                    "D : ว่องไวเป็นเลิศ": "#F59E0B",
+                  };
+                  const tcolor = teamColors[w.group_name] || "#6B7280";
+                  const createdDate = w.created_at ? new Date(w.created_at).toLocaleDateString('th-TH') : '-';
+                  return (
+                    <div key={i} style={{ border:"1.5px solid #FDE68A", borderRadius:14, padding:"14px 16px", background:"#FFFBEB", display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
+                      {/* avatar */}
+                      {w.photo ? (
+                        <img src={w.photo} alt="" style={{ width:48, height:48, borderRadius:"50%", objectFit:"cover", border:"2px solid #FCD34D", flexShrink:0 }} />
+                      ) : (
+                        <div style={{ width:48, height:48, borderRadius:"50%", background:"#FEF3C7", display:"flex", alignItems:"center", justifyContent:"center", fontSize:22, border:"2px solid #FCD34D", flexShrink:0 }}>👤</div>
+                      )}
+                      {/* info */}
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontWeight:700, fontSize:14, color:"#1F2937" }}>{w.display_name}</div>
+                        <div style={{ fontSize:11, color:"#6B7280", marginTop:2 }}>
+                          รหัส: <strong>{w.employee_id}</strong>
+                          {" · "}<span style={{ color:tcolor, fontWeight:600 }}>{w.group_name || "—"}</span>
+                          {" · "}สมัคร {createdDate}
+                        </div>
+                      </div>
+                      {/* actions */}
+                      <div style={{ display:"flex", gap:8, flexShrink:0 }}>
+                        <button onClick={() => activateUser(w)}
+                          style={{ background:"linear-gradient(135deg,#16A34A,#22C55E)", color:"#fff", border:"none", borderRadius:10, padding:"8px 16px", cursor:"pointer", fontFamily:"'Prompt'", fontWeight:700, fontSize:13 }}>
+                          ✅ อนุมัติ
+                        </button>
+                        <button onClick={() => rejectWaiting(w)} className="btn-r">
+                          ❌ ปฏิเสธ
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+                <div style={{ fontSize:12, color:"#9CA3AF", textAlign:"right" }}>รวม {waiting.length} รายการ</div>
               </div>
             )}
           </div>
