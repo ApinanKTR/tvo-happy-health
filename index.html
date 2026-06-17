@@ -962,7 +962,10 @@ const handleRegister = async () => {
             <button onClick={handleLogin} disabled={authLoading} style={{ width:"100%", padding:"15px", fontSize:15, borderRadius:16, border:"none", cursor:"pointer", fontFamily:"'Prompt'", fontWeight:700, background: authLoading?"#D1FAE5":"linear-gradient(135deg,#16A34A,#22C55E)", color: authLoading?"#6B7280":"#fff", boxShadow:"0 4px 16px #16A34A30", transition:"all .2s" }}>
               {authLoading ? "⏳ กำลังเข้าสู่ระบบ..." : "🔑 เข้าสู่ระบบ"}
             </button>
-            {/* register link ปิดชั่วคราว */}
+            <p style={{ textAlign:"center", marginTop:18, fontSize:12, color:"#6B7280" }}>
+              ยังไม่มีบัญชี?{" "}
+              <span onClick={()=>{setAuthScreen("register");setAuthError("");}} style={{ color:"#16A34A", fontWeight:700, cursor:"pointer" }}>สมัครสมาชิก</span>
+            </p>
           </>) : (<>
             <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:18 }}>
               <button onClick={()=>{setAuthScreen("login");setAuthError("");}} style={{ background:"none", border:"none", cursor:"pointer", fontSize:18, color:"#6B7280" }}>←</button>
@@ -1214,46 +1217,8 @@ const handleRegister = async () => {
                 style={{ width:"100%", padding:"10px 14px", borderRadius:12, border:"1.5px solid #D1FAE5", fontSize:14, color:"#15803D", fontWeight:600, outline:"none" }} />
             </div>
 
-            {/* Duration + Cal */}
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:14 }}>
-              <div>
-                <label style={{ fontSize:12, fontWeight:700, color:"#374151", display:"block", marginBottom:6 }}>⏱️ เวลา (นาที)</label>
-                <div style={{ display:"flex", alignItems:"center", background:"#F0FDF4", borderRadius:12, border:"1.5px solid #D1FAE5", overflow:"hidden" }}>
-                  <button
-                    onMouseDown={()=>startHoldMouse(()=>setEditLogModal(p=>({...p,form:{...p.form,duration:Math.max(1,p.form.duration-1)}})))} onMouseUp={stopHold} onMouseLeave={stopHold}
-                    onTouchStart={e=>{e.preventDefault();startHoldTouch(()=>setEditLogModal(p=>({...p,form:{...p.form,duration:Math.max(1,p.form.duration-1)}})));}} onTouchEnd={stopHold}
-                    style={{ background:"none", border:"none", padding:"0 10px", fontSize:18, color:"#16A34A", cursor:"pointer", height:44, userSelect:"none" }}>−</button>
-                  <input type="number" min={1} max={480} value={editLogModal.form.duration}
-                    onChange={e=>setEditLogModal(p=>({...p,form:{...p.form,duration:Math.min(480,Math.max(0,+e.target.value||0))}}))}
-                    onBlur={()=>setEditLogModal(p=>({...p,form:{...p.form,duration:Math.max(1,p.form.duration||1)}}))}
-                    style={{ flex:1, background:"transparent", border:"none", fontSize:18, fontWeight:800, color:"#16A34A", textAlign:"center", outline:"none", padding:"6px 0" }} />
-                  <button
-                    onMouseDown={()=>startHoldMouse(()=>setEditLogModal(p=>({...p,form:{...p.form,duration:Math.min(480,p.form.duration+1)}})))} onMouseUp={stopHold} onMouseLeave={stopHold}
-                    onTouchStart={e=>{e.preventDefault();startHoldTouch(()=>setEditLogModal(p=>({...p,form:{...p.form,duration:Math.min(480,p.form.duration+1)}})));}} onTouchEnd={stopHold}
-                    style={{ background:"none", border:"none", padding:"0 10px", fontSize:18, color:"#16A34A", cursor:"pointer", height:44, userSelect:"none" }}>+</button>
-                </div>
-              </div>
-              <div>
-                <label style={{ fontSize:12, fontWeight:700, color:"#374151", display:"block", marginBottom:6 }}>🔥 Calories</label>
-                <div style={{ display:"flex", alignItems:"center", background:"#F0FDF4", borderRadius:12, border:"1.5px solid #D1FAE5", overflow:"hidden" }}>
-                  <button
-                    onMouseDown={()=>startHoldMouse(()=>setEditLogModal(p=>({...p,form:{...p.form,calories:Math.max(1,p.form.calories-1)}})))} onMouseUp={stopHold} onMouseLeave={stopHold}
-                    onTouchStart={e=>{e.preventDefault();startHoldTouch(()=>setEditLogModal(p=>({...p,form:{...p.form,calories:Math.max(1,p.form.calories-1)}})));}} onTouchEnd={stopHold}
-                    style={{ background:"none", border:"none", padding:"0 10px", fontSize:18, color:"#16A34A", cursor:"pointer", height:44, userSelect:"none" }}>−</button>
-                  <input type="number" min={1} max={9999} value={editLogModal.form.calories}
-                    onChange={e=>setEditLogModal(p=>({...p,form:{...p.form,calories:Math.min(9999,Math.max(0,+e.target.value||0))}}))}
-                    onBlur={()=>setEditLogModal(p=>({...p,form:{...p.form,calories:Math.max(1,p.form.calories||1)}}))}
-                    style={{ flex:1, background:"transparent", border:"none", fontSize:18, fontWeight:800, color:"#16A34A", textAlign:"center", outline:"none", padding:"6px 0" }} />
-                  <button
-                    onMouseDown={()=>startHoldMouse(()=>setEditLogModal(p=>({...p,form:{...p.form,calories:Math.min(9999,p.form.calories+1)}})))} onMouseUp={stopHold} onMouseLeave={stopHold}
-                    onTouchStart={e=>{e.preventDefault();startHoldTouch(()=>setEditLogModal(p=>({...p,form:{...p.form,calories:Math.min(9999,p.form.calories+1)}})));}} onTouchEnd={stopHold}
-                    style={{ background:"none", border:"none", padding:"0 10px", fontSize:18, color:"#16A34A", cursor:"pointer", height:44, userSelect:"none" }}>+</button>
-                </div>
-              </div>
-            </div>
-
             {/* Photo */}
-            <div style={{ marginBottom:18 }}>
+            <div style={{ marginBottom:14 }}>
               <label style={{ fontSize:12, fontWeight:700, color:"#374151", display:"block", marginBottom:6 }}>📸 รูปแนบ</label>
               {editLogModal.form.photo ? (
                 <div style={{ position:"relative" }}>
@@ -1270,6 +1235,44 @@ const handleRegister = async () => {
               )}
               <input ref={editLogPhotoRef} type="file" accept="image/*" style={{ display:"none" }}
                 onChange={e=>{ const f=e.target.files?.[0]; if(!f) return; resizeImage(f).then(b64=>setEditLogModal(p=>({...p,form:{...p.form,photo:b64}}))); }} />
+            </div>
+
+            {/* Duration */}
+            <div style={{ marginBottom:14 }}>
+              <label style={{ fontSize:12, fontWeight:700, color:"#374151", display:"block", marginBottom:6 }}>⏱️ เวลา (นาที)</label>
+              <div style={{ display:"flex", alignItems:"center", background:"#F0FDF4", borderRadius:12, border:"1.5px solid #D1FAE5", overflow:"hidden" }}>
+                <button
+                  onMouseDown={()=>startHoldMouse(()=>setEditLogModal(p=>({...p,form:{...p.form,duration:Math.max(1,p.form.duration-1)}})))} onMouseUp={stopHold} onMouseLeave={stopHold}
+                  onTouchStart={e=>{e.preventDefault();startHoldTouch(()=>setEditLogModal(p=>({...p,form:{...p.form,duration:Math.max(1,p.form.duration-1)}})));}} onTouchEnd={stopHold}
+                  style={{ background:"none", border:"none", padding:"0 14px", fontSize:18, color:"#16A34A", cursor:"pointer", height:44, userSelect:"none" }}>−</button>
+                <input type="number" min={1} max={480} value={editLogModal.form.duration}
+                  onChange={e=>setEditLogModal(p=>({...p,form:{...p.form,duration:Math.min(480,Math.max(0,+e.target.value||0))}}))}
+                  onBlur={()=>setEditLogModal(p=>({...p,form:{...p.form,duration:Math.max(1,p.form.duration||1)}}))}
+                  style={{ flex:1, background:"transparent", border:"none", fontSize:18, fontWeight:800, color:"#16A34A", textAlign:"center", outline:"none", padding:"6px 0" }} />
+                <button
+                  onMouseDown={()=>startHoldMouse(()=>setEditLogModal(p=>({...p,form:{...p.form,duration:Math.min(480,p.form.duration+1)}})))} onMouseUp={stopHold} onMouseLeave={stopHold}
+                  onTouchStart={e=>{e.preventDefault();startHoldTouch(()=>setEditLogModal(p=>({...p,form:{...p.form,duration:Math.min(480,p.form.duration+1)}})));}} onTouchEnd={stopHold}
+                  style={{ background:"none", border:"none", padding:"0 14px", fontSize:18, color:"#16A34A", cursor:"pointer", height:44, userSelect:"none" }}>+</button>
+              </div>
+            </div>
+
+            {/* Calories */}
+            <div style={{ marginBottom:18 }}>
+              <label style={{ fontSize:12, fontWeight:700, color:"#374151", display:"block", marginBottom:6 }}>🔥 Calories</label>
+              <div style={{ display:"flex", alignItems:"center", background:"#F0FDF4", borderRadius:12, border:"1.5px solid #D1FAE5", overflow:"hidden" }}>
+                <button
+                  onMouseDown={()=>startHoldMouse(()=>setEditLogModal(p=>({...p,form:{...p.form,calories:Math.max(1,p.form.calories-1)}})))} onMouseUp={stopHold} onMouseLeave={stopHold}
+                  onTouchStart={e=>{e.preventDefault();startHoldTouch(()=>setEditLogModal(p=>({...p,form:{...p.form,calories:Math.max(1,p.form.calories-1)}})));}} onTouchEnd={stopHold}
+                  style={{ background:"none", border:"none", padding:"0 14px", fontSize:18, color:"#16A34A", cursor:"pointer", height:44, userSelect:"none" }}>−</button>
+                <input type="number" min={1} max={9999} value={editLogModal.form.calories}
+                  onChange={e=>setEditLogModal(p=>({...p,form:{...p.form,calories:Math.min(9999,Math.max(0,+e.target.value||0))}}))}
+                  onBlur={()=>setEditLogModal(p=>({...p,form:{...p.form,calories:Math.max(1,p.form.calories||1)}}))}
+                  style={{ flex:1, background:"transparent", border:"none", fontSize:18, fontWeight:800, color:"#16A34A", textAlign:"center", outline:"none", padding:"6px 0" }} />
+                <button
+                  onMouseDown={()=>startHoldMouse(()=>setEditLogModal(p=>({...p,form:{...p.form,calories:Math.min(9999,p.form.calories+1)}})))} onMouseUp={stopHold} onMouseLeave={stopHold}
+                  onTouchStart={e=>{e.preventDefault();startHoldTouch(()=>setEditLogModal(p=>({...p,form:{...p.form,calories:Math.min(9999,p.form.calories+1)}})));}} onTouchEnd={stopHold}
+                  style={{ background:"none", border:"none", padding:"0 14px", fontSize:18, color:"#16A34A", cursor:"pointer", height:44, userSelect:"none" }}>+</button>
+              </div>
             </div>
 
             <div style={{ display:"flex", gap:10 }}>
