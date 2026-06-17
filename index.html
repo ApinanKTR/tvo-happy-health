@@ -110,7 +110,7 @@ const sbFetchLogs = async () => {
     .gte('log_date', thaiDate(cutoff))
     .order('log_date', { ascending: false })
     .order('created_at', { ascending: false })
-    .limit(500);
+    .limit(3000);
   if (error) throw new Error(error.message);
   return (data || []).map(i => ({
     id: i.id, spId: i.id,
@@ -333,6 +333,18 @@ const SPECIAL_EVENTS = [
       return days.size >= 2;
     },
   },
+  {
+    id: "special_day_jun18",
+    icon: "🎂",
+    name: "Special Day",
+    desc: "ออกกำลังกายรวม 42+ นาที ในวันที่ 18 มิ.ย.",
+    check: (userLogs) => {
+      const total = userLogs
+        .filter(l => l.date === "2026-06-18")
+        .reduce((s, l) => s + (Number(l.duration) || 0), 0);
+      return total >= 42;
+    },
+  },
 ];
 
 const SPECIAL_ICON_SET = new Set(SPECIAL_EVENTS.map(e => e.icon));
@@ -340,7 +352,9 @@ const SPECIAL_ICON_SET = new Set(SPECIAL_EVENTS.map(e => e.icon));
 // render ชื่อ: ถ้า icon เป็น special event → สีรุ้งวิ่งไปมา
 const WiggleName = ({ name, icon }) => {
   if (!icon || !SPECIAL_ICON_SET.has(icon)) return React.createElement(React.Fragment, null, name);
-  return React.createElement('span', { className: 'pride-name' }, name);
+  const classMap = { "🌈": "pride-name", "🎂": "birthday-name" };
+  const cls = classMap[icon] || "pride-name";
+  return React.createElement('span', { className: cls }, name);
 };
 
 // คืน array ของ special icons ที่ user ปลดล็อกแล้ว
@@ -1023,6 +1037,8 @@ const handleRegister = async () => {
         @keyframes rainbow-slide{0%{background-position:0% 50%}100%{background-position:200% 50%}}
         @keyframes pop-in{from{opacity:0;transform:scale(.7)}to{opacity:1;transform:scale(1)}}
         .pride-name{color:#e85d04;background:linear-gradient(90deg,#ff4e50,#fc913a,#f9d62e,#4caf50,#2196f3,#9c27b0,#ff4e50);background-size:200% auto;-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;animation:rainbow-slide 1.8s linear infinite;display:inline;}
+        @keyframes bday-shimmer{0%{background-position:0% 50%}100%{background-position:200% 50%}}
+        .birthday-name{color:#f59e0b;background:linear-gradient(90deg,#f59e0b,#fbbf24,#fde68a,#fb7185,#fbbf24,#f59e0b);background-size:200% auto;-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;animation:bday-shimmer 1.6s linear infinite;display:inline;font-weight:700;}
 
         /* Like button */
         .v2-like{background:none;border:1.5px solid #E5E7EB;border-radius:999px;cursor:pointer;display:inline-flex;align-items:center;gap:4px;padding:4px 12px;font-size:12px;color:#6B7280;transition:all .2s;font-family:'Sarabun'}
