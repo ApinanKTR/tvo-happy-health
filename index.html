@@ -106,7 +106,7 @@ const sbFetchLogs = async () => {
   cutoff.setDate(cutoff.getDate() - 90);
   const { data, error } = await supabase
     .from('exercise_logs')
-    .select('*')
+    .select('id,employee_id,user_name,group_name,exercise,duration,calories,log_date,note,likes,verified,admin_comment,photo')
     .gte('log_date', thaiDate(cutoff))
     .order('log_date', { ascending: false })
     .order('created_at', { ascending: false })
@@ -122,6 +122,21 @@ const sbFetchLogs = async () => {
     verified: i.verified || false,
     adminComment: i.admin_comment || '',
   }));
+};
+
+const sbFetchLogPhotoIds = async () => {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 90);
+  const { data } = await supabase
+    .from('exercise_logs')
+    .select('id')
+    .not('photo', 'is', null)
+    .gte('log_date', thaiDate(cutoff));
+  return new Set((data || []).map(r => r.id));
+};
+const sbFetchLogPhoto = async (id) => {
+  const { data } = await supabase.from('exercise_logs').select('photo').eq('id', id).single();
+  return data?.photo || null;
 };
 
 const sbSetVerified = async (id, verified) => {
@@ -386,6 +401,8 @@ const getLast7Days = (userLogs) => {
 function CalorieTracker() {
   // ไม่ load logs จาก localStorage — ดึงสดจาก SharePoint ทุกครั้ง เพื่อป้องกัน log เก่าค้าง
   const [logs, setLogs] = useState(INITIAL_LOGS);
+  const [logPhotoIds, setLogPhotoIds] = useState(() => new Set());
+  const [logPhotos, setLogPhotos] = useState({});
   const [exercises, setExercises] = useState(INIT_EXERCISES); // hardcoded — ทุกคนเห็นเหมือนกัน
   const [groups, setGroups] = useState(INIT_GROUPS);
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -507,8 +524,10 @@ function CalorieTracker() {
     setProfileIconMap(prev => { const merged = { ...prev, ...iconMap }; lsSet("tvohh_profileicons", merged); return merged; });
   };
   useEffect(() => {
-    sbFetchUserPhotos().then(avs => { if (avs) setAvatars(avs); });
-    sbFetchAllUsers().then(syncAllUsers);
+    sbFetchUsersOnce().then(({ allUsers, avatars }) => {
+      if (Object.keys(avatars).length) setAvatars(avatars);
+      syncAllUsers(allUsers);
+    });
   }, []);
 
   // โหลด likes ของตัวเองจาก DB เมื่อ login
@@ -731,7 +750,7 @@ const handleAdd = async () => {
   };
   const handlePhotoUpload = (file) => {
     if (!file) return;
-    resizeImage(file).then(b64 => { if (b64) setForm(p => ({ ...p, photo: b64 })); });
+    resizeImage(file, 200, 30720).then(b64 => { if (b64) setForm(p => ({ ...p, photo: b64 })); });
   };
   const handleLogin = async () => {
     if (!authForm.empId.trim() || !authForm.password) return setAuthError("กรุณากรอกรหัสพนักงานและรหัสผ่าน");
@@ -1329,7 +1348,7 @@ const handleRegister = async () => {
                   ?<img src={editForm.avatar!==undefined?editForm.avatar:authUser.avatar} style={{ width:"100%", height:"100%", objectFit:"cover" }} alt="avatar" />
                   :<span style={{ fontSize:38 }}>📷</span>}
               </div>
-              <input ref={avatarEditRef} type="file" accept="image/*" style={{ display:"none" }} onChange={e=>{ const f=e.target.files?.[0]; if(!f)return; resizeImage(f).then(b64=>setEditForm(p=>({...p,avatar:b64}))); }} />
+              <input ref={avatarEditRef} type="file" accept="image/*" style={{ display:"none" }} onChange={e=>{ const f=e.target.files?.[0]; if(!f)return; resizeImage(f, 200, 30720).then(b64=>setEditForm(p=>({...p,avatar:b64}))); }} />
               <p style={{ fontSize:10, color:"#9CA3AF", marginTop:6 }}>แตะวงกลมเพื่อเปลี่ยนรูป</p>
               {(editForm.avatar!==undefined&&editForm.avatar!==null)&&<button onClick={()=>setEditForm(p=>({...p,avatar:null}))} style={{ marginTop:6, background:"none", border:"none", color:"#9CA3AF", fontSize:11, cursor:"pointer", textDecoration:"underline" }}>ลบรูปภาพ</button>}
             </div>

@@ -374,22 +374,34 @@ function AdminApp() {
   // ── Compress all profile photos ────────────────────────────
   const [compressing, setCompressing] = useState(false);
   const compressAllPhotos = async () => {
-    if (!window.confirm(`บีบรูปโปรไฟล์ทั้งหมด ${users.length} คน?\nอาจใช้เวลา 1-2 นาที`)) return;
+    if (!window.confirm(`อัปโหลดรูปโปรไฟล์ทั้งหมด ${users.length} คน ไปยัง Storage?\nอาจใช้เวลา 1-2 นาที`)) return;
     setCompressing(true);
     let ok = 0, skip = 0, fail = 0;
     for (const u of users) {
       try {
         const photo = u.Photo || "";
-        if (!photo || photo.length * 0.75 <= 20000) { skip++; continue; }
+        // ข้ามถ้าไม่มีรูป หรือเป็น URL แล้ว (ไม่ใช่ Base64)
+        if (!photo || !photo.startsWith("data:image")) { skip++; continue; }
         const compressed = await compressBase64(photo);
-        if (compressed === photo) { skip++; continue; }
-        await sbUpdateUserPhoto(u.EmployeeID, compressed);
+        // แปลง base64 → blob → อัปโหลด Storage
+        const res = await fetch(compressed);
+        const blob = await res.blob();
+        const fileName = `avatars/${u.EmployeeID}.jpg`;
+        const { error: upErr } = await supabase.storage
+          .from('exercise-photos')
+          .upload(fileName, blob, { contentType: 'image/jpeg', upsert: true });
+        if (upErr) throw new Error(upErr.message);
+        const { data: urlData } = supabase.storage
+          .from('exercise-photos')
+          .getPublicUrl(fileName);
+        const publicUrl = urlData.publicUrl;
+        await sbUpdateUserPhoto(u.EmployeeID, publicUrl);
         ok++;
-        showToast(`บีบรูป ${u.DisplayName} ✅ (${ok}/${users.length})`);
+        showToast(`อัปโหลดรูป ${u.DisplayName} ✅ (${ok}/${users.length})`);
       } catch(e) { fail++; console.error("compress fail:", u.DisplayName, e); }
     }
     setCompressing(false);
-    showToast(`เสร็จแล้ว ✅ บีบสำเร็จ ${ok} | ข้าม ${skip} | ผิดพลาด ${fail}`);
+    showToast(`เสร็จแล้ว ✅ อัปโหลด Storage ${ok} | ข้าม ${skip} | ผิดพลาด ${fail}`);
   };
 
   // ── Delete Log ─────────────────────────────────────────────

@@ -173,7 +173,7 @@ function RegisterPage() {
           </div>
           <div style={{ fontSize:11, color:'#9CA3AF' }}>แตะเพื่อเพิ่มรูปโปรไฟล์ (ไม่บังคับ)</div>
           <input ref={avatarRef} type="file" accept="image/*" style={{ display:'none' }}
-            onChange={e=>{ const f=e.target.files?.[0]; if(!f) return; resizeImage(f).then(b64=>{ if(b64) setForm(p=>({...p,avatar:b64})); }); }} />
+            onChange={e=>{ const f=e.target.files?.[0]; if(!f) return; resizeImage(f, 200, 30720).then(b64=>{ if(b64) setForm(p=>({...p,avatar:b64})); }); }} />
         </div>
 
         {/* Fields */}
