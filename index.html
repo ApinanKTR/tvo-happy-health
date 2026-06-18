@@ -1899,6 +1899,155 @@ const handleRegister = async () => {
                   })()}
                 </div>
 
+                {/* ── Exercise Analysis 30d ── */}
+                {(()=>{
+                  const cutoff30 = new Date(); cutoff30.setDate(cutoff30.getDate()-30);
+                  const cutoff30s = thaiDate(cutoff30);
+                  const r30 = allProfileLogs.filter(l=>l.date>=cutoff30s);
+                  if (!r30.length) return null;
+                  // === Metrics ===
+                  const activeDays = new Set(r30.map(l=>l.date)).size;
+                  const exCnt = {}; r30.forEach(l=>{exCnt[l.exercise]=(exCnt[l.exercise]||0)+1;});
+                  const topExArr = Object.entries(exCnt).sort((a,b)=>b[1]-a[1]);
+                  const topEx = topExArr[0]?.[0] || "-";
+                  const exTypes = topExArr.length;
+                  const dowCnt = [0,0,0,0,0,0,0];
+                  r30.forEach(l=>{ const d=new Date(l.date); dowCnt[d.getDay()]++; });
+                  const dowTH = ['อา','จ','อ','พ','พฤ','ศ','ส'];
+                  const bestDow = ['อาทิตย์','จันทร์','อังคาร','พุธ','พฤหัส','ศุกร์','เสาร์'][dowCnt.indexOf(Math.max(...dowCnt))];
+                  const totalMin = r30.reduce((s,l)=>s+l.duration,0);
+                  const avgMin = Math.round(totalMin/r30.length);
+                  const actDaySet = new Set(allProfileLogs.map(l=>l.date));
+                  const todayS = thaiDate();
+                  let streak=0, startMs2=actDaySet.has(todayS)?Date.now():Date.now()-86400000;
+                  for(let i=0;i<365;i++){ const ds=thaiDate(new Date(startMs2-i*86400000)); if(actDaySet.has(ds))streak++; else break; }
+                  const cut15s = thaiDate(new Date(Date.now()-15*86400000));
+                  const prev15 = r30.filter(l=>l.date<cut15s).length;
+                  const last15 = r30.filter(l=>l.date>=cut15s).length;
+                  const trend = last15-prev15;
+                  const pct = Math.round((activeDays/30)*100);
+                  const rating = activeDays>=22?{t:"ยอดเยี่ยม",emoji:"🔥",c:"#DC2626"}
+                    :activeDays>=15?{t:"ดีมาก",emoji:"⭐",c:"#16A34A"}
+                    :activeDays>=8?{t:"ดี",emoji:"👍",c:"#0891B2"}
+                    :activeDays>=3?{t:"พอใช้",emoji:"📝",c:"#D97706"}
+                    :{t:"ควรเพิ่ม",emoji:"💪",c:"#9CA3AF"};
+                  // === Chart Data ===
+                  const weekData = [3,2,1,0].map(w=>{
+                    const eMs=Date.now()-w*7*86400000; const sMs=Date.now()-(w+1)*7*86400000;
+                    const sS=thaiDate(new Date(sMs)); const eS=thaiDate(new Date(eMs));
+                    const mins=allProfileLogs.filter(l=>l.date>=sS&&l.date<=eS).reduce((s,l)=>s+l.duration,0);
+                    return { mins, label:w===0?"สัปดาห์นี้":`-${w+1} สปด`, isNow:w===0 };
+                  });
+                  const weekMax = Math.max(...weekData.map(d=>d.mins),1);
+                  const dowMax = Math.max(...dowCnt,1);
+                  const topExes = topExArr.slice(0,5);
+                  const exMax = topExes[0]?.[1]||1;
+                  const ECOLS = ['#16A34A','#0891B2','#7C3AED','#D97706','#DC2626'];
+                  // === Text ===
+                  const behaviorLines = [
+                    `ออกกำลังกาย ${activeDays} วัน จาก 30 วัน (${pct}%) รวม ${totalMin.toLocaleString()} นาที`,
+                    `กิจกรรมที่ชอบ: ${topEx}${exTypes>1?` (และอีก ${exTypes-1} ประเภท)`:""}`,
+                    `วันที่ออกบ่อยที่สุด: วัน${bestDow} · เฉลี่ย ${avgMin} นาที/ครั้ง`,
+                    streak>0?`streak ปัจจุบัน: ${streak} วัน${streak>=7?" 🔥":""}`:null,
+                  ].filter(Boolean);
+                  const tips = [];
+                  if(activeDays<8) tips.push("💡 ลองตั้งเป้าออกกำลังกาย 3 วัน/สัปดาห์ก่อน ค่อยๆ เพิ่มจะยั่งยืนกว่า");
+                  else if(activeDays<15) tips.push("💡 ออกสม่ำเสมอดีแล้ว ลองเพิ่มเป็น 4-5 วัน/สัปดาห์เพื่อผลลัพธ์ที่ชัดขึ้น");
+                  if(avgMin<20) tips.push("💡 เวลาเฉลี่ยยังน้อย ลองเพิ่มเป็น 30 นาที/ครั้ง ตาม WHO guideline");
+                  if(exTypes===1) tips.push(`💡 ออกแต่ ${topEx} อย่างเดียว ลองเพิ่ม cardio/strength/ยืดเหยียดสลับกัน`);
+                  if(trend>3) tips.push(`💡 แนวโน้มดีขึ้นชัดเจน (+${trend} ครั้งใน 2 สัปดาห์หลัง) รักษาระดับนี้ไว้!`);
+                  else if(trend<-3) tips.push(`💡 ช่วง 2 สัปดาห์หลังลดลง ${Math.abs(trend)} ครั้ง ลองหาเพื่อนออกกำลังกายหรือ challenge ใหม่`);
+                  if(streak>=7) tips.push(`💡 streak ${streak} วัน! เยี่ยมมาก อย่าลืมพักผ่อนให้เพียงพอด้วยนะ`);
+                  if(!tips.length) tips.push("💡 ดีมาก! รักษาความสม่ำเสมอและฟังสัญญาณร่างกายเสมอ");
+                  return (
+                    <div className="v2-card" style={{ padding:18, marginBottom:14 }}>
+                      {/* Header + Rating */}
+                      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
+                        <div style={{ fontFamily:"'Prompt'", fontWeight:700, fontSize:13, color:"#374151" }}>📊 วิเคราะห์ 30 วันล่าสุด</div>
+                        <div style={{ display:"flex", alignItems:"center", gap:6, background:rating.c+"18", border:`1px solid ${rating.c}44`, borderRadius:20, padding:"3px 10px" }}>
+                          <span style={{ fontSize:14 }}>{rating.emoji}</span>
+                          <span style={{ fontSize:11, fontWeight:700, color:rating.c }}>{rating.t}</span>
+                        </div>
+                      </div>
+                      {/* Summary text */}
+                      <div style={{ background:"#F9FAFB", borderRadius:10, padding:"10px 14px", marginBottom:12 }}>
+                        {behaviorLines.map((line,i)=>(
+                          <div key={i} style={{ fontSize:12, color:"#374151", lineHeight:1.9,
+                            borderBottom:i<behaviorLines.length-1?"1px dashed #E5E7EB":"none",
+                            paddingBottom:i<behaviorLines.length-1?5:0, paddingTop:i>0?5:0 }}>
+                            {line}
+                          </div>
+                        ))}
+                      </div>
+                      {/* Charts row: Weekly + DOW */}
+                      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:12 }}>
+                        {/* Chart 1: Weekly */}
+                        <div style={{ background:"#F9FAFB", borderRadius:10, padding:"10px 8px 8px" }}>
+                          <div style={{ fontSize:10.5, fontWeight:700, color:"#6B7280", marginBottom:8 }}>📈 รายสัปดาห์ (นาที)</div>
+                          <div style={{ display:"flex", alignItems:"flex-end", gap:5, height:72 }}>
+                            {weekData.map((d,i)=>(
+                              <div key={i} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:2, height:"100%" }}>
+                                <div style={{ flex:1, width:"100%", display:"flex", alignItems:"flex-end" }}>
+                                  <div style={{ width:"100%", height:`${Math.max(5,(d.mins/weekMax)*100)}%`,
+                                    background:d.isNow?"linear-gradient(180deg,#16A34A,#22C55E)":"linear-gradient(180deg,#D1FAE5,#A7F3D0)",
+                                    borderRadius:"4px 4px 0 0", border:d.isNow?"1px solid #16A34A44":"none" }} />
+                                </div>
+                                {d.mins>0&&<div style={{ fontSize:8, color:d.isNow?"#16A34A":"#9CA3AF", fontWeight:700 }}>{d.mins}</div>}
+                                <div style={{ fontSize:8, color:d.isNow?"#16A34A":"#9CA3AF", fontWeight:d.isNow?700:400, textAlign:"center", lineHeight:1.2 }}>{d.label}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                        {/* Chart 2: DOW */}
+                        <div style={{ background:"#F9FAFB", borderRadius:10, padding:"10px 8px 8px" }}>
+                          <div style={{ fontSize:10.5, fontWeight:700, color:"#6B7280", marginBottom:8 }}>📅 วันที่ active</div>
+                          <div style={{ display:"flex", alignItems:"flex-end", gap:2, height:72 }}>
+                            {dowTH.map((day,i)=>{
+                              const isTop=dowCnt[i]===Math.max(...dowCnt)&&dowCnt[i]>0;
+                              return (
+                                <div key={i} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:2, height:"100%" }}>
+                                  <div style={{ flex:1, width:"100%", display:"flex", alignItems:"flex-end" }}>
+                                    <div style={{ width:"100%", height:`${Math.max(5,(dowCnt[i]/dowMax)*100)}%`,
+                                      background:isTop?"linear-gradient(180deg,#7C3AED,#A78BFA)":dowCnt[i]>0?"linear-gradient(180deg,#E9D5FF,#DDD6FE)":"#F3F4F6",
+                                      borderRadius:"3px 3px 0 0" }} />
+                                  </div>
+                                  {dowCnt[i]>0&&<div style={{ fontSize:7.5, color:isTop?"#7C3AED":"#9CA3AF", fontWeight:700 }}>{dowCnt[i]}</div>}
+                                  <div style={{ fontSize:8, color:isTop?"#7C3AED":"#9CA3AF", fontWeight:isTop?700:400 }}>{day}</div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                      {/* Chart 3: Top exercises */}
+                      {topExes.length>0&&(
+                        <div style={{ background:"#F9FAFB", borderRadius:10, padding:"10px 14px", marginBottom:12 }}>
+                          <div style={{ fontSize:10.5, fontWeight:700, color:"#6B7280", marginBottom:8 }}>🏋️ กิจกรรมยอดนิยม (ครั้ง)</div>
+                          <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                            {topExes.map(([ex,cnt],i)=>(
+                              <div key={ex}>
+                                <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, color:"#374151", marginBottom:3 }}>
+                                  <span>{ex}</span><span style={{ fontWeight:700, color:ECOLS[i] }}>{cnt}</span>
+                                </div>
+                                <div style={{ height:7, background:"#E5E7EB", borderRadius:4, overflow:"hidden" }}>
+                                  <div style={{ height:"100%", width:`${Math.round((cnt/exMax)*100)}%`,
+                                    background:ECOLS[i], borderRadius:4 }} />
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {/* Tips */}
+                      <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                        {tips.map((tip,i)=>(
+                          <div key={i} style={{ fontSize:11.5, color:"#1E40AF", background:"#EFF6FF", border:"1px solid #BFDBFE", borderRadius:8, padding:"7px 10px", lineHeight:1.6 }}>{tip}</div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 {/* ── Calendar ── */}
                 {(()=>{
                   const userLogs = logs.filter(l => l.user === profileUser);
