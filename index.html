@@ -750,7 +750,7 @@ const handleAdd = async () => {
   };
   const handlePhotoUpload = (file) => {
     if (!file) return;
-    resizeImage(file, 200, 30720).then(b64 => { if (b64) setForm(p => ({ ...p, photo: b64 })); });
+    resizeImage(file).then(b64 => { if (b64) setForm(p => ({ ...p, photo: b64 })); });
   };
   const handleLogin = async () => {
     if (!authForm.empId.trim() || !authForm.password) return setAuthError("กรุณากรอกรหัสพนักงานและรหัสผ่าน");
@@ -1348,7 +1348,7 @@ const handleRegister = async () => {
                   ?<img src={editForm.avatar!==undefined?editForm.avatar:authUser.avatar} style={{ width:"100%", height:"100%", objectFit:"cover" }} alt="avatar" />
                   :<span style={{ fontSize:38 }}>📷</span>}
               </div>
-              <input ref={avatarEditRef} type="file" accept="image/*" style={{ display:"none" }} onChange={e=>{ const f=e.target.files?.[0]; if(!f)return; resizeImage(f, 200, 30720).then(b64=>setEditForm(p=>({...p,avatar:b64}))); }} />
+              <input ref={avatarEditRef} type="file" accept="image/*" style={{ display:"none" }} onChange={e=>{ const f=e.target.files?.[0]; if(!f)return; resizeImage(f).then(b64=>setEditForm(p=>({...p,avatar:b64}))); }} />
               <p style={{ fontSize:10, color:"#9CA3AF", marginTop:6 }}>แตะวงกลมเพื่อเปลี่ยนรูป</p>
               {(editForm.avatar!==undefined&&editForm.avatar!==null)&&<button onClick={()=>setEditForm(p=>({...p,avatar:null}))} style={{ marginTop:6, background:"none", border:"none", color:"#9CA3AF", fontSize:11, cursor:"pointer", textDecoration:"underline" }}>ลบรูปภาพ</button>}
             </div>
