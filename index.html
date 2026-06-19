@@ -290,6 +290,12 @@ const sbRemoveLog = async (id) => {
   await supabase.from('exercise_logs').delete().eq('id', id);
 };
 
+const sbSaveWeeklyGoal = async (displayName, val) => {
+  await supabase.from('user_profiles')
+    .update({ weekly_goal: val })
+    .eq('display_name', displayName);
+};
+
 const sbUpdateLog = async (id, fields) => {
   const { error } = await supabase.from('exercise_logs').update(fields).eq('id', id);
   if (error) throw new Error(error.message);
@@ -305,9 +311,9 @@ const cleanGroupName = (v) => {
   return v.trim();
 };
 const sbFetchUsersOnce = async () => {
-  const { data, error } = await supabase.from('user_profiles').select('display_name,group_name,employee_id,photo,profile_icon');
+  const { data, error } = await supabase.from('user_profiles').select('display_name,group_name,employee_id,photo,profile_icon,weekly_goal');
   if (error) return { allUsers: [], avatars: {} };
-  const allUsers = (data||[]).map(u => ({ user: (u.display_name||'').trim(), group: cleanGroupName(u.group_name), empId: u.employee_id, profileIcon: u.profile_icon || null }));
+  const allUsers = (data||[]).map(u => ({ user: (u.display_name||'').trim(), group: cleanGroupName(u.group_name), empId: u.employee_id, profileIcon: u.profile_icon || null, weeklyGoal: u.weekly_goal ?? 5000 }));
   const avatars = {};
   (data||[]).forEach(u => { if (u.photo) avatars[u.display_name] = u.photo; });
   return { allUsers, avatars };
@@ -538,8 +544,8 @@ function CalorieTracker() {
   const [likersModal, setLikersModal] = useState(null); // { logId, names, loading }
 
   // Goals
-  const [goals, setGoals] = useState(() => lsGet("tvohh_goals", {}));
-  const getGoal = (user) => (goals[user]?.weekly ?? 5000);
+  const [weeklyGoals, setWeeklyGoals] = useState({});
+  const getGoal = (user) => (weeklyGoals[user] ?? 5000);
   const [goalFormUser, setGoalFormUser] = useState("");
   const [goalFormVal, setGoalFormVal] = useState(5000);
 
@@ -586,7 +592,7 @@ function CalorieTracker() {
   // Persist exercises/groups เท่านั้น — logs ไม่ cache (ดึงสดจาก SP)
   // useEffect(() => { lsSet("tvohh_logs", logs); }, [logs]); // disabled
   useEffect(() => { lsSet("tvohh_exercises", exercises); }, [exercises]);
-  useEffect(() => { lsSet("tvohh_goals", goals); }, [goals]);
+
 
   // โหลดรูป User ทุกคนจาก SharePoint เมื่อเปิดแอพ (ทำให้ทุกเครื่องเห็นรูปคนอื่น)
   // ใช้ React state แทน localStorage โดยตรง → React จะ re-render ทุก component ที่ใช้ avatars
@@ -948,9 +954,10 @@ const handleRegister = async () => {
   const handleEditEx = (ex) => { setExForm({ name: ex.name, icon: ex.icon, calPerMin: ex.calPerMin, image: ex.image }); setEditingEx(ex.id); setShowEmojiPicker(false); };
   const handleEditGrp = (g) => { setGrpForm({ name: g.name, color: g.color, image: g.image }); setEditingGrp(g.id); };
 
-  const handleSaveGoal = () => {
+  const handleSaveGoal = async () => {
     if (!goalFormUser) return;
-    setGoals(p => ({ ...p, [goalFormUser]: { weekly: goalFormVal } }));
+    await sbSaveWeeklyGoal(goalFormUser, goalFormVal);
+    setWeeklyGoals(p => ({ ...p, [goalFormUser]: goalFormVal }));
     toast(`ตั้งเป้าหมายให้ ${goalFormUser} แล้ว! 🎯`);
   };
 
@@ -1848,10 +1855,11 @@ const handleRegister = async () => {
 
                 {/* Stats row */}
                 {profileUserData&&(
-                  <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:9, marginBottom:16 }}>
+                  <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(68px,1fr))", gap:9, marginBottom:16 }}>
                     {[
                       { label:"แคลอรี่รวม", value:profileUserData.totalCal.toLocaleString(), unit:"kcal", color:"#16A34A" },
                       { label:"เซสชั่น", value:profileUserData.sessions, unit:"ครั้ง", color:"#0891B2" },
+                      { label:"❤️ Like", value:(allProfileLogs.reduce((s,l)=>s+(l.likes||0),0)).toLocaleString(), unit:"ครั้ง", color:"#E11D48" },
                       { label:"เฉลี่ย/ครั้ง", value:Math.round(profileUserData.totalCal/profileUserData.sessions).toLocaleString(), unit:"kcal", color:"#7C3AED" },
                       ...(profileUser===authUser?.displayName ? [{ label:"วันนี้", value:`${todayCount}/${DAILY_LIMIT}`, unit:"ครั้ง", color: dailyFull?"#9CA3AF":"#F59E0B" }] : []),
                     ].map(s=>(
@@ -1880,7 +1888,7 @@ const handleRegister = async () => {
                       <input type="range" min={500} max={10000} step={250} value={goalInput} onChange={e=>setGoalInput(+e.target.value)} style={{ width:"100%", accentColor:"#16A34A", marginBottom:10, border:"none", background:"transparent" }} />
                       <div style={{ display:"flex", gap:8 }}>
                         <button onClick={()=>setEditingGoal(false)} style={{ flex:1, padding:10, borderRadius:12, border:"1.5px solid #E5E7EB", background:"#fff", cursor:"pointer", fontSize:13, color:"#6B7280", fontFamily:"'Sarabun'" }}>ยกเลิก</button>
-                        <button onClick={()=>{ setGoals(p=>({...p,[profileUser]:{weekly:goalInput}})); setEditingGoal(false); toast("บันทึกเป้าหมายแล้ว 🎯"); }} style={{ flex:2, padding:10, borderRadius:12, border:"none", background:"linear-gradient(135deg,#16A34A,#22C55E)", color:"#fff", cursor:"pointer", fontSize:13, fontFamily:"'Prompt'", fontWeight:700 }}>💾 บันทึก</button>
+                        <button onClick={()=>{ (async()=>{ await sbSaveWeeklyGoal(profileUser,goalInput); setWeeklyGoals(p=>({...p,[profileUser]:goalInput})); setEditingGoal(false); toast("บันทึกเป้าหมายแล้ว 🎯"); })(); }} style={{ flex:2, padding:10, borderRadius:12, border:"none", background:"linear-gradient(135deg,#16A34A,#22C55E)", color:"#fff", cursor:"pointer", fontSize:13, fontFamily:"'Prompt'", fontWeight:700 }}>💾 บันทึก</button>
                       </div>
                     </div>
                   ):(
@@ -2013,6 +2021,7 @@ const handleRegister = async () => {
                   let streak=0; const todayS=thaiDate();
                   let sMs2=actDaySet.has(todayS)?Date.now():Date.now()-86400000;
                   for(let i=0;i<365;i++){const ds=thaiDate(new Date(sMs2-i*86400000));if(actDaySet.has(ds))streak++;else break;}
+                  const totalLikes=allProfileLogs.reduce((s,l)=>s+(l.likes||0),0);
                   const cut15s=thaiDate(new Date(Date.now()-15*86400000));
                   const prev15=r30.filter(l=>l.date<cut15s).length;
                   const last15=r30.filter(l=>l.date>=cut15s).length;
@@ -2205,7 +2214,7 @@ const handleRegister = async () => {
                         {[
                           {val:`${activeDays}`,unit:"วัน",label:"ออกกำลังกาย/30วัน",c:"#16A34A"},
                           {val:`${avgMin}`,unit:"นาที",label:"เฉลี่ย/ครั้ง",c:"#0891B2"},
-                          {val:`${streak}`,unit:"วัน",label:"streak",c:"#7C3AED"},
+                          {val:`${streak}`,unit:"วัน",label:"streak ต่อเนื่อง",c:"#7C3AED"},
                         ].map((k,i)=>(
                           <div key={i} style={{background:"#F9FAFB",borderRadius:10,padding:"10px 6px",textAlign:"center",border:`1px solid ${k.c}22`}}>
                             <div style={{fontSize:20,fontWeight:800,color:k.c,lineHeight:1}}>{k.val}<span style={{fontSize:9.5,fontWeight:400,color:"#9CA3AF"}}> {k.unit}</span></div>
