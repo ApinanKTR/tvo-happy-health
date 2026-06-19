@@ -16,6 +16,58 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>body{margin:0;padding:0;background:#F0FDF4}</style>
+  <script>
+  /* ── Auto-update detector — HEAD request only (0 bytes body) ── */
+  (function(){
+    let knownTag=null, bannerShown=false;
+
+    const getTag = res => res.headers.get('etag') || res.headers.get('last-modified');
+
+    const check = async () => {
+      if(bannerShown) return;
+      try {
+        const res = await fetch(location.href, {method:'HEAD', cache:'no-store'});
+        const tag = getTag(res);
+        if(!tag) return;           // server ไม่ส่ง header — ข้ามไป
+        if(knownTag === null){ knownTag = tag; return; }  // baseline ครั้งแรก
+        if(tag !== knownTag) showBanner();
+      } catch(e){}
+    };
+
+    const showBanner = () => {
+      if(bannerShown) return;
+      bannerShown = true;
+      const b = document.createElement('div');
+      b.id = 'update-banner';
+      b.innerHTML =
+        '<span>🔄 มีการอัปเดตใหม่</span>' +
+        '<button id="upd-ok">รีเฟรชเลย</button>' +
+        '<button id="upd-x">✕</button>';
+      Object.assign(b.style, {
+        position:'fixed', bottom:'72px', left:'50%', transform:'translateX(-50%)',
+        zIndex:'9999', background:'#1E40AF', color:'#fff',
+        padding:'10px 16px', borderRadius:'12px', fontSize:'13px',
+        display:'flex', alignItems:'center', gap:'10px',
+        boxShadow:'0 4px 20px rgba(0,0,0,0.3)',
+        fontFamily:"'Prompt',sans-serif", whiteSpace:'nowrap'
+      });
+      document.body.appendChild(b);
+      Object.assign(document.getElementById('upd-ok').style,
+        {background:'#fff',color:'#1E40AF',border:'none',
+         borderRadius:'6px',padding:'4px 12px',cursor:'pointer',
+         fontSize:'12px',fontWeight:'700'});
+      Object.assign(document.getElementById('upd-x').style,
+        {background:'none',border:'none',color:'#93C5FD',
+         cursor:'pointer',fontSize:'16px',lineHeight:'1'});
+      document.getElementById('upd-ok').onclick = () => location.reload();
+      document.getElementById('upd-x').onclick  = () => b.remove();
+    };
+
+    window.addEventListener('load', check);
+    document.addEventListener('visibilitychange', () => { if(!document.hidden) check(); });
+    setInterval(() => { if(!document.hidden) check(); }, 10*60*1000); // ทุก 10 นาที
+  })();
+  </script>
 </head>
 <body>
   <div id="root"></div>
@@ -2165,7 +2217,7 @@ const handleRegister = async () => {
                       {/* Anomaly */}
                       {anomalies.length>0&&(
                         <div style={{marginBottom:12}}>
-                          <div style={{fontSize:10.5,fontWeight:700,color:"#374151",marginBottom:6}}>🔍 ความผิดปกติที่ตรวจพบ</div>
+                          <div style={{fontSize:10.5,fontWeight:700,color:"#374151",marginBottom:6}}>🔍 สรุปผลการออกกำลังกาย</div>
                           {anomalies.map((a,i)=>{
                             const s=lvlStyle[a.lvl];
                             return (
