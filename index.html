@@ -1908,148 +1908,283 @@ const handleRegister = async () => {
                   const cutoff30s = thaiDate(cutoff30);
                   const r30 = allProfileLogs.filter(l=>l.date>=cutoff30s);
                   if (!r30.length) return null;
+
                   // === Metrics ===
                   const activeDays = new Set(r30.map(l=>l.date)).size;
                   const exCnt = {}; r30.forEach(l=>{exCnt[l.exercise]=(exCnt[l.exercise]||0)+1;});
                   const topExArr = Object.entries(exCnt).sort((a,b)=>b[1]-a[1]);
-                  const topEx = topExArr[0]?.[0] || "-";
+                  const topEx = topExArr[0]?.[0]||"-";
                   const exTypes = topExArr.length;
                   const dowCnt = [0,0,0,0,0,0,0];
-                  r30.forEach(l=>{ const d=new Date(l.date); dowCnt[d.getDay()]++; });
+                  r30.forEach(l=>{const d=new Date(l.date);dowCnt[d.getDay()]++;});
                   const dowTH = ['อา','จ','อ','พ','พฤ','ศ','ส'];
-                  const bestDow = ['อาทิตย์','จันทร์','อังคาร','พุธ','พฤหัส','ศุกร์','เสาร์'][dowCnt.indexOf(Math.max(...dowCnt))];
+                  const dowFull = ['อาทิตย์','จันทร์','อังคาร','พุธ','พฤหัส','ศุกร์','เสาร์'];
+                  const bestDowIdx = dowCnt.indexOf(Math.max(...dowCnt));
+                  const bestDow = dowFull[bestDowIdx];
                   const totalMin = r30.reduce((s,l)=>s+l.duration,0);
-                  const avgMin = Math.round(totalMin/r30.length);
+                  const avgMin = r30.length ? Math.round(totalMin/r30.length) : 0;
                   const actDaySet = new Set(allProfileLogs.map(l=>l.date));
                   const todayS = thaiDate();
-                  let streak=0, startMs2=actDaySet.has(todayS)?Date.now():Date.now()-86400000;
-                  for(let i=0;i<365;i++){ const ds=thaiDate(new Date(startMs2-i*86400000)); if(actDaySet.has(ds))streak++; else break; }
+                  let streak=0, sMs=actDaySet.has(todayS)?Date.now():Date.now()-86400000;
+                  for(let i=0;i<365;i++){const ds=thaiDate(new Date(sMs-i*86400000));if(actDaySet.has(ds))streak++;else break;}
                   const cut15s = thaiDate(new Date(Date.now()-15*86400000));
-                  const prev15 = r30.filter(l=>l.date<cut15s).length;
-                  const last15 = r30.filter(l=>l.date>=cut15s).length;
-                  const trend = last15-prev15;
-                  const pct = Math.round((activeDays/30)*100);
-                  const rating = activeDays>=22?{t:"ยอดเยี่ยม",emoji:"🔥",c:"#DC2626"}
+                  const prev15=r30.filter(l=>l.date<cut15s).length;
+                  const last15=r30.filter(l=>l.date>=cut15s).length;
+                  const trend=last15-prev15;
+                  const pct=Math.round((activeDays/30)*100);
+                  const rating=activeDays>=22?{t:"ยอดเยี่ยม",emoji:"🔥",c:"#DC2626"}
                     :activeDays>=15?{t:"ดีมาก",emoji:"⭐",c:"#16A34A"}
                     :activeDays>=8?{t:"ดี",emoji:"👍",c:"#0891B2"}
                     :activeDays>=3?{t:"พอใช้",emoji:"📝",c:"#D97706"}
                     :{t:"ควรเพิ่ม",emoji:"💪",c:"#9CA3AF"};
-                  // === Chart Data ===
-                  const weekData = [3,2,1,0].map(w=>{
-                    const eMs=Date.now()-w*7*86400000; const sMs=Date.now()-(w+1)*7*86400000;
-                    const sS=thaiDate(new Date(sMs)); const eS=thaiDate(new Date(eMs));
-                    const mins=allProfileLogs.filter(l=>l.date>=sS&&l.date<=eS).reduce((s,l)=>s+l.duration,0);
-                    return { mins, label:w===0?"สัปดาห์นี้":`-${w+1} สปด`, isNow:w===0 };
+
+                  // === Donut helpers ===
+                  const ECOLS=['#16A34A','#0891B2','#7C3AED','#D97706','#DC2626','#9CA3AF'];
+                  const DCOLS=['#7C3AED','#0891B2','#16A34A','#D97706','#DC2626','#9CA3AF','#EC4899'];
+
+                  // buildSegments: cumulative % for SVG dashoffset
+                  const buildSegments=(entries,total)=>{
+                    let cum=0;
+                    return entries.map(([name,val])=>{
+                      const p=total>0?(val/total)*100:0;
+                      const seg={name,val,pct:p,cum};
+                      cum+=p; return seg;
+                    });
+                  };
+
+                  // DonutChart with center overlay — using JSX
+                  const DonutChart=({segments,cols,size=100,thick=6,centerVal,centerLabel})=>{
+                    const r=15.9155, cx=18, cy=18;
+                    return (
+                      <div style={{position:"relative",width:size,height:size,margin:"0 auto",flexShrink:0}}>
+                        <svg viewBox="0 0 36 36" style={{width:size,height:size,transform:"rotate(-90deg)",display:"block"}}>
+                          <circle cx={cx} cy={cy} r={r} fill="none" stroke="#E5E7EB" strokeWidth={thick}/>
+                          {segments.map((seg,i)=>(
+                            <circle key={i} cx={cx} cy={cy} r={r} fill="none"
+                              stroke={cols[i%cols.length]} strokeWidth={thick}
+                              strokeDasharray={`${seg.pct.toFixed(3)} ${(100-seg.pct).toFixed(3)}`}
+                              strokeDashoffset={`${(-seg.cum).toFixed(3)}`}
+                            />
+                          ))}
+                        </svg>
+                        {centerVal && (
+                          <div style={{position:"absolute",top:"50%",left:"50%",
+                            transform:"translate(-50%,-50%)",textAlign:"center",
+                            pointerEvents:"none",width:"64%",lineHeight:1}}>
+                            <div style={{fontSize:Math.round(size*0.17),fontWeight:800,color:"#1F2937"}}>{centerVal}</div>
+                            {centerLabel && <div style={{fontSize:Math.round(size*0.09),color:"#9CA3AF",marginTop:2,whiteSpace:"nowrap"}}>{centerLabel}</div>}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  };
+
+                  // Legend 2-col
+                  const Legend=({segments,cols})=>(
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"4px 6px",marginTop:10,width:"100%"}}>
+                      {segments.map((seg,i)=>(
+                        <div key={i} style={{display:"flex",alignItems:"center",gap:4,minWidth:0}}>
+                          <div style={{width:8,height:8,borderRadius:2,background:cols[i%cols.length],flexShrink:0}}/>
+                          <span style={{fontSize:9.5,color:"#374151",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>{seg.name}</span>
+                          <span style={{fontSize:9.5,fontWeight:700,color:cols[i%cols.length],flexShrink:0}}>{Math.round(seg.pct)}%</span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+
+                  // === Exercise type donut — fix full circle: add อื่นๆ bucket ===
+                  const exTotal=r30.length;
+                  const ex5=topExArr.slice(0,5);
+                  const ex5Sum=ex5.reduce((s,[,v])=>s+v,0);
+                  const exOther=exTotal-ex5Sum;
+                  const exEntries=exOther>0?[...ex5,['อื่นๆ',exOther]]:ex5;
+                  const exSegs=buildSegments(exEntries,exTotal);
+
+                  // === DOW donut — all active days included ===
+                  const dowTotal=dowCnt.reduce((s,v)=>s+v,0)||1;
+                  const dowEntries=dowTH.map((d,i)=>[d,dowCnt[i]]).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]);
+                  const dowSegs=buildSegments(dowEntries,dowTotal);
+
+                  // === Weekly bar ===
+                  const weekData=[3,2,1,0].map(w=>{
+                    const eMs=Date.now()-w*7*86400000; const sMs2=Date.now()-(w+1)*7*86400000;
+                    const sS=thaiDate(new Date(sMs2)); const eS=thaiDate(new Date(eMs));
+                    const wLogs=allProfileLogs.filter(l=>l.date>=sS&&l.date<=eS);
+                    const mins=wLogs.reduce((s,l)=>s+l.duration,0);
+                    const days=new Set(wLogs.map(l=>l.date)).size;
+                    return{mins,days,label:w===0?"สัปดาห์นี้":`-${w+1} สปด`,isNow:w===0};
                   });
-                  const weekMax = Math.max(...weekData.map(d=>d.mins),1);
-                  const dowMax = Math.max(...dowCnt,1);
-                  const topExes = topExArr.slice(0,5);
-                  const exMax = topExes[0]?.[1]||1;
-                  const ECOLS = ['#16A34A','#0891B2','#7C3AED','#D97706','#DC2626'];
-                  // === Text ===
-                  const behaviorLines = [
-                    `ออกกำลังกาย ${activeDays} วัน จาก 30 วัน (${pct}%) รวม ${totalMin.toLocaleString()} นาที`,
-                    `กิจกรรมที่ชอบ: ${topEx}${exTypes>1?` (และอีก ${exTypes-1} ประเภท)`:""}`,
-                    `วันที่ออกบ่อยที่สุด: วัน${bestDow} · เฉลี่ย ${avgMin} นาที/ครั้ง`,
-                    streak>0?`streak ปัจจุบัน: ${streak} วัน${streak>=7?" 🔥":""}`:null,
-                  ].filter(Boolean);
-                  const tips = [];
-                  if(activeDays<8) tips.push("💡 ลองตั้งเป้าออกกำลังกาย 3 วัน/สัปดาห์ก่อน ค่อยๆ เพิ่มจะยั่งยืนกว่า");
-                  else if(activeDays<15) tips.push("💡 ออกสม่ำเสมอดีแล้ว ลองเพิ่มเป็น 4-5 วัน/สัปดาห์เพื่อผลลัพธ์ที่ชัดขึ้น");
-                  if(avgMin<20) tips.push("💡 เวลาเฉลี่ยยังน้อย ลองเพิ่มเป็น 30 นาที/ครั้ง ตาม WHO guideline");
-                  if(exTypes===1) tips.push(`💡 ออกแต่ ${topEx} อย่างเดียว ลองเพิ่ม cardio/strength/ยืดเหยียดสลับกัน`);
-                  if(trend>3) tips.push(`💡 แนวโน้มดีขึ้นชัดเจน (+${trend} ครั้งใน 2 สัปดาห์หลัง) รักษาระดับนี้ไว้!`);
-                  else if(trend<-3) tips.push(`💡 ช่วง 2 สัปดาห์หลังลดลง ${Math.abs(trend)} ครั้ง ลองหาเพื่อนออกกำลังกายหรือ challenge ใหม่`);
-                  if(streak>=7) tips.push(`💡 streak ${streak} วัน! เยี่ยมมาก อย่าลืมพักผ่อนให้เพียงพอด้วยนะ`);
-                  if(!tips.length) tips.push("💡 ดีมาก! รักษาความสม่ำเสมอและฟังสัญญาณร่างกายเสมอ");
+                  const weekMax=Math.max(...weekData.map(d=>d.mins),1);
+
+                  // === Anomaly detection ===
+                  const anomalies=[];
+
+                  // 1. Unusually long sessions (>120 min)
+                  const longSess=r30.filter(l=>l.duration>120);
+                  if(longSess.length>0){
+                    const det=longSess.slice(0,3).map(l=>`${l.date} — ${l.exercise} (${l.duration} นาที)`).join(' / ');
+                    anomalies.push({lvl:'warn',msg:`พบ ${longSess.length} ครั้งออกนานผิดปกติ >120 นาที`,det});
+                  }
+
+                  // 2. Multiple sessions per day (>3)
+                  const dayCnt={}; r30.forEach(l=>{dayCnt[l.date]=(dayCnt[l.date]||0)+1;});
+                  const busyDays=Object.entries(dayCnt).filter(([,c])=>c>3).sort((a,b)=>b[1]-a[1]);
+                  if(busyDays.length>0){
+                    const det=busyDays.slice(0,3).map(([d,c])=>`${d} (${c} ครั้ง)`).join(' / ');
+                    anomalies.push({lvl:'warn',msg:`บันทึก >3 ครั้ง/วัน ใน ${busyDays.length} วัน อาจกดซ้ำ`,det});
+                  }
+
+                  // 3. Suspect calories (>25 or <1 kcal/min)
+                  const suspCal=r30.filter(l=>l.duration>0&&l.calories>0&&(l.calories/l.duration>25||l.calories/l.duration<1));
+                  if(suspCal.length>0){
+                    const det=suspCal.slice(0,2).map(l=>`${l.date} ${l.exercise}: ${l.calories} kcal / ${l.duration} นาที = ${(l.calories/l.duration).toFixed(1)} kcal/นาที`).join(' / ');
+                    anomalies.push({lvl:'warn',msg:`แคลอรี่ผิดสัดส่วน ${suspCal.length} รายการ (ควร 3–20 kcal/นาที)`,det});
+                  }
+
+                  // 4. Duplicate entries (same date + exercise + duration)
+                  const dupMap={}; r30.forEach(l=>{const k=`${l.date}|${l.exercise}|${l.duration}`;dupMap[k]=(dupMap[k]||[]);dupMap[k].push(l);});
+                  const dups=Object.entries(dupMap).filter(([,arr])=>arr.length>1);
+                  if(dups.length>0){
+                    const det=dups.slice(0,2).map(([k,arr])=>{const[d,e,m]=k.split('|');return `${d} ${e} ${m}นาที (×${arr.length})`;}).join(' / ');
+                    anomalies.push({lvl:'error',msg:`พบรายการซ้ำกัน ${dups.length} รายการ`,det});
+                  }
+
+                  // 5. Sudden stop (no entries last 7 days, but active before)
+                  const last7s=thaiDate(new Date(Date.now()-7*86400000));
+                  const recentLogs=r30.filter(l=>l.date>=last7s);
+                  const prevLogs=r30.filter(l=>l.date<last7s);
+                  if(recentLogs.length===0&&prevLogs.length>=5){
+                    const lastE=prevLogs[0];
+                    anomalies.push({lvl:'info',msg:`7 วันล่าสุดไม่มีการบันทึกเลย`,det:`บันทึกล่าสุด: ${lastE?.date} — ${lastE?.exercise} (${lastE?.duration} นาที)`});
+                  }
+
+                  // 6. Zero duration
+                  const zeroDur=r30.filter(l=>!l.duration||l.duration===0);
+                  if(zeroDur.length>0){
+                    const det=zeroDur.slice(0,3).map(l=>`${l.date} ${l.exercise}`).join(' / ');
+                    anomalies.push({lvl:'warn',msg:`${zeroDur.length} รายการไม่ได้กรอกเวลา (0 นาที)`,det});
+                  }
+
+                  // 7. Very short sessions (<5 min and calories logged)
+                  const shortSess=r30.filter(l=>l.duration>0&&l.duration<5&&l.calories>0);
+                  if(shortSess.length>0){
+                    const det=shortSess.slice(0,2).map(l=>`${l.date} ${l.exercise} (${l.duration} นาที ${l.calories} kcal)`).join(' / ');
+                    anomalies.push({lvl:'info',msg:`${shortSess.length} รายการออกน้อยกว่า 5 นาที`,det});
+                  }
+
+                  const lvlStyle={
+                    error:{bg:"#FEE2E2",border:"#FECACA",text:"#991B1B",icon:"❌"},
+                    warn:{bg:"#FEF3C7",border:"#FDE68A",text:"#92400E",icon:"⚠️"},
+                    info:{bg:"#EFF6FF",border:"#BFDBFE",text:"#1E40AF",icon:"ℹ️"},
+                  };
+
+                  // Tips
+                  const tips=[];
+                  if(activeDays<8) tips.push("💡 ลองตั้งเป้าออกกำลังกาย 3 วัน/สัปดาห์ก่อน");
+                  else if(activeDays<15) tips.push("💡 ออกสม่ำเสมอดีแล้ว ลองเพิ่มเป็น 4-5 วัน/สัปดาห์");
+                  if(avgMin<20) tips.push("💡 เพิ่มเวลาเป็น 30 นาที/ครั้ง ตาม WHO guideline");
+                  if(exTypes===1) tips.push(`💡 ออกแต่ ${topEx} ลองเพิ่มความหลากหลาย`);
+                  if(trend>3) tips.push(`💡 แนวโน้มดีขึ้น +${trend} ครั้งใน 2 สัปดาห์หลัง 🎉`);
+                  else if(trend<-3) tips.push(`💡 2 สัปดาห์หลังลดลง ${Math.abs(trend)} ครั้ง ลองหา challenge ใหม่`);
+                  if(streak>=7) tips.push(`💡 streak ${streak} วัน! อย่าลืมพักฟื้นด้วย`);
+                  if(!tips.length) tips.push("💡 ดีมาก! รักษาความสม่ำเสมอและฟังสัญญาณร่างกาย");
+
                   return (
-                    <div className="v2-card" style={{ padding:18, marginBottom:14 }}>
-                      {/* Header + Rating */}
-                      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
-                        <div style={{ fontFamily:"'Prompt'", fontWeight:700, fontSize:13, color:"#374151" }}>📊 วิเคราะห์ 30 วันล่าสุด</div>
-                        <div style={{ display:"flex", alignItems:"center", gap:6, background:rating.c+"18", border:`1px solid ${rating.c}44`, borderRadius:20, padding:"3px 10px" }}>
-                          <span style={{ fontSize:14 }}>{rating.emoji}</span>
-                          <span style={{ fontSize:11, fontWeight:700, color:rating.c }}>{rating.t}</span>
+                    <div className="v2-card" style={{padding:18,marginBottom:14}}>
+
+                      {/* Header */}
+                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+                        <div style={{fontFamily:"'Prompt'",fontWeight:700,fontSize:13,color:"#374151"}}>📊 วิเคราะห์ 30 วันล่าสุด</div>
+                        <div style={{display:"flex",alignItems:"center",gap:6,background:rating.c+"18",border:`1px solid ${rating.c}44`,borderRadius:20,padding:"3px 12px"}}>
+                          <span style={{fontSize:14}}>{rating.emoji}</span>
+                          <span style={{fontSize:11,fontWeight:700,color:rating.c}}>{rating.t}</span>
                         </div>
                       </div>
-                      {/* Summary text */}
-                      <div style={{ background:"#F9FAFB", borderRadius:10, padding:"10px 14px", marginBottom:12 }}>
-                        {behaviorLines.map((line,i)=>(
-                          <div key={i} style={{ fontSize:12, color:"#374151", lineHeight:1.9,
-                            borderBottom:i<behaviorLines.length-1?"1px dashed #E5E7EB":"none",
-                            paddingBottom:i<behaviorLines.length-1?5:0, paddingTop:i>0?5:0 }}>
-                            {line}
+
+                      {/* KPI row */}
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:14}}>
+                        {[
+                          {val:`${activeDays}`,unit:"วัน",label:"ออกกำลังกาย/30วัน",c:"#16A34A"},
+                          {val:`${avgMin}`,unit:"นาที",label:"เฉลี่ย/ครั้ง",c:"#0891B2"},
+                          {val:`${streak}`,unit:"วัน",label:"streak",c:"#7C3AED"},
+                        ].map((k,i)=>(
+                          <div key={i} style={{background:"#F9FAFB",borderRadius:10,padding:"10px 6px",textAlign:"center",border:`1px solid ${k.c}22`}}>
+                            <div style={{fontSize:20,fontWeight:800,color:k.c,lineHeight:1}}>{k.val}<span style={{fontSize:9.5,fontWeight:400,color:"#9CA3AF"}}> {k.unit}</span></div>
+                            <div style={{fontSize:9,color:"#6B7280",marginTop:3}}>{k.label}</div>
                           </div>
                         ))}
                       </div>
-                      {/* Charts row: Weekly + DOW */}
-                      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:12 }}>
-                        {/* Chart 1: Weekly */}
-                        <div style={{ background:"#F9FAFB", borderRadius:10, padding:"10px 8px 8px" }}>
-                          <div style={{ fontSize:10.5, fontWeight:700, color:"#6B7280", marginBottom:8 }}>📈 รายสัปดาห์ (นาที)</div>
-                          <div style={{ display:"flex", alignItems:"flex-end", gap:5, height:72 }}>
-                            {weekData.map((d,i)=>(
-                              <div key={i} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:2, height:"100%" }}>
-                                <div style={{ flex:1, width:"100%", display:"flex", alignItems:"flex-end" }}>
-                                  <div style={{ width:"100%", height:`${Math.max(5,(d.mins/weekMax)*100)}%`,
-                                    background:d.isNow?"linear-gradient(180deg,#16A34A,#22C55E)":"linear-gradient(180deg,#D1FAE5,#A7F3D0)",
-                                    borderRadius:"4px 4px 0 0", border:d.isNow?"1px solid #16A34A44":"none" }} />
-                                </div>
-                                {d.mins>0&&<div style={{ fontSize:8, color:d.isNow?"#16A34A":"#9CA3AF", fontWeight:700 }}>{d.mins}</div>}
-                                <div style={{ fontSize:8, color:d.isNow?"#16A34A":"#9CA3AF", fontWeight:d.isNow?700:400, textAlign:"center", lineHeight:1.2 }}>{d.label}</div>
-                              </div>
-                            ))}
-                          </div>
+
+                      {/* Donut Charts 2-col */}
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
+
+                        <div style={{background:"#F9FAFB",borderRadius:12,padding:"14px 12px",display:"flex",flexDirection:"column",alignItems:"center"}}>
+                          <div style={{fontSize:10.5,fontWeight:700,color:"#6B7280",marginBottom:10,alignSelf:"flex-start"}}>🏋️ สัดส่วนกิจกรรม</div>
+                          <DonutChart segments={exSegs} cols={ECOLS} size={104} thick={7}
+                            centerVal={`${exTypes}`} centerLabel="ประเภท"/>
+                          <Legend segments={exSegs} cols={ECOLS}/>
                         </div>
-                        {/* Chart 2: DOW */}
-                        <div style={{ background:"#F9FAFB", borderRadius:10, padding:"10px 8px 8px" }}>
-                          <div style={{ fontSize:10.5, fontWeight:700, color:"#6B7280", marginBottom:8 }}>📅 วันที่ active</div>
-                          <div style={{ display:"flex", alignItems:"flex-end", gap:2, height:72 }}>
-                            {dowTH.map((day,i)=>{
-                              const isTop=dowCnt[i]===Math.max(...dowCnt)&&dowCnt[i]>0;
-                              return (
-                                <div key={i} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:2, height:"100%" }}>
-                                  <div style={{ flex:1, width:"100%", display:"flex", alignItems:"flex-end" }}>
-                                    <div style={{ width:"100%", height:`${Math.max(5,(dowCnt[i]/dowMax)*100)}%`,
-                                      background:isTop?"linear-gradient(180deg,#7C3AED,#A78BFA)":dowCnt[i]>0?"linear-gradient(180deg,#E9D5FF,#DDD6FE)":"#F3F4F6",
-                                      borderRadius:"3px 3px 0 0" }} />
-                                  </div>
-                                  {dowCnt[i]>0&&<div style={{ fontSize:7.5, color:isTop?"#7C3AED":"#9CA3AF", fontWeight:700 }}>{dowCnt[i]}</div>}
-                                  <div style={{ fontSize:8, color:isTop?"#7C3AED":"#9CA3AF", fontWeight:isTop?700:400 }}>{day}</div>
-                                </div>
-                              );
-                            })}
-                          </div>
+
+                        <div style={{background:"#F9FAFB",borderRadius:12,padding:"14px 12px",display:"flex",flexDirection:"column",alignItems:"center"}}>
+                          <div style={{fontSize:10.5,fontWeight:700,color:"#6B7280",marginBottom:10,alignSelf:"flex-start"}}>📅 วันที่ออกบ่อย</div>
+                          <DonutChart segments={dowSegs} cols={DCOLS} size={104} thick={7}
+                            centerVal={`วัน${dowTH[bestDowIdx]}`} centerLabel="บ่อยสุด"/>
+                          <Legend segments={dowSegs} cols={DCOLS}/>
+                        </div>
+
+                      </div>
+
+                      {/* Weekly bar */}
+                      <div style={{background:"#F9FAFB",borderRadius:12,padding:"12px 14px",marginBottom:12}}>
+                        <div style={{fontSize:10.5,fontWeight:700,color:"#6B7280",marginBottom:10}}>📈 แนวโน้มรายสัปดาห์</div>
+                        <div style={{display:"flex",alignItems:"flex-end",gap:8,height:64}}>
+                          {weekData.map((d,i)=>(
+                            <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:3,height:"100%"}}>
+                              <div style={{flex:1,width:"100%",display:"flex",alignItems:"flex-end"}}>
+                                <div style={{width:"100%",height:`${Math.max(4,(d.mins/weekMax)*100)}%`,
+                                  background:d.isNow?"linear-gradient(180deg,#16A34A,#4ADE80)":"#D1FAE5",
+                                  borderRadius:"5px 5px 0 0",
+                                  boxShadow:d.isNow?"0 -2px 6px #16A34A44":"none"}}/>
+                              </div>
+                              {d.mins>0&&<div style={{fontSize:8,color:d.isNow?"#16A34A":"#9CA3AF",fontWeight:700}}>{d.mins}น.</div>}
+                              <div style={{fontSize:8.5,color:d.isNow?"#16A34A":"#9CA3AF",fontWeight:d.isNow?700:400,textAlign:"center",lineHeight:1.2}}>{d.label}</div>
+                            </div>
+                          ))}
                         </div>
                       </div>
-                      {/* Chart 3: Top exercises */}
-                      {topExes.length>0&&(
-                        <div style={{ background:"#F9FAFB", borderRadius:10, padding:"10px 14px", marginBottom:12 }}>
-                          <div style={{ fontSize:10.5, fontWeight:700, color:"#6B7280", marginBottom:8 }}>🏋️ กิจกรรมยอดนิยม (ครั้ง)</div>
-                          <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-                            {topExes.map(([ex,cnt],i)=>(
-                              <div key={ex}>
-                                <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, color:"#374151", marginBottom:3 }}>
-                                  <span>{ex}</span><span style={{ fontWeight:700, color:ECOLS[i] }}>{cnt}</span>
-                                </div>
-                                <div style={{ height:7, background:"#E5E7EB", borderRadius:4, overflow:"hidden" }}>
-                                  <div style={{ height:"100%", width:`${Math.round((cnt/exMax)*100)}%`,
-                                    background:ECOLS[i], borderRadius:4 }} />
-                                </div>
+
+                      {/* Anomaly */}
+                      {anomalies.length>0&&(
+                        <div style={{marginBottom:12}}>
+                          <div style={{fontSize:10.5,fontWeight:700,color:"#374151",marginBottom:6}}>🔍 ความผิดปกติที่ตรวจพบ</div>
+                          {anomalies.map((a,i)=>{
+                            const s=lvlStyle[a.lvl];
+                            return (
+                              <div key={i} style={{background:s.bg,border:`1px solid ${s.border}`,borderRadius:9,padding:"7px 10px",marginBottom:5}}>
+                                <div style={{fontSize:11,fontWeight:600,color:s.text,lineHeight:1.5}}>{s.icon} {a.msg}</div>
+                                {a.det&&<div style={{fontSize:9.5,color:s.text,opacity:0.8,marginTop:3,lineHeight:1.5,fontStyle:"italic"}}>{a.det}</div>}
                               </div>
-                            ))}
-                          </div>
+                            );
+                          })}
                         </div>
                       )}
+                      {anomalies.length===0&&(
+                        <div style={{background:"#F0FDF4",border:"1px solid #BBF7D0",borderRadius:9,padding:"7px 10px",marginBottom:12,fontSize:11,color:"#166534"}}>
+                          ✅ ไม่พบข้อมูลผิดปกติใน 30 วันที่ผ่านมา
+                        </div>
+                      )}
+
                       {/* Tips */}
-                      <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                      <div style={{display:"flex",flexDirection:"column",gap:6}}>
                         {tips.map((tip,i)=>(
-                          <div key={i} style={{ fontSize:11.5, color:"#1E40AF", background:"#EFF6FF", border:"1px solid #BFDBFE", borderRadius:8, padding:"7px 10px", lineHeight:1.6 }}>{tip}</div>
+                          <div key={i} style={{fontSize:11.5,color:"#1E40AF",background:"#EFF6FF",border:"1px solid #BFDBFE",borderRadius:8,padding:"7px 10px",lineHeight:1.6}}>{tip}</div>
                         ))}
                       </div>
+
                     </div>
                   );
                 })()}
+
 
                 {/* ── Calendar ── */}
                 {(()=>{
