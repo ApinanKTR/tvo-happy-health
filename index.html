@@ -17,11 +17,12 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
   body{margin:0;padding:0;background:#F0FDF4}
-  /* Rank frame CSS — ใช้ outline (ไม่ถูก overflow:hidden clip) */
-  .rnk-1,.rnk-2,.rnk-3{outline-style:solid;outline-offset:2px}
+  /* ── Rank frame CSS — outline ไม่ถูก overflow:hidden clip ── */
+  .rnk-1,.rnk-2,.rnk-3,.rnk-4,.rnk-5{outline-style:solid;outline-offset:2px}
   .rnk-1{border:3px solid #F59E0B!important;outline-width:3px;outline-color:#F59E0B;animation:goldGlow 1.8s ease-in-out infinite}
   .rnk-2{border:2.5px solid #C0C0C0!important;outline-width:2.5px;outline-color:#C0C0C0;animation:silverShine 2.2s ease-in-out infinite}
-  .rnk-3{border:2.5px solid #CD7F32!important;outline-width:2px;outline-color:#CD7F32;animation:bronzeGlow 2.5s ease-in-out infinite}
+  .rnk-3{border:2.5px solid #E8711A!important;outline-width:2px;outline-color:#E8711A;animation:bronzeGlow 2.5s ease-in-out infinite}
+  .rnk-4,.rnk-5,.rnk-6,.rnk-7,.rnk-8,.rnk-9,.rnk-10{border:2px solid #06B6D4!important;outline-style:solid;outline-width:2px;outline-color:#06B6D4;outline-offset:1px;animation:tealPulse 3s ease-in-out infinite}
   @keyframes goldGlow{
     0%,100%{outline-color:#F59E0B;outline-offset:2px}
     50%{outline-color:#FEF3C7;outline-offset:5px}
@@ -31,8 +32,12 @@
     50%{outline-color:#F1F5F9;outline-offset:4px}
   }
   @keyframes bronzeGlow{
-    0%,100%{outline-color:#CD7F32;outline-offset:2px}
-    50%{outline-color:#DEB887;outline-offset:4px}
+    0%,100%{outline-color:#E8711A;outline-offset:2px}
+    50%{outline-color:#FED7AA;outline-offset:4px}
+  }
+  @keyframes tealPulse{
+    0%,100%{outline-color:#06B6D4;outline-offset:1px}
+    50%{outline-color:#CFFAFE;outline-offset:3px}
   }
 </style>
   <script>
@@ -988,11 +993,11 @@ const handleRegister = async () => {
     const map={}, byGrp={};
     userStats.forEach(u=>{ (byGrp[u.group]=byGrp[u.group]||[]).push(u); });
     Object.values(byGrp).forEach(arr=>{
-      [...arr].sort((a,b)=>b.totalCal-a.totalCal).forEach((m,i)=>{ if(i<3) map[m.user]=i; });
+      [...arr].sort((a,b)=>b.totalCal-a.totalCal).forEach((m,i)=>{ if(i<10) map[m.user]=i; });
     });
     return map;
   })();
-  const rankClass = r => r===0?"rnk-1":r===1?"rnk-2":r===2?"rnk-3":"";
+  const rankClass = r => r===0?"rnk-1":r===1?"rnk-2":r===2?"rnk-3":(r>=3&&r<=9)?"rnk-4":"";
 
   const maxGroupCal = Math.max(1, ...groupStats.map(g => g.totalCal));
   const maxUserCal = Math.max(1, ...userStats.map(u => u.totalCal));
@@ -1576,8 +1581,8 @@ const handleRegister = async () => {
                   <div key={log.id} className="v2-card" style={{ padding:"14px 16px", borderLeft:`4px solid ${color}` }}>
                     <div style={{ display:"flex", alignItems:"center", gap:12 }}>
                       {/* Profile avatar (แทน exercise icon) */}
-                      <div onClick={()=>{ setProfileUser(log.user); setProfileFilter("all"); setActiveTab("profile"); }} style={{ width:44, height:44, borderRadius:"50%", overflow:"hidden", flexShrink:0, border:`2px solid ${color}55`, background:`${color}18`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, cursor:"pointer" }}>
-                        {logAv?<img src={logAv} style={{ width:"100%", height:"100%", objectFit:"cover" }} alt="" />:<span>👤</span>}
+                      <div onClick={()=>{ setProfileUser(log.user); setProfileFilter("all"); setActiveTab("profile"); }} className={rankClass(groupRankMap[log.user])} style={{ width:44, height:44, borderRadius:"50%", flexShrink:0, background:`${color}18`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, cursor:"pointer", ...(!groupRankMap[log.user]&&groupRankMap[log.user]!==0?{border:`2px solid ${color}55`}:{}) }}>
+                        {logAv?<img src={logAv} style={{ width:44, height:44, objectFit:"cover", borderRadius:"50%", display:"block" }} alt="" />:<span>👤</span>}
                       </div>
                       {/* Info */}
                       <div style={{ flex:1, minWidth:0 }}>
