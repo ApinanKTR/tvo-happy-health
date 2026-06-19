@@ -15,7 +15,26 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <style>body{margin:0;padding:0;background:#F0FDF4}</style>
+  <style>
+  body{margin:0;padding:0;background:#F0FDF4}
+  /* Rank frame CSS — ใช้ outline (ไม่ถูก overflow:hidden clip) */
+  .rnk-1,.rnk-2,.rnk-3{outline-style:solid;outline-offset:2px}
+  .rnk-1{border:3px solid #F59E0B!important;outline-width:3px;outline-color:#F59E0B;animation:goldGlow 1.8s ease-in-out infinite}
+  .rnk-2{border:2.5px solid #C0C0C0!important;outline-width:2.5px;outline-color:#C0C0C0;animation:silverShine 2.2s ease-in-out infinite}
+  .rnk-3{border:2.5px solid #CD7F32!important;outline-width:2px;outline-color:#CD7F32;animation:bronzeGlow 2.5s ease-in-out infinite}
+  @keyframes goldGlow{
+    0%,100%{outline-color:#F59E0B;outline-offset:2px}
+    50%{outline-color:#FEF3C7;outline-offset:5px}
+  }
+  @keyframes silverShine{
+    0%,100%{outline-color:#C0C0C0;outline-offset:2px}
+    50%{outline-color:#F1F5F9;outline-offset:4px}
+  }
+  @keyframes bronzeGlow{
+    0%,100%{outline-color:#CD7F32;outline-offset:2px}
+    50%{outline-color:#DEB887;outline-offset:4px}
+  }
+</style>
   <script>
   /* ── Auto-update detector — HEAD request only (0 bytes body) ── */
   (function(){
@@ -964,10 +983,21 @@ const handleRegister = async () => {
     acc[l.user].totalCal += l.calories; acc[l.user].sessions++; return acc;
   }, {})).sort((a, b) => b.totalCal - a.totalCal);
 
+  // กรอบ avatar ตามอันดับในกลุ่ม
+  const groupRankMap = (()=>{
+    const map={}, byGrp={};
+    userStats.forEach(u=>{ (byGrp[u.group]=byGrp[u.group]||[]).push(u); });
+    Object.values(byGrp).forEach(arr=>{
+      [...arr].sort((a,b)=>b.totalCal-a.totalCal).forEach((m,i)=>{ if(i<3) map[m.user]=i; });
+    });
+    return map;
+  })();
+  const rankClass = r => r===0?"rnk-1":r===1?"rnk-2":r===2?"rnk-3":"";
+
   const maxGroupCal = Math.max(1, ...groupStats.map(g => g.totalCal));
   const maxUserCal = Math.max(1, ...userStats.map(u => u.totalCal));
   const grpLabel = g => g?.trim() || "";
-  const medalColors = ["#4ADE80", "#C0C0C0", "#CD7F32"];
+  const medalColors = ["#F59E0B", "#C0C0C0", "#CD7F32"]; // gold/silver/bronze
 
   const profileUserData = userStats.find(u => u.user === profileUser);
   const profileLogs = profileUser ? logs.filter(l => l.user === profileUser && (profileFilter === "all" || l.exercise === profileFilter)) : [];
@@ -1779,7 +1809,7 @@ const handleRegister = async () => {
                   )}
                   <div style={{ position:"relative" }}>
                     {avatars[profileUser]
-                      ?<img src={avatars[profileUser]} style={{ width:60, height:60, borderRadius:"50%", objectFit:"cover", border:"3px solid #22C55E", boxShadow:"0 4px 16px #16A34A30" }} alt="av" />
+                      ?<img src={avatars[profileUser]} className={rankClass(groupRankMap[profileUser])} style={{ width:60, height:60, borderRadius:"50%", objectFit:"cover", ...(groupRankMap[profileUser]!==undefined?{}:{border:"3px solid #22C55E", boxShadow:"0 4px 16px #16A34A30"}) }} alt="av" />
                       :<div style={{ width:60, height:60, borderRadius:"50%", background:"linear-gradient(135deg,#16A34A,#4ADE80)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:28, boxShadow:"0 4px 16px #16A34A25" }}>👤</div>}
                   </div>
                   <div>
@@ -2463,8 +2493,8 @@ const handleRegister = async () => {
                   <div key={u.user} className="v2-card v2-card-hover" style={{ padding:"13px 16px", marginBottom:9, display:"flex", alignItems:"center", gap:12, cursor:"pointer" }}
                     onClick={()=>{ setProfileUser(u.user); setProfileFilter("all"); setActiveTab("profile"); }}>
                     <div style={{ width:28, textAlign:"center", fontFamily:"'Prompt'", fontWeight:800, fontSize:15, color:i<3?["#F59E0B","#9CA3AF","#CD7F32"][i]:"#D1D5DB" }}>{i<3?["🥇","🥈","🥉"][i]:`#${i+1}`}</div>
-                    <div style={{ width:42, height:42, borderRadius:"50%", overflow:"hidden", border:`2.5px solid ${color}55`, flexShrink:0, background:color+"18", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                      {av?<img src={av} style={{ width:"100%", height:"100%", objectFit:"cover" }} alt="" />:<span style={{ fontSize:19 }}>👤</span>}
+                    <div className={rankClass(groupRankMap[u.user])} style={{ width:42, height:42, borderRadius:"50%", flexShrink:0, background:color+"18", display:"flex", alignItems:"center", justifyContent:"center", ...(!groupRankMap[u.user]&&groupRankMap[u.user]!==0?{border:`2.5px solid ${color}55`}:{}) }}>
+                      {av?<img src={av} style={{ width:42, height:42, objectFit:"cover", borderRadius:"50%", display:"block" }} alt="" />:<span style={{ fontSize:19 }}>👤</span>}
                     </div>
                     <div style={{ flex:1, minWidth:0 }}>
                       <div style={{ display:"flex", alignItems:"center", gap:7, marginBottom:5, flexWrap:"wrap" }}>
@@ -2509,8 +2539,8 @@ const handleRegister = async () => {
                       <div key={u.user} onClick={()=>{ setProfileUser(u.user); setProfileFilter("all"); setActiveTab("profile"); }}
                         style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", cursor:"pointer" }}>
                         {rankAv
-                          ?<img src={rankAv} style={{ width:40, height:40, borderRadius:"50%", objectFit:"cover", border:`2.5px solid ${mc}`, marginBottom:4, flexShrink:0 }} alt="av" />
-                          :<div style={{ width:40, height:40, borderRadius:"50%", background:mc+"22", border:`2.5px solid ${mc}`, marginBottom:4, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18 }}>👤</div>}
+                          ?<img src={rankAv} className={rankClass(groupRankMap[u.user])} style={{ width:40, height:40, borderRadius:"50%", objectFit:"cover", marginBottom:4, flexShrink:0, ...(!groupRankMap[u.user]&&groupRankMap[u.user]!==0?{border:`2.5px solid ${mc}`}:{}) }} alt="av" />
+                          :<div className={rankClass(groupRankMap[u.user])} style={{ width:40, height:40, borderRadius:"50%", background:mc+"22", marginBottom:4, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, ...(!groupRankMap[u.user]&&groupRankMap[u.user]!==0?{border:`2.5px solid ${mc}`}:{}) }}>👤</div>}
                         <div style={{ fontSize:11, fontFamily:"'Prompt'", fontWeight:700, color:mc, marginBottom:2, textAlign:"center", width:"100%", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", padding:"0 4px" }}>{profileIconMap[u.user]&&<span style={{ marginRight:2 }}>{profileIconMap[u.user]}</span>}<WiggleName name={u.user} icon={profileIconMap[u.user]} /></div>
                         <div style={{ fontSize:10, color:"#6B7280", marginBottom:6, textAlign:"center", fontWeight:600 }}>{u.totalCal.toLocaleString()}</div>
                         <div style={{ width:"100%", height:barH, background:`linear-gradient(180deg,${mc}30,${mc}10)`, border:`1.5px solid ${mc}44`, borderRadius:"10px 10px 0 0", display:"flex", alignItems:"flex-start", justifyContent:"center", paddingTop:10 }}>
