@@ -83,7 +83,7 @@
       Object.assign(document.getElementById('upd-x').style,
         {background:'none',border:'none',color:'#93C5FD',
          cursor:'pointer',fontSize:'16px',lineHeight:'1'});
-      document.getElementById('upd-ok').onclick = () => location.reload();
+      document.getElementById('upd-ok').onclick = () => { const u=location.href.split('?')[0]+'?_t='+Date.now(); location.replace(u); };
       document.getElementById('upd-x').onclick  = () => b.remove();
     };
 
