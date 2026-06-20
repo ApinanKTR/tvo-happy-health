@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html lang="th">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="theme-color" content="#16A34A" />
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="theme-color" content="#16A34A"/>
   <title>Calories Charity — TVO Happy Health</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
@@ -24,26 +24,30 @@
     .prog-wrap{max-width:900px;margin:14px auto 0;padding:0 14px}
     .prog-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px}
     .prog-top span{font-size:12px;font-weight:700}
-    .prog-bar{background:#E5E7EB;border-radius:99px;height:16px;overflow:hidden}
+    .prog-bar{background:#E5E7EB;border-radius:99px;height:16px;overflow:hidden;position:relative}
     .prog-fill{height:100%;background:linear-gradient(90deg,#16A34A,#22c55e,#86efac);border-radius:99px;transition:width 1.8s cubic-bezier(.22,.61,.36,1);min-width:2px}
-    .prog-labels{display:flex;justify-content:space-between;font-size:10px;color:#9CA3AF;margin-top:5px}
+    .prog-ms{position:absolute;top:0;height:100%;display:flex;align-items:center;pointer-events:none}
+    .prog-ms-dot{width:3px;height:100%;background:rgba(255,255,255,.55)}
     .infobx{max-width:960px;margin:16px auto 0;padding:0 14px}
     svg.ig{width:100%;display:block;border-radius:16px}
-    .footnote{text-align:center;font-size:11px;color:#9CA3AF;padding:12px 16px 32px;line-height:1.6}
-    .rbtn{background:#F0FDF4;border:1px solid #D1FAE5;color:#16A34A;font-size:11px;font-weight:700;padding:4px 12px;border-radius:99px;cursor:pointer;margin-left:6px}
     .loader{text-align:center;padding:60px 20px;font-size:14px;color:#6B7280}
-
-    /* ── Animations ── */
-    @keyframes bob{0%,100%{transform:translateY(0px)}50%{transform:translateY(-5px)}}
-    @keyframes smokeUp{0%{opacity:.7;transform:translate(0,0) scale(1)}100%{opacity:0;transform:translate(3px,-26px) scale(1.8)}}
-    @keyframes legsA{0%,49%{opacity:1}50%,100%{opacity:0}}
-    @keyframes legsB{0%,49%{opacity:0}50%,100%{opacity:1}}
-    .grape-body{animation:bob .48s ease-in-out infinite;transform-box:fill-box;transform-origin:center bottom}
-    .sk1{animation:smokeUp 2s ease-out infinite;transform-box:fill-box;transform-origin:center bottom}
-    .sk2{animation:smokeUp 2s ease-out .67s infinite;transform-box:fill-box;transform-origin:center bottom}
-    .sk3{animation:smokeUp 2s ease-out 1.34s infinite;transform-box:fill-box;transform-origin:center bottom}
-    .la{animation:legsA .4s steps(1,end) infinite}
-    .lb{animation:legsB .4s steps(1,end) infinite}
+    .rbtn{background:#F0FDF4;border:1px solid #D1FAE5;color:#16A34A;font-size:11px;font-weight:700;padding:4px 12px;border-radius:99px;cursor:pointer;margin-left:6px}
+    .footnote{text-align:center;font-size:11px;color:#9CA3AF;padding:12px 16px 32px;line-height:1.6}
+    @keyframes smokeRing{0%{r:10px;opacity:.55}100%{r:26px;opacity:0}}
+    @keyframes msGlowRing{0%,100%{opacity:.6;stroke-width:3}50%{opacity:0;stroke-width:8}}
+    @keyframes grapeHop{0%,100%{transform:scale(1)}50%{transform:scale(1.07)}}
+    .smoke-a{animation:smokeRing 2.2s ease-out infinite;fill:none;transform-box:fill-box;transform-origin:center}
+    .smoke-b{animation:smokeRing 2.2s ease-out .7s infinite;fill:none;transform-box:fill-box;transform-origin:center}
+    .smoke-c{animation:smokeRing 2.2s ease-out 1.4s infinite;fill:none;transform-box:fill-box;transform-origin:center}
+    .grape-hop{animation:grapeHop .6s ease-in-out infinite;transform-box:fill-box;transform-origin:center}
+    .lb-wrap{max-width:900px;margin:14px auto 0;padding:0 14px 4px}
+    .lb-hd{font-size:13px;font-weight:800;color:#374151;margin-bottom:10px;padding:0 2px}
+    .lb-row{display:flex;align-items:center;gap:10px;margin-bottom:7px;background:#fff;border-radius:14px;padding:10px 14px;box-shadow:0 1px 8px rgba(0,0,0,.06)}
+    .lb-rank{font-size:17px;width:26px;text-align:center;flex-shrink:0}
+    .lb-name{font-size:12px;font-weight:700;color:#1F2937;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+    .lb-bar-bg{flex:2;background:#F3F4F6;border-radius:99px;height:8px;overflow:hidden;min-width:60px}
+    .lb-bar-fill{height:100%;border-radius:99px;background:linear-gradient(90deg,#16A34A,#22c55e);width:0;transition:width 1.4s cubic-bezier(.22,.61,.36,1)}
+    .lb-val{font-size:11px;font-weight:700;color:#16A34A;white-space:nowrap;min-width:54px;text-align:right}
   </style>
 </head>
 <body>
@@ -69,326 +73,293 @@
       <span style="color:#16A34A">ความคืบหน้า</span>
       <span style="color:#374151" id="v-pct">0%</span>
     </div>
-    <div class="prog-bar"><div class="prog-fill" id="prog" style="width:0%"></div></div>
-    <div class="prog-labels">
-      <span>🏭 โรงงาน TVO</span>
-      <span>🌉 5,000 ฿</span>
-      <span>🏥 โรงพยาบาล</span>
+    <div class="prog-bar">
+      <div class="prog-fill" id="prog" style="width:0%"></div>
+      <div class="prog-ms" style="left:25%"><div class="prog-ms-dot"></div></div>
+      <div class="prog-ms" style="left:50%"><div class="prog-ms-dot"></div></div>
+      <div class="prog-ms" style="left:75%"><div class="prog-ms-dot"></div></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:10px;color:#9CA3AF;margin-top:5px;padding:0 2px">
+      <span>🏭 โรงงาน TVO</span><span>🌉 5,000 ฿</span><span>🏥 โรงพยาบาล</span>
     </div>
   </div>
 
-  <!-- ═══════════════ 3D INFOGRAPHIC ═══════════════ -->
   <div class="infobx">
-  <svg class="ig" viewBox="0 0 900 540" xmlns="http://www.w3.org/2000/svg" id="ig" role="img">
-    <title>Calories Charity Infographic 3D</title>
+  <svg class="ig" viewBox="0 0 900 540" xmlns="http://www.w3.org/2000/svg" role="img">
+    <title>Calories Charity Bird Eye View Map</title>
     <defs>
-      <linearGradient id="skyG" x1="0" y1="0" x2="0" y2="1">
+      <radialGradient id="fieldG" cx="50%" cy="50%" r="70%">
+        <stop offset="0%" stop-color="#4ADE80"/>
+        <stop offset="100%" stop-color="#16A34A"/>
+      </radialGradient>
+      <linearGradient id="riverG" x1="0" y1="0" x2="1" y2="0">
         <stop offset="0%" stop-color="#7DD3FC"/>
-        <stop offset="100%" stop-color="#BFDBFE"/>
+        <stop offset="40%" stop-color="#38BDF8"/>
+        <stop offset="100%" stop-color="#7DD3FC"/>
       </linearGradient>
-      <linearGradient id="riverG" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stop-color="#7DD3FC"/>
-        <stop offset="100%" stop-color="#38BDF8"/>
+      <linearGradient id="siloG" cx="35%" cy="35%" r="60%" id="siloRG" gradientUnits="objectBoundingBox">
+        <stop offset="0%" stop-color="#D1D5DB"/>
+        <stop offset="100%" stop-color="#6B7280"/>
       </linearGradient>
+      <filter id="bldShadow" x="-10%" y="-10%" width="130%" height="130%">
+        <feDropShadow dx="8" dy="8" stdDeviation="6" flood-color="#000" flood-opacity="0.28"/>
+      </filter>
+      <filter id="softShadow" x="-20%" y="-20%" width="150%" height="150%">
+        <feDropShadow dx="4" dy="4" stdDeviation="4" flood-opacity="0.2"/>
+      </filter>
+      <clipPath id="leftClip"><rect x="0" y="0" width="190" height="540"/></clipPath>
+      <clipPath id="rightClip"><rect x="710" y="0" width="190" height="540"/></clipPath>
     </defs>
 
-    <!-- ── SKY ── -->
-    <rect width="900" height="295" fill="url(#skyG)" rx="16"/>
+    <!-- ===== GROUND ===== -->
+    <rect width="900" height="540" fill="url(#fieldG)" rx="14"/>
+    <ellipse cx="350" cy="130" rx="140" ry="70" fill="#86EFAC" opacity=".28"/>
+    <ellipse cx="560" cy="400" rx="130" ry="60" fill="#86EFAC" opacity=".25"/>
+    <ellipse cx="450" cy="500" rx="110" ry="45" fill="#22c55e" opacity=".2"/>
+    <ellipse cx="150" cy="420" rx="80" ry="40" fill="#22c55e" opacity=".18"/>
+    <ellipse cx="760" cy="120" rx="90" ry="45" fill="#86EFAC" opacity=".22"/>
 
-    <!-- Sun -->
-    <circle cx="832" cy="58" r="32" fill="#FDE68A" opacity=".9"/>
-    <circle cx="832" cy="58" r="25" fill="#FCD34D"/>
-    <g stroke="#FDE68A" stroke-width="2" stroke-linecap="round" opacity=".55">
-      <line x1="832" y1="16" x2="832" y2="8"/><line x1="832" y1="100" x2="832" y2="108"/>
-      <line x1="790" y1="58" x2="782" y2="58"/><line x1="874" y1="58" x2="882" y2="58"/>
-      <line x1="802" y1="28" x2="796" y2="22"/><line x1="862" y1="88" x2="868" y2="94"/>
-      <line x1="862" y1="28" x2="868" y2="22"/><line x1="802" y1="88" x2="796" y2="94"/>
-    </g>
+    <!-- ===== FACTORY COMPOUND (left strip) ===== -->
+    <rect x="0" y="0" width="192" height="540" fill="#D9F7BE" opacity=".18" rx="4"/>
+    <rect x="708" y="0" width="192" height="540" fill="#EFF6FF" opacity=".22" rx="4"/>
 
-    <!-- Clouds -->
-    <g opacity=".85">
-      <ellipse cx="188" cy="62" rx="52" ry="24" fill="white"/>
-      <ellipse cx="224" cy="50" rx="38" ry="22" fill="white"/>
-      <ellipse cx="158" cy="56" rx="32" ry="19" fill="white"/>
-    </g>
-    <g opacity=".7">
-      <ellipse cx="554" cy="75" rx="44" ry="20" fill="white"/>
-      <ellipse cx="586" cy="63" rx="32" ry="18" fill="white"/>
-      <ellipse cx="528" cy="68" rx="28" ry="15" fill="white"/>
-    </g>
+    <!-- ===== FACTORY 45deg single building (smaller) ===== -->
+    <!-- Ground pavement -->
+    <rect x="5" y="316" width="130" height="18" fill="#D1D5DB"/>
+    <!-- Access lane to road -->
+    <rect x="100" y="202" width="90" height="14" fill="#B45309" opacity=".5"/>
+    <rect x="100" y="206" width="90" height="6" fill="#FCD34D" opacity=".4"/>
 
-    <!-- Background hills -->
-    <ellipse cx="450" cy="296" rx="380" ry="50" fill="#4ADE80" opacity=".38"/>
-    <ellipse cx="180" cy="298" rx="220" ry="42" fill="#22c55e" opacity=".32"/>
-    <ellipse cx="730" cy="296" rx="240" ry="40" fill="#22c55e" opacity=".28"/>
+    <!-- Chimney 1 (left) side + front + top -->
+    <polygon points="46,180 52,176 52,205 46,210" fill="#374151"/>
+    <rect x="38" y="180" width="8" height="30" fill="#4B5563"/>
+    <ellipse cx="42" cy="180" rx="5" ry="2.5" fill="#6B7280"/>
+    <!-- Smoke rings ch1 -->
+    <circle class="smoke-a" cx="42" cy="174" r="4" fill="none" stroke="#9CA3AF" stroke-width="1.5"/>
+    <circle class="smoke-b" cx="42" cy="174" r="4" fill="none" stroke="#9CA3AF" stroke-width="1.5"/>
+    <circle class="smoke-c" cx="42" cy="174" r="4" fill="none" stroke="#9CA3AF" stroke-width="1.5"/>
 
-    <!-- ── GROUND (perspective trapezoid) ── -->
-    <polygon points="0,540 900,540 762,292 138,292" fill="#4ADE80"/>
-    <!-- Ground shading bands -->
-    <polygon points="0,540 900,540 762,400 138,400" fill="#22c55e" opacity=".28"/>
-    <polygon points="0,540 900,540 762,460 138,460" fill="#16A34A" opacity=".15"/>
-    <!-- Perspective lines on ground -->
-    <g stroke="#16A34A" stroke-width=".6" opacity=".18">
-      <line x1="138" y1="292" x2="0" y2="420"/>
-      <line x1="260" y1="292" x2="80" y2="480"/>
-      <line x1="400" y1="292" x2="220" y2="540"/>
-      <line x1="540" y1="292" x2="460" y2="540"/>
-      <line x1="660" y1="292" x2="680" y2="540"/>
-      <line x1="762" y1="292" x2="900" y2="420"/>
-    </g>
+    <!-- Chimney 2 (right) side + front + top -->
+    <polygon points="66,184 71,181 71,205 66,210" fill="#374151"/>
+    <rect x="59" y="184" width="7" height="26" fill="#4B5563"/>
+    <ellipse cx="62" cy="184" rx="4.5" ry="2" fill="#6B7280"/>
+    <!-- Smoke rings ch2 -->
+    <circle class="smoke-a" cx="62" cy="178" r="4" fill="none" stroke="#9CA3AF" stroke-width="1.5" style="animation-delay:.4s"/>
+    <circle class="smoke-b" cx="62" cy="178" r="4" fill="none" stroke="#9CA3AF" stroke-width="1.5" style="animation-delay:.4s"/>
+    <circle class="smoke-c" cx="62" cy="178" r="4" fill="none" stroke="#9CA3AF" stroke-width="1.5" style="animation-delay:.4s"/>
 
-    <!-- ── RIVER (perspective band) ── -->
-    <polygon points="398,540 578,540 550,310 426,310" fill="url(#riverG)" opacity=".92"/>
-    <!-- Shimmer -->
-    <line x1="464" y1="510" x2="450" y2="360" stroke="white" stroke-width="4" opacity=".22" stroke-linecap="round"/>
-    <line x1="498" y1="505" x2="486" y2="370" stroke="white" stroke-width="2.5" opacity=".18" stroke-linecap="round"/>
-    <line x1="434" y1="495" x2="424" y2="365" stroke="white" stroke-width="2" opacity=".15" stroke-linecap="round"/>
-    <!-- River banks -->
-    <line x1="398" y1="540" x2="426" y2="310" stroke="#0284C7" stroke-width="2" opacity=".4"/>
-    <line x1="578" y1="540" x2="550" y2="310" stroke="#0284C7" stroke-width="2" opacity=".4"/>
-
-    <!-- ── ROAD (3D ribbon, drawn before bridge/buildings) ── -->
-    <!-- Road side/shadow (near edge depth) -->
-    <path d="M 114,492 C 198,456 296,422 402,395 C 492,373 562,372 624,360 C 702,344 750,323 802,304
-             L 802,294 C 750,313 702,334 624,350 C 562,362 492,363 402,385 C 296,412 198,446 114,482 Z"
-          fill="#92400E" opacity=".3"/>
-    <!-- Road surface (amber/brown) -->
-    <path d="M 114,482 C 198,446 296,412 402,385 C 492,363 562,362 624,350 C 702,334 750,313 802,294
-             L 802,279 C 750,298 702,319 624,335 C 562,347 492,348 402,370 C 296,397 198,431 114,467 Z"
-          fill="#D97706"/>
-    <!-- Road lighter surface -->
-    <path d="M 114,474 C 198,438 296,404 402,377 C 492,355 562,354 624,342 C 702,326 750,305 802,286
-             L 802,279 C 750,298 702,319 624,335 C 562,347 492,348 402,370 C 296,397 198,431 114,467 Z"
-          fill="#FBBF24" opacity=".65"/>
-    <!-- Road center dashes -->
-    <path id="roadpath"
-          d="M 114,474 C 198,438 296,404 402,377 C 492,356 562,355 624,343 C 702,327 750,306 802,287"
-          stroke="white" stroke-width="2.5" fill="none" stroke-dasharray="14 10" opacity=".8" stroke-linecap="round"/>
-    <!-- Road edges -->
-    <path d="M 114,482 C 198,446 296,412 402,385 C 492,363 562,362 624,350 C 702,334 750,313 802,294"
-          stroke="#92400E" stroke-width="1.5" fill="none" opacity=".5"/>
-    <path d="M 114,467 C 198,431 296,397 402,370 C 492,348 562,347 624,335 C 702,319 750,298 802,279"
-          stroke="#92400E" stroke-width="1" fill="none" opacity=".35"/>
-
-    <!-- ── BRIDGE (over river) ── -->
-    <!-- Bridge deck top -->
-    <polygon points="406,398 556,380 548,366 398,384" fill="#A8A29E"/>
-    <!-- Bridge deck near face (depth) -->
-    <polygon points="406,398 556,380 556,390 406,408" fill="#78716C"/>
-    <!-- Road surface on bridge -->
-    <polygon points="408,395 553,377 547,367 402,385" fill="#FBBF24" opacity=".8"/>
-
-    <!-- Left tower 3D -->
-    <polygon points="416,398 428,398 428,342 416,342" fill="#57534E"/>
-    <polygon points="428,398 440,391 440,335 428,342" fill="#44403C"/>
-    <polygon points="416,342 428,342 440,335 428,335" fill="#78716C"/>
-    <polygon points="413,343 431,343 443,336 425,336" fill="#292524"/>
-    <polygon points="431,343 443,336 443,343 431,350" fill="#1C1917"/>
-
-    <!-- Right tower 3D -->
-    <polygon points="534,383 546,383 546,328 534,328" fill="#57534E"/>
-    <polygon points="546,383 558,376 558,321 546,328" fill="#44403C"/>
-    <polygon points="534,328 546,328 558,321 546,321" fill="#78716C"/>
-    <polygon points="531,329 549,329 561,322 543,322" fill="#292524"/>
-    <polygon points="549,329 561,322 561,329 549,336" fill="#1C1917"/>
-
-    <!-- Main cables -->
-    <path d="M 422,336 Q 482,316 546,322" stroke="#1C1917" stroke-width="2.5" fill="none"/>
-    <path d="M 422,336 Q 482,310 546,316" stroke="#44403C" stroke-width="1.2" fill="none" opacity=".5"/>
-    <!-- Hangers -->
-    <g stroke="#57534E" stroke-width="1" opacity=".65">
-      <line x1="432" y1="330" x2="430" y2="385"/><line x1="447" y1="323" x2="445" y2="380"/>
-      <line x1="462" y1="318" x2="460" y2="375"/><line x1="477" y1="315" x2="475" y2="372"/>
-      <line x1="492" y1="314" x2="490" y2="371"/><line x1="507" y1="315" x2="505" y2="372"/>
-      <line x1="522" y1="317" x2="520" y2="374"/><line x1="537" y1="320" x2="535" y2="377"/>
-    </g>
-    <!-- Near railing -->
-    <line x1="406" y1="408" x2="556" y2="390" stroke="#78716C" stroke-width="2.5"/>
-    <g stroke="#57534E" stroke-width="1.5">
-      <line x1="416" y1="398" x2="416" y2="409"/><line x1="431" y1="396" x2="431" y2="407"/>
-      <line x1="446" y1="394" x2="446" y2="405"/><line x1="461" y1="392" x2="461" y2="403"/>
-      <line x1="476" y1="390" x2="476" y2="401"/><line x1="491" y1="389" x2="491" y2="400"/>
-      <line x1="506" y1="387" x2="506" y2="398"/><line x1="521" y1="385" x2="521" y2="396"/>
-      <line x1="536" y1="383" x2="536" y2="394"/><line x1="551" y1="381" x2="551" y2="392"/>
-    </g>
-
-    <!-- ── FACTORY 3D (left, near/foreground) ── -->
-    <!-- Base platform -->
-    <polygon points="8,480 118,480 150,460 40,460" fill="#1F2937" opacity=".45"/>
+    <!-- Roof face -->
+    <polygon points="12,218 102,218 120,204 30,204" fill="#9CA3AF"/>
+    <!-- Right side face (shadow) -->
+    <polygon points="102,218 120,204 120,318 102,318" fill="#374151"/>
     <!-- Front face -->
-    <polygon points="10,470 112,470 112,355 10,355" fill="#6B7280"/>
-    <!-- Right face -->
-    <polygon points="112,470 150,450 150,332 112,355" fill="#374151"/>
-    <!-- Top face -->
-    <polygon points="10,355 112,355 150,332 48,332" fill="#9CA3AF"/>
-    <!-- Siding lines front -->
-    <g stroke="#9CA3AF" stroke-width=".5" opacity=".28">
-      <line x1="10" y1="393" x2="112" y2="393"/>
-      <line x1="10" y1="430" x2="112" y2="430"/>
-    </g>
-    <!-- Windows front -->
-    <g fill="#93C5FD" opacity=".88">
-      <rect x="20" y="364" width="16" height="14" rx="1"/><rect x="43" y="364" width="16" height="14" rx="1"/>
-      <rect x="66" y="364" width="16" height="14" rx="1"/><rect x="89" y="364" width="16" height="14" rx="1"/>
-      <rect x="20" y="396" width="16" height="14" rx="1"/><rect x="43" y="396" width="16" height="14" rx="1"/>
-      <rect x="66" y="396" width="16" height="14" rx="1"/><rect x="89" y="396" width="16" height="14" rx="1"/>
-      <rect x="20" y="428" width="16" height="14" rx="1"/><rect x="43" y="428" width="16" height="14" rx="1"/>
-      <rect x="66" y="428" width="16" height="14" rx="1"/>
-    </g>
-    <!-- Windows right face -->
-    <g fill="#1D4ED8" opacity=".25">
-      <polygon points="114,368 148,348 148,362 114,382"/>
-      <polygon points="114,400 148,380 148,394 114,414"/>
-      <polygon points="114,432 148,412 148,426 114,446"/>
-    </g>
-    <!-- Door -->
-    <rect x="44" y="440" width="24" height="32" rx="2" fill="#1F2937"/>
-    <circle cx="65" cy="456" r="2" fill="#9CA3AF"/>
-    <!-- TVO sign -->
-    <polygon points="22,418 100,418 100,435 22,435" fill="#15803d"/>
-    <text x="61" y="430" text-anchor="middle" font-size="9" font-weight="800" fill="white" font-family="system-ui,sans-serif">TVO</text>
+    <rect x="12" y="218" width="90" height="100" fill="#52616B"/>
 
-    <!-- Chimneys 3D -->
-    <!-- Ch1 -->
-    <polygon points="24,300 38,300 38,358 24,358" fill="#4B5563"/>
-    <polygon points="38,300 50,294 50,352 38,358" fill="#374151"/>
-    <polygon points="24,300 38,300 50,294 36,294" fill="#6B7280"/>
-    <polygon points="20,300 42,300 54,294 32,294" fill="#1F2937"/>
-    <!-- Ch2 -->
-    <polygon points="50,308 62,308 62,358 50,358" fill="#4B5563"/>
-    <polygon points="62,308 72,303 72,353 62,358" fill="#374151"/>
-    <polygon points="50,308 62,308 72,303 60,303" fill="#6B7280"/>
-    <polygon points="46,308 66,308 76,303 56,303" fill="#1F2937"/>
-    <!-- Ch3 -->
-    <polygon points="72,314 82,314 82,358 72,358" fill="#374151"/>
-    <polygon points="82,314 91,310 91,354 82,358" fill="#292524"/>
-    <polygon points="72,314 82,314 91,310 81,310" fill="#4B5563"/>
-    <polygon points="68,314 86,314 95,310 77,310" fill="#1F2937"/>
-    <!-- Smoke -->
-    <g class="sk1" style="transform-origin:31px 296px"><circle cx="31" cy="296" r="9" fill="#9CA3AF" opacity=".65"/></g>
-    <g class="sk2" style="transform-origin:56px 304px"><circle cx="56" cy="304" r="7" fill="#9CA3AF" opacity=".55"/></g>
-    <g class="sk3" style="transform-origin:78px 310px"><circle cx="78" cy="310" r="6" fill="#9CA3AF" opacity=".48"/></g>
-    <!-- Label -->
-    <text x="62" y="512" text-anchor="middle" font-size="12" font-weight="700" fill="#374151" font-family="system-ui,sans-serif">โรงงาน TVO</text>
+    <!-- Windows 2x2 -->
+    <rect x="24" y="232" width="20" height="14" rx="1" fill="#BAE6FD" opacity=".85"/>
+    <rect x="58" y="232" width="20" height="14" rx="1" fill="#BAE6FD" opacity=".85"/>
+    <rect x="24" y="264" width="20" height="14" rx="1" fill="#BAE6FD" opacity=".85"/>
+    <rect x="58" y="264" width="20" height="14" rx="1" fill="#BAE6FD" opacity=".85"/>
 
-    <!-- ── HOSPITAL 3D (right, far/background) ── -->
-    <!-- Base -->
-    <polygon points="748,328 836,328 856,316 768,316" fill="#D1D5DB" opacity=".4"/>
+    <!-- TVO label banner -->
+    <rect x="14" y="290" width="88" height="18" rx="2" fill="#15803D"/>
+    <text x="58" y="303" text-anchor="middle" font-size="11" font-weight="800" fill="white" font-family="Arial">TVO</text>
+
+    <!-- Industrial door -->
+    <rect x="40" y="308" width="28" height="10" rx="1" fill="#78716C"/>
+    <line x1="54" y1="308" x2="54" y2="318" stroke="#57534E" stroke-width="1"/>
+
+    <!-- Pipe on right edge -->
+    <rect x="103" y="230" width="5" height="60" fill="#6B7280"/>
+    <rect x="101" y="280" width="9" height="4" fill="#9CA3AF"/>
+
+    <!-- Start flag -->
+    <line x1="188" y1="188" x2="188" y2="210" stroke="#15803D" stroke-width="2"/>
+    <polygon points="188,188 208,196 188,204" fill="#16A34A"/>
+
+    <!-- ===== HOSPITAL 45deg single building (smaller) ===== -->
+    <!-- Ground pavement -->
+    <rect x="760" y="316" width="130" height="18" fill="#E5E7EB"/>
+    <!-- Access lane from road -->
+    <rect x="710" y="202" width="82" height="14" fill="#B45309" opacity=".5"/>
+    <rect x="710" y="206" width="82" height="6" fill="#FCD34D" opacity=".4"/>
+
+    <!-- Roof face -->
+    <polygon points="790,218 880,218 862,204 772,204" fill="#E5E7EB"/>
+    <!-- Left side face (lit) -->
+    <polygon points="790,218 772,204 772,318 790,318" fill="#D1D5DB"/>
     <!-- Front face -->
-    <polygon points="750,320 834,320 834,238 750,238" fill="white"/>
-    <polygon points="750,320 834,320 834,238 750,238" fill="none" stroke="#E5E7EB" stroke-width="1"/>
-    <!-- Right face -->
-    <polygon points="834,320 854,308 854,226 834,238" fill="#E5E7EB"/>
-    <!-- Top face -->
-    <polygon points="750,238 834,238 854,226 770,226" fill="#F3F4F6"/>
-    <!-- Windows front -->
-    <g fill="#BAE6FD" opacity=".9">
-      <rect x="760" y="250" width="13" height="11" rx="1"/><rect x="780" y="250" width="13" height="11" rx="1"/>
-      <rect x="800" y="250" width="13" height="11" rx="1"/><rect x="820" y="250" width="8"  height="11" rx="1"/>
-      <rect x="760" y="270" width="13" height="11" rx="1"/><rect x="800" y="270" width="13" height="11" rx="1"/>
-      <rect x="820" y="270" width="8"  height="11" rx="1"/>
+    <rect x="790" y="218" width="90" height="100" fill="#FFFFFF"/>
+
+    <!-- Helipad on roof -->
+    <ellipse cx="836" cy="210" rx="12" ry="5" fill="#D1D5DB" stroke="#9CA3AF" stroke-width="1"/>
+    <text x="836" y="213" text-anchor="middle" font-size="8" font-weight="800" fill="#4B5563" font-family="Arial">H</text>
+
+    <!-- HVAC on roof -->
+    <rect x="797" y="205" width="14" height="8" rx="1" fill="#9CA3AF"/>
+    <rect x="815" y="204" width="10" height="7" rx="1" fill="#9CA3AF"/>
+
+    <!-- Windows 2x2 -->
+    <rect x="800" y="232" width="20" height="14" rx="1" fill="#BFDBFE" opacity=".9"/>
+    <rect x="840" y="232" width="20" height="14" rx="1" fill="#BFDBFE" opacity=".9"/>
+    <rect x="800" y="264" width="20" height="14" rx="1" fill="#BFDBFE" opacity=".9"/>
+    <rect x="840" y="264" width="20" height="14" rx="1" fill="#BFDBFE" opacity=".9"/>
+
+    <!-- Red cross (center of front face) -->
+    <rect x="826" y="246" width="8" height="28" fill="#DC2626"/>
+    <rect x="818" y="254" width="24" height="8" fill="#DC2626"/>
+
+    <!-- HOSPITAL label banner -->
+    <rect x="792" y="290" width="86" height="18" rx="2" fill="#1D4ED8"/>
+    <text x="835" y="303" text-anchor="middle" font-size="9" font-weight="800" fill="white" font-family="Arial">HOSPITAL</text>
+
+    <!-- Emergency entrance -->
+    <rect x="816" y="308" width="28" height="10" rx="1" fill="#22C55E"/>
+    <text x="830" y="315" text-anchor="middle" font-size="6" fill="white" font-family="Arial">ER</text>
+
+    <!-- End flag -->
+    <line x1="712" y1="188" x2="712" y2="210" stroke="#B91C1C" stroke-width="2"/>
+    <polygon points="712,188 692,196 712,204" fill="#EF4444"/>
+
+    <!-- ===== TREES (bird eye: layered circles) ===== -->
+    <!-- Far north (safe: y<55) -->
+    <circle cx="230" cy="30" r="18" fill="#166534"/><circle cx="230" cy="30" r="11" fill="#15803D"/>
+    <circle cx="270" cy="18" r="14" fill="#15803D"/><circle cx="270" cy="18" r="8" fill="#16A34A"/>
+    <circle cx="310" cy="34" r="16" fill="#166534"/><circle cx="310" cy="34" r="9" fill="#15803D"/>
+    <circle cx="360" cy="22" r="13" fill="#15803D"/><circle cx="360" cy="22" r="7" fill="#16A34A"/>
+    <circle cx="430" cy="16" r="15" fill="#166534"/><circle cx="430" cy="16" r="9" fill="#15803D"/>
+    <circle cx="490" cy="30" r="12" fill="#15803D"/><circle cx="490" cy="30" r="7" fill="#16A34A"/>
+    <circle cx="545" cy="18" r="16" fill="#166534"/><circle cx="545" cy="18" r="10" fill="#15803D"/>
+    <circle cx="600" cy="32" r="14" fill="#15803D"/><circle cx="600" cy="32" r="8" fill="#16A34A"/>
+    <circle cx="648" cy="20" r="13" fill="#166534"/><circle cx="648" cy="20" r="7" fill="#15803D"/>
+    <!-- Far south (safe: y>430) -->
+    <circle cx="220" cy="480" r="17" fill="#15803D"/><circle cx="220" cy="480" r="10" fill="#16A34A"/>
+    <circle cx="270" cy="500" r="14" fill="#166534"/><circle cx="270" cy="500" r="8" fill="#15803D"/>
+    <circle cx="330" cy="475" r="16" fill="#15803D"/><circle cx="330" cy="475" r="9" fill="#16A34A"/>
+    <circle cx="400" cy="510" r="13" fill="#166534"/><circle cx="400" cy="510" r="7" fill="#15803D"/>
+    <circle cx="460" cy="480" r="18" fill="#15803D"/><circle cx="460" cy="480" r="11" fill="#16A34A"/>
+    <circle cx="530" cy="500" r="15" fill="#166534"/><circle cx="530" cy="500" r="9" fill="#15803D"/>
+    <circle cx="590" cy="475" r="14" fill="#15803D"/><circle cx="590" cy="475" r="8" fill="#16A34A"/>
+    <circle cx="650" cy="505" r="13" fill="#166534"/><circle cx="650" cy="505" r="7" fill="#15803D"/>
+    <!-- Near river banks (safe x~360-388 and x~512-545, varying y) -->
+    <circle cx="368" cy="90" r="12" fill="#166534"/><circle cx="368" cy="90" r="7" fill="#15803D"/>
+    <circle cx="375" cy="400" r="11" fill="#15803D"/><circle cx="375" cy="400" r="6" fill="#16A34A"/>
+    <circle cx="525" cy="80" r="13" fill="#166534"/><circle cx="525" cy="80" r="7" fill="#15803D"/>
+    <circle cx="530" cy="410" r="12" fill="#15803D"/><circle cx="530" cy="410" r="7" fill="#16A34A"/>
+
+    <!-- ===== RIVER (vertical) ===== -->
+    <rect x="388" y="0" width="124" height="540" fill="url(#riverG)" opacity=".88"/>
+    <line x1="410" y1="0" x2="410" y2="540" stroke="white" stroke-width="3" opacity=".16"/>
+    <line x1="445" y1="0" x2="445" y2="540" stroke="white" stroke-width="2" opacity=".12"/>
+    <line x1="475" y1="0" x2="475" y2="540" stroke="white" stroke-width="2.5" opacity=".14"/>
+    <line x1="500" y1="0" x2="500" y2="540" stroke="white" stroke-width="1.5" opacity=".1"/>
+    <line x1="388" y1="0" x2="388" y2="540" stroke="#0284C7" stroke-width="2.5" opacity=".4"/>
+    <line x1="512" y1="0" x2="512" y2="540" stroke="#0284C7" stroke-width="2.5" opacity=".4"/>
+    <!-- River label -->
+    <text x="450" y="470" text-anchor="middle" font-size="10" fill="#0369A1" font-weight="600" font-family="system-ui,sans-serif" opacity=".7">แม่น้ำ</text>
+
+    <!-- ===== WINDING ROAD (S-curves, drawn as thick stroke) ===== -->
+    <!-- Road shadow -->
+    <path d="M 190,210 C 255,340 345,110 388,255 L 512,255 C 555,390 655,110 710,210" stroke="#78350F" stroke-width="60" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity=".2"/>
+    <!-- Road base (earth/gravel) -->
+    <path d="M 190,210 C 255,340 345,110 388,255 L 512,255 C 555,390 655,110 710,210" stroke="#D97706" stroke-width="52" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- Road surface (asphalt) -->
+    <path d="M 190,210 C 255,340 345,110 388,255 L 512,255 C 555,390 655,110 710,210" stroke="#FBBF24" stroke-width="44" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity=".6"/>
+    <!-- Road shoulders (edge marks) -->
+    <path d="M 190,210 C 255,340 345,110 388,255 L 512,255 C 555,390 655,110 710,210" stroke="white" stroke-width="46" fill="none" stroke-linecap="round" stroke-dasharray="0" opacity=".08"/>
+    <!-- Road center dashes (visual only) -->
+    <path d="M 190,210 C 255,340 345,110 388,255 L 512,255 C 555,390 655,110 710,210" stroke="white" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-dasharray="18 14" opacity=".8"/>
+    <!-- Functional invisible path for grape/coin animation -->
+    <path id="roadpath" d="M 190,210 C 255,340 345,110 388,255 L 512,255 C 555,390 655,110 710,210" stroke="none" fill="none"/>
+
+    <!-- ===== BRIDGE OVER RIVER ===== -->
+    <!-- Bridge concrete deck -->
+    <rect x="380" y="229" width="140" height="52" fill="#A8A29E" rx="2"/>
+    <!-- Bridge hangers / vertical members -->
+    <g stroke="#57534E" stroke-width="1.5" opacity=".55">
+      <line x1="400" y1="229" x2="400" y2="281"/>
+      <line x1="420" y1="229" x2="420" y2="281"/>
+      <line x1="440" y1="229" x2="440" y2="281"/>
+      <line x1="460" y1="229" x2="460" y2="281"/>
+      <line x1="480" y1="229" x2="480" y2="281"/>
+      <line x1="500" y1="229" x2="500" y2="281"/>
     </g>
-    <!-- Windows right face -->
-    <g fill="#BAE6FD" opacity=".35">
-      <polygon points="836,252 852,243 852,254 836,263"/>
-      <polygon points="836,272 852,263 852,274 836,283"/>
+    <!-- Bridge railings (top-down: thick edge lines) -->
+    <rect x="380" y="229" width="140" height="7" fill="#57534E"/>
+    <rect x="380" y="274" width="140" height="7" fill="#57534E"/>
+    <!-- Bridge cable anchors (circles at corners) -->
+    <circle cx="397" cy="232" r="6" fill="#292524"/>
+    <circle cx="503" cy="232" r="6" fill="#292524"/>
+    <circle cx="397" cy="278" r="6" fill="#292524"/>
+    <circle cx="503" cy="278" r="6" fill="#292524"/>
+    <!-- Main bridge cables (diagonals, top-down view) -->
+    <line x1="397" y1="232" x2="503" y2="232" stroke="#1C1917" stroke-width="2.5" opacity=".65"/>
+    <line x1="397" y1="278" x2="503" y2="278" stroke="#1C1917" stroke-width="2.5" opacity=".65"/>
+    <!-- Bridge road surface -->
+    <rect x="388" y="236" width="124" height="38" fill="#FBBF24" opacity=".7"/>
+    <!-- Bridge center dash -->
+    <line x1="388" y1="255" x2="512" y2="255" stroke="white" stroke-width="2.5" stroke-dasharray="14 10" opacity=".85"/>
+    <!-- Bridge name badge -->
+    <rect x="420" y="238" width="60" height="14" rx="3" fill="#1C1917" opacity=".65"/>
+    <text x="450" y="249" text-anchor="middle" font-size="7.5" fill="#FDE68A" font-weight="700" font-family="system-ui,sans-serif">สะพานบุญ</text>
+
+    <!-- ===== MILESTONE LAYER (JS) ===== -->
+    <g id="milestone-layer"></g>
+
+    <!-- ===== COINS (follow winding roadpath) ===== -->
+    <g id="coin-layer" opacity="0" style="transition:opacity .8s">
+      <g><circle r="8" fill="#FBBF24" stroke="#D97706" stroke-width="1.5"/><text text-anchor="middle" dy="3" font-size="8" font-weight="800" fill="#78350F" font-family="system-ui,sans-serif">฿</text>
+        <animateMotion dur="5s" begin="0s" repeatCount="indefinite"><mpath href="#roadpath"/></animateMotion>
+        <animate attributeName="opacity" values="0;1;1;1;0" keyTimes="0;0.05;0.5;0.95;1" dur="5s" begin="0s" repeatCount="indefinite"/>
+      </g>
+      <g><circle r="7" fill="#FEF3C7" stroke="#D97706" stroke-width="1.5"/><text text-anchor="middle" dy="2.5" font-size="7" font-weight="800" fill="#78350F" font-family="system-ui,sans-serif">฿</text>
+        <animateMotion dur="5s" begin="1.25s" repeatCount="indefinite"><mpath href="#roadpath"/></animateMotion>
+        <animate attributeName="opacity" values="0;1;1;1;0" keyTimes="0;0.05;0.5;0.95;1" dur="5s" begin="1.25s" repeatCount="indefinite"/>
+      </g>
+      <g><circle r="8" fill="#FBBF24" stroke="#F59E0B" stroke-width="1.5"/><text text-anchor="middle" dy="3" font-size="8" font-weight="800" fill="#78350F" font-family="system-ui,sans-serif">฿</text>
+        <animateMotion dur="5s" begin="2.5s" repeatCount="indefinite"><mpath href="#roadpath"/></animateMotion>
+        <animate attributeName="opacity" values="0;1;1;1;0" keyTimes="0;0.05;0.5;0.95;1" dur="5s" begin="2.5s" repeatCount="indefinite"/>
+      </g>
+      <g><circle r="6.5" fill="#FEF3C7" stroke="#D97706" stroke-width="1.5"/><text text-anchor="middle" dy="2.5" font-size="6.5" font-weight="800" fill="#78350F" font-family="system-ui,sans-serif">฿</text>
+        <animateMotion dur="5s" begin="3.75s" repeatCount="indefinite"><mpath href="#roadpath"/></animateMotion>
+        <animate attributeName="opacity" values="0;1;1;1;0" keyTimes="0;0.05;0.5;0.95;1" dur="5s" begin="3.75s" repeatCount="indefinite"/>
+      </g>
     </g>
-    <!-- Door -->
-    <rect x="783" y="294" width="24" height="28" rx="2" fill="#6EE7B7"/>
-    <line x1="795" y1="294" x2="795" y2="322" stroke="#34D399" stroke-width="1"/>
-    <!-- Red cross on top face -->
-    <polygon points="754,226 800,226 818,218 772,218" fill="#EF4444"/>
-    <text x="786" y="225" text-anchor="middle" font-size="8" font-weight="800" fill="white" font-family="system-ui,sans-serif">รพ.</text>
-    <!-- Cross on front -->
-    <rect x="785" y="283" width="14" height="6" rx="1" fill="#EF4444"/>
-    <rect x="789" y="279" width="6" height="14" rx="1" fill="#EF4444"/>
-    <!-- Label -->
-    <text x="800" y="352" text-anchor="middle" font-size="11" font-weight="700" fill="#374151" font-family="system-ui,sans-serif">โรงพยาบาล</text>
 
-    <!-- ── FLAGS ── -->
-    <line x1="114" y1="432" x2="114" y2="478" stroke="#374151" stroke-width="2"/>
-    <polygon points="114,432 140,441 114,450" fill="#16A34A"/>
-    <line x1="750" y1="293" x2="750" y2="328" stroke="#374151" stroke-width="1.5"/>
-    <polygon points="750,293 770,300 750,307" fill="#EF4444"/>
-
-    <!-- ── น้ององุ่น YELLOW (repositioned by JS) ── -->
-    <g id="grape" transform="translate(114,474)">
-      <!-- Shadow -->
-      <ellipse cx="0" cy="5" rx="12" ry="3.5" fill="rgba(0,0,0,.15)"/>
-      <!-- Legs A: left-front right-back -->
-      <g class="la">
-        <line x1="-4" y1="0" x2="-14" y2="14" stroke="#D97706" stroke-width="4.5" stroke-linecap="round"/>
-        <line x1="4"  y1="0" x2="10"  y2="9"  stroke="#D97706" stroke-width="4.5" stroke-linecap="round"/>
-      </g>
-      <!-- Legs B: right-front left-back -->
-      <g class="lb">
-        <line x1="-4" y1="0" x2="-8"  y2="9"  stroke="#D97706" stroke-width="4.5" stroke-linecap="round"/>
-        <line x1="4"  y1="0" x2="14"  y2="14" stroke="#D97706" stroke-width="4.5" stroke-linecap="round"/>
-      </g>
-
-      <g class="grape-body">
-        <!-- Arms A -->
-        <g class="la">
-          <line x1="-15" y1="-16" x2="-25" y2="-8"  stroke="#B45309" stroke-width="4.5" stroke-linecap="round"/>
-          <line x1="15"  y1="-16" x2="20"  y2="-26" stroke="#B45309" stroke-width="4.5" stroke-linecap="round"/>
-        </g>
-        <!-- Arms B -->
-        <g class="lb">
-          <line x1="-15" y1="-16" x2="-20" y2="-26" stroke="#B45309" stroke-width="4.5" stroke-linecap="round"/>
-          <line x1="15"  y1="-16" x2="25"  y2="-8"  stroke="#B45309" stroke-width="4.5" stroke-linecap="round"/>
-        </g>
-        <!-- Body: YELLOW -->
-        <circle cx="0" cy="-18" r="18" fill="#FBBF24"/>
-        <!-- 3D shading: darker bottom arc -->
-        <ellipse cx="0" cy="-6" rx="18" ry="6" fill="#D97706" opacity=".35"/>
-        <!-- Shine top -->
-        <circle cx="-6" cy="-26" r="5.5" fill="#FEF3C7" opacity=".7"/>
-        <ellipse cx="0" cy="-32" rx="6" ry="3" fill="white" opacity=".35"/>
-        <!-- Eyes -->
-        <circle cx="-5.5" cy="-20" r="2.5" fill="#1F1F1F"/>
-        <circle cx="5.5"  cy="-20" r="2.5" fill="#1F1F1F"/>
-        <circle cx="-4.5" cy="-21.5" r=".9" fill="white"/>
-        <circle cx="6.5"  cy="-21.5" r=".9" fill="white"/>
-        <!-- Smile -->
-        <path d="M -5,-13 Q 0,-8 5,-13" stroke="#92400E" stroke-width="2" fill="none" stroke-linecap="round"/>
-        <!-- Cheeks -->
-        <circle cx="-10" cy="-13" r="3.5" fill="#F59E0B" opacity=".5"/>
-        <circle cx="10"  cy="-13" r="3.5" fill="#F59E0B" opacity=".5"/>
-        <!-- Leaf -->
-        <ellipse cx="4" cy="-37" rx="5.5" ry="9" fill="#16A34A" transform="rotate(-22 4 -37)"/>
-        <path d="M 2,-36 Q 4,-29 1,-23" stroke="#15803D" stroke-width="1.2" fill="none"/>
-        <ellipse cx="-3" cy="-34" rx="4" ry="6" fill="#22c55e" transform="rotate(18 -3 -34)" opacity=".65"/>
-      </g>
-      <!-- Speed lines -->
-      <line x1="-32" y1="-20" x2="-43" y2="-20" stroke="#D97706" stroke-width="2.5" stroke-linecap="round" opacity=".4"/>
-      <line x1="-30" y1="-13" x2="-43" y2="-13" stroke="#D97706" stroke-width="2"   stroke-linecap="round" opacity=".3"/>
-      <line x1="-32" y1="-27" x2="-41" y2="-27" stroke="#D97706" stroke-width="1.5" stroke-linecap="round" opacity=".22"/>
+    <!-- ===== น้ององุ่น Bean (PNG mascot) ===== -->
+    <g id="grape" transform="translate(190,210)">
+      <!-- Drop shadow -->
+      <ellipse rx="22" ry="8" cy="6" fill="rgba(0,0,0,.25)"/>
+      <!-- Bean.png : width=55, height=87 (ratio 725:1150≈0.63), bottom aligned to road center -->
+      <image href="Bean.png" x="-27" y="-84" width="55" height="87" class="grape-hop"
+             style="image-rendering:auto"/>
     </g>
 
     <!-- Donation bubble -->
-    <g id="bubble" transform="translate(114,432)">
-      <rect x="-40" y="-23" width="80" height="27" rx="13" fill="#16A34A"/>
-      <polygon points="-7,4 7,4 0,14" fill="#16A34A"/>
-      <text id="bubble-txt" x="0" y="-3" text-anchor="middle" font-size="12" font-weight="800" fill="white" font-family="system-ui,sans-serif">฿0</text>
+    <g id="bubble" transform="translate(190,170)">
+      <rect x="-40" y="-22" width="80" height="27" rx="13" fill="#16A34A"/>
+      <polygon points="-7,5 7,5 0,14" fill="#16A34A"/>
+      <text id="bubble-txt" x="0" y="-2" text-anchor="middle" font-size="12" font-weight="800" fill="white" font-family="system-ui,sans-serif">฿0</text>
     </g>
 
-    <!-- Midpoint label -->
-    <line x1="478" y1="346" x2="455" y2="372" stroke="#9CA3AF" stroke-width="1" stroke-dasharray="4 3" opacity=".55"/>
-    <text x="440" y="342" text-anchor="middle" font-size="9" fill="#6B7280" font-family="system-ui,sans-serif">5,000 ฿</text>
-
-    <!-- Distance ruler at bottom -->
-    <g opacity=".38">
-      <line x1="114" y1="522" x2="802" y2="522" stroke="#6B7280" stroke-width="1"/>
-      <line x1="114" y1="518" x2="114" y2="526" stroke="#6B7280" stroke-width="1.5"/>
-      <line x1="802" y1="518" x2="802" y2="526" stroke="#6B7280" stroke-width="1.5"/>
-      <line x1="458" y1="519" x2="458" y2="525" stroke="#6B7280" stroke-width="1"/>
-      <text x="114" y="536" text-anchor="middle" font-size="9" fill="#6B7280" font-family="system-ui,sans-serif">0฿</text>
-      <text x="458" y="536" text-anchor="middle" font-size="9" fill="#6B7280" font-family="system-ui,sans-serif">5,000฿</text>
-      <text x="802" y="536" text-anchor="middle" font-size="9" fill="#6B7280" font-family="system-ui,sans-serif">10,000฿</text>
+    <!-- ===== DISTANCE RULER (bottom) ===== -->
+    <g opacity=".5">
+      <line x1="78" y1="522" x2="822" y2="522" stroke="#6B7280" stroke-width="1.2"/>
+      <line x1="78"  y1="517" x2="78"  y2="527" stroke="#6B7280" stroke-width="2"/>
+      <line x1="822" y1="517" x2="822" y2="527" stroke="#6B7280" stroke-width="2"/>
+      <line x1="450" y1="518" x2="450" y2="526" stroke="#6B7280" stroke-width="1.5"/>
+      <text x="78"  y="537" text-anchor="middle" font-size="9" fill="#6B7280" font-family="system-ui,sans-serif">0 ฿</text>
+      <text x="450" y="537" text-anchor="middle" font-size="9" fill="#6B7280" font-family="system-ui,sans-serif">5,000 ฿</text>
+      <text x="822" y="537" text-anchor="middle" font-size="9" fill="#6B7280" font-family="system-ui,sans-serif">10,000 ฿</text>
     </g>
-    <circle id="ruler-dot" cx="114" cy="522" r="5" fill="#16A34A" opacity=".85"/>
+    <circle id="ruler-dot" cx="78" cy="522" r="6" fill="#16A34A" opacity=".9"/>
 
   </svg>
+  </div>
+
+  <div class="lb-wrap" id="lb-section" style="display:none">
+    <div class="lb-hd">🏆 กลุ่มที่เผา Cal สูงสุด</div>
+    <div id="lb-rows"></div>
   </div>
 
   <div style="text-align:center;padding:12px 16px 8px;font-size:12px;color:#6B7280">
@@ -410,7 +381,6 @@ const GOAL = 10000;
 async function loadData() {
   try {
     let { data, error } = await sb.from('exercise_logs').select('calories').eq('verified', true);
-    // fallback ถ้า error หรือได้ array ว่าง (verified=true ไม่มีข้อมูล)
     if (error || !data || data.length === 0) {
       ({ data } = await sb.from('exercise_logs').select('calories'));
     }
@@ -421,6 +391,17 @@ async function loadData() {
     document.getElementById('loader').innerHTML =
       '❌ โหลดไม่สำเร็จ — <button onclick="loadData()" style="border:none;background:none;color:#16A34A;cursor:pointer;font-weight:700">ลองใหม่</button>';
   }
+  loadLeaderboard();
+}
+
+async function loadLeaderboard() {
+  try {
+    const [r1, r2] = await Promise.all([
+      sb.from('exercise_logs').select('user,calories'),
+      sb.from('user_profiles').select('display_name,group_name'),
+    ]);
+    renderLeaderboard(r1.data, r2.data);
+  } catch(e) {}
 }
 
 function render(totalCal, baht, pct) {
@@ -433,33 +414,120 @@ function render(totalCal, baht, pct) {
     document.getElementById('prog').style.width = pct.toFixed(2) + '%';
     document.getElementById('v-pct').textContent = pct.toFixed(1) + '%';
   }, 80);
-  document.getElementById('ruler-dot').setAttribute('cx', (114 + (802-114)*(pct/100)).toFixed(1));
+  // ruler-dot: x=78..822 (range 744)
+  document.getElementById('ruler-dot').setAttribute('cx', (78 + 744*(pct/100)).toFixed(1));
   placeGrape(pct/100, baht);
   document.getElementById('ts').textContent = new Date().toLocaleTimeString('th-TH');
+  setTimeout(() => renderMilestones(pct), 120);
+  renderCoins(pct);
 }
 
 function placeGrape(fraction, baht) {
-  // ใช้ #roadpath ที่ render ใน SVG แล้ว — getTotalLength() ได้ค่าจริงเสมอ
   const road = document.getElementById('roadpath');
   if (!road) return;
   const total = road.getTotalLength();
   if (!total) return;
-  let gx = 114, gy = 474, sc = 1.15;
+  let gx = 190, gy = 210;
   if (fraction > 0) {
     const dist = Math.min(fraction * total, total - 2);
-    const pt   = road.getPointAtLength(dist);
-    gx = Math.max(80,  Math.min(850, pt.x));
-    gy = Math.max(200, Math.min(500, pt.y));
-    sc = 1.15 - fraction * 0.37; // perspective: ใหญ่ใกล้โรงงาน → เล็กใกล้รพ.
+    const pt = road.getPointAtLength(dist);
+    gx = pt.x; gy = pt.y;
   }
-  document.getElementById('grape').setAttribute('transform',
-    `translate(${gx.toFixed(1)},${gy.toFixed(1)}) scale(${sc.toFixed(3)})`);
-  const bx = Math.max(90, Math.min(840, gx));
-  const by = gy - 50 * sc;
-  const bs = Math.max(0.68, sc);
-  document.getElementById('bubble').setAttribute('transform',
-    `translate(${bx.toFixed(1)},${by.toFixed(1)}) scale(${bs.toFixed(3)})`);
+  document.getElementById('grape').setAttribute('transform', `translate(${gx.toFixed(1)},${gy.toFixed(1)})`);
+  const bx = Math.max(80, Math.min(860, gx));
+  const by = gy - 98;
+  document.getElementById('bubble').setAttribute('transform', `translate(${bx.toFixed(1)},${by.toFixed(1)})`);
   document.getElementById('bubble-txt').textContent = '฿' + baht.toLocaleString('th-TH');
+}
+
+function renderMilestones(pct) {
+  const road = document.getElementById('roadpath');
+  if (!road) return;
+  const total = road.getTotalLength();
+  if (!total) return;
+  const layer = document.getElementById('milestone-layer');
+  layer.innerHTML = '';
+  const NS = 'http://www.w3.org/2000/svg';
+  const defs = [
+    {frac:0.25, label:'2,500 ฿', icon:'🌱', col:'#22c55e'},
+    {frac:0.50, label:'5,000 ฿', icon:'🌿', col:'#16A34A'},
+    {frac:0.75, label:'7,500 ฿', icon:'🌳', col:'#15803D'},
+  ];
+  defs.forEach(m => {
+    const pt = road.getPointAtLength(m.frac * total);
+    const x = pt.x, y = pt.y;
+    const lit = pct >= m.frac * 100;
+    const g = document.createElementNS(NS, 'g');
+    g.setAttribute('opacity', lit ? '1' : '0.45');
+    if (lit) {
+      const ring = document.createElementNS(NS, 'circle');
+      ring.setAttribute('cx', x); ring.setAttribute('cy', y); ring.setAttribute('r', '26');
+      ring.setAttribute('stroke', m.col); ring.setAttribute('stroke-width', '3'); ring.setAttribute('fill', 'none');
+      ring.setAttribute('style', 'animation:msGlowRing 2s ease-out infinite');
+      g.appendChild(ring);
+    }
+    const badge = document.createElementNS(NS, 'circle');
+    badge.setAttribute('cx', x); badge.setAttribute('cy', y); badge.setAttribute('r', '16');
+    badge.setAttribute('fill', lit ? m.col : '#9CA3AF');
+    g.appendChild(badge);
+    const icon = document.createElementNS(NS, 'text');
+    icon.setAttribute('x', x); icon.setAttribute('y', y+5); icon.setAttribute('text-anchor','middle');
+    icon.setAttribute('font-size', lit ? '14' : '10');
+    icon.textContent = lit ? m.icon : '·';
+    if (!lit) icon.setAttribute('fill','white');
+    g.appendChild(icon);
+    // label pill above
+    const lx = x-28, ly = y-46;
+    const pill = document.createElementNS(NS,'rect');
+    pill.setAttribute('x',lx); pill.setAttribute('y',ly);
+    pill.setAttribute('width','56'); pill.setAttribute('height','18'); pill.setAttribute('rx','9');
+    pill.setAttribute('fill', lit ? m.col : '#9CA3AF');
+    g.appendChild(pill);
+    const lbl = document.createElementNS(NS,'text');
+    lbl.setAttribute('x',x); lbl.setAttribute('y',ly+13); lbl.setAttribute('text-anchor','middle');
+    lbl.setAttribute('font-size','9.5'); lbl.setAttribute('font-weight','700');
+    lbl.setAttribute('fill','white'); lbl.setAttribute('font-family','system-ui,sans-serif');
+    lbl.textContent = m.label;
+    g.appendChild(lbl);
+    const conn = document.createElementNS(NS,'line');
+    conn.setAttribute('x1',x); conn.setAttribute('y1',y-16);
+    conn.setAttribute('x2',x); conn.setAttribute('y2',ly+18);
+    conn.setAttribute('stroke', lit ? m.col : '#9CA3AF'); conn.setAttribute('stroke-width','1.5');
+    g.appendChild(conn);
+    layer.appendChild(g);
+  });
+}
+
+function renderCoins(pct) {
+  document.getElementById('coin-layer').style.opacity = pct > 3 ? '1' : '0';
+}
+
+function renderLeaderboard(logs, users) {
+  if (!logs || !users || !logs.length) return;
+  const userGroup = {};
+  (users||[]).forEach(u => { if (u.display_name) userGroup[u.display_name.trim()] = u.group_name || null; });
+  const groupCal = {};
+  (logs||[]).forEach(l => {
+    const grp = userGroup[(l.user||'').trim()];
+    if (!grp) return;
+    groupCal[grp] = (groupCal[grp]||0) + (Number(l.calories)||0);
+  });
+  const sorted = Object.entries(groupCal).sort((a,b) => b[1]-a[1]).slice(0,6);
+  if (!sorted.length) return;
+  const maxCal = sorted[0][1];
+  const medals = ['🥇','🥈','🥉','4','5','6'];
+  const rows = document.getElementById('lb-rows');
+  rows.innerHTML = '';
+  sorted.forEach(([name, cal], i) => {
+    const baht = Math.floor(cal/100);
+    const w = maxCal > 0 ? (cal/maxCal*100).toFixed(1) : 0;
+    const div = document.createElement('div');
+    div.className = 'lb-row';
+    div.innerHTML = `<div class="lb-rank">${medals[i]}</div><div class="lb-name">${name}</div><div class="lb-bar-bg"><div class="lb-bar-fill" data-w="${w}"></div></div><div class="lb-val">฿${baht.toLocaleString('th-TH')}</div>`;
+    rows.appendChild(div);
+  });
+  document.getElementById('lb-section').style.display = 'block';
+  setTimeout(() => { document.querySelectorAll('.lb-bar-fill').forEach(el => { el.style.width = el.dataset.w + '%'; }); }, 300);
 }
 
 function count(id, target, dur, fmt) {
@@ -471,6 +539,8 @@ function count(id, target, dur, fmt) {
   };
   requestAnimationFrame(step);
 }
+
+loadData();
 </script>
 </body>
-</html>
+</html>                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      
