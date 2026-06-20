@@ -544,7 +544,12 @@ function CalorieTracker() {
   const [likersModal, setLikersModal] = useState(null); // { logId, names, loading }
 
   // Goals
-  const [weeklyGoals, setWeeklyGoals] = useState({});
+  const [weeklyGoals, setWeeklyGoals] = useState(() => {
+    const cached = lsGet("tvohh_allusers", []);
+    const m = {};
+    cached.forEach(u => { if (u.weeklyGoal !== undefined) m[u.user] = u.weeklyGoal; });
+    return m;
+  });
   const getGoal = (user) => (weeklyGoals[user] ?? 5000);
   const [goalFormUser, setGoalFormUser] = useState("");
   const [goalFormVal, setGoalFormVal] = useState(5000);
@@ -607,6 +612,12 @@ function CalorieTracker() {
     const iconMap = {};
     users.forEach(u => { if (u.profileIcon) iconMap[u.user] = u.profileIcon; });
     setProfileIconMap(prev => { const merged = { ...prev, ...iconMap }; lsSet("tvohh_profileicons", merged); return merged; });
+    // sync weeklyGoals จาก DB (เฉพาะ user ที่มี weeklyGoal ใน data)
+    setWeeklyGoals(prev => {
+      const next = { ...prev };
+      users.forEach(u => { if (u.weeklyGoal !== undefined) next[u.user] = u.weeklyGoal; });
+      return next;
+    });
   };
   useEffect(() => {
     sbFetchUsersOnce().then(({ allUsers, avatars }) => {
