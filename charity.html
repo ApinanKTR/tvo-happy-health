@@ -10,7 +10,7 @@
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:#F0FDF4;min-height:100vh;color:#1a2e1a}
-    .hdr{background:linear-gradient(135deg,#15803d 0%,#16A34A 60%,#22c55e 100%);color:#fff;text-align:center;padding:28px 16px 22px}
+    .hdr{background:linear-gradient(135deg,#15803d 0%,#16A34A 60%,#22c55e 100%);color:#fff;text-align:center;padding:28px 16px 22px;margin-top:2.5rem}
     .hdr-icon{font-size:38px;margin-bottom:6px}
     .hdr h1{font-size:22px;font-weight:800;margin-bottom:4px}
     .hdr p{font-size:13px;opacity:.88;line-height:1.5}
@@ -343,6 +343,19 @@
     </g>
     <circle id="ruler-dot" cx="78" cy="522" r="6" fill="#16A34A" opacity=".9"/>
 
+    <!-- Bean mascot -->
+    <g id="grape" transform="translate(190,210)">
+      <ellipse rx="22" ry="8" cy="6" fill="rgba(0,0,0,.25)"/>
+      <image href="Bean.png" x="-27" y="-84" width="55" height="87" class="grape-hop"
+             style="image-rendering:auto"/>
+    </g>
+    <!-- Donation bubble -->
+    <g id="bubble" transform="translate(190,170)">
+      <rect x="-40" y="-22" width="80" height="27" rx="13" fill="#16A34A"/>
+      <polygon points="-7,5 7,5 0,14" fill="#16A34A"/>
+      <text id="bubble-txt" x="0" y="-2" text-anchor="middle" font-size="12" font-weight="800" fill="white" font-family="system-ui,sans-serif">฿0</text>
+    </g>
+
   </svg>
   </div>
 
@@ -408,6 +421,25 @@ function render(totalCal, baht, pct) {
   document.getElementById('ts').textContent = new Date().toLocaleTimeString('th-TH');
   setTimeout(() => renderMilestones(pct), 120);
   renderCoins(pct);
+  setTimeout(() => placeGrape(pct/100, baht), 200);
+}
+
+function placeGrape(fraction, baht) {
+  const road = document.getElementById('roadpath');
+  if (!road) return;
+  const total = road.getTotalLength();
+  if (!total) return;
+  let gx = 190, gy = 210;
+  if (fraction > 0) {
+    const dist = Math.min(fraction * total, total - 2);
+    const pt = road.getPointAtLength(dist);
+    gx = pt.x; gy = pt.y;
+  }
+  document.getElementById('grape').setAttribute('transform', `translate(${gx.toFixed(1)},${gy.toFixed(1)})`);
+  const bx = Math.max(80, Math.min(820, gx));
+  const by = gy - 98;
+  document.getElementById('bubble').setAttribute('transform', `translate(${bx.toFixed(1)},${by.toFixed(1)})`);
+  document.getElementById('bubble-txt').textContent = '฿' + baht.toLocaleString('th-TH');
 }
 
 function renderMilestones(pct) {
