@@ -181,16 +181,22 @@ const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // ─── Exercise Logs API ──────────────────────────────────────
 const sbFetchLogs = async () => {
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - 90);
-  const { data, error } = await supabase
-    .from('exercise_logs')
-    .select('id,employee_id,user_name,group_name,exercise,duration,calories,log_date,note,likes,verified,admin_comment,photo')
-    .gte('log_date', thaiDate(cutoff))
-    .order('log_date', { ascending: false })
-    .order('created_at', { ascending: false })
-    .limit(3000);
-  if (error) throw new Error(error.message);
+  const BATCH = 1000;
+  let allData = [], from = 0;
+  while (true) {
+    const { data, error } = await supabase
+      .from('exercise_logs')
+      .select('id,employee_id,user_name,group_name,exercise,duration,calories,log_date,note,likes,verified,admin_comment,photo')
+      .order('log_date', { ascending: false })
+      .order('created_at', { ascending: false })
+      .range(from, from + BATCH - 1);
+    if (error) throw new Error(error.message);
+    if (!data || data.length === 0) break;
+    allData = allData.concat(data);
+    if (data.length < BATCH) break;
+    from += BATCH;
+  }
+  const data = allData;
   return (data || []).map(i => ({
     id: i.id, spId: i.id,
     empId: i.employee_id || null,
@@ -205,7 +211,7 @@ const sbFetchLogs = async () => {
 
 const sbFetchLogPhotoIds = async () => {
   const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - 90);
+  cutoff.setDate(cutoff.getDate() - 180);
   const { data } = await supabase
     .from('exercise_logs')
     .select('id')
@@ -311,7 +317,7 @@ const cleanGroupName = (v) => {
   return v.trim();
 };
 const sbFetchUsersOnce = async () => {
-  const { data, error } = await supabase.from('user_profiles').select('display_name,group_name,employee_id,photo,profile_icon,weekly_goal');
+  const { data, error } = await supabase.from('user_profiles').select('display_name,group_name,employee_id,photo,profile_icon,weekly_goal').limit(5000);
   if (error) return { allUsers: [], avatars: {} };
   const allUsers = (data||[]).map(u => ({ user: (u.display_name||'').trim(), group: cleanGroupName(u.group_name), empId: u.employee_id, profileIcon: u.profile_icon || null, weeklyGoal: u.weekly_goal ?? 5000 }));
   const avatars = {};
@@ -527,6 +533,7 @@ function CalorieTracker() {
   const [spLastSync, setSpLastSync] = useState(null);
   const [dashSort, setDashSort] = useState("newest");
   const [dashFilter, setDashFilter] = useState("all"); // "all" | "pending"
+  const [dashLimit, setDashLimit] = useState(50);
 
   // Add form
   const [form, setForm] = useState(() => { const s = lsGet("tvohh_session", null); const sg = s?.group; const cleanGrp = sg?.Value ?? (typeof sg === "string" && !sg.trim().startsWith("{") ? sg : "A : ใส่ใจลูกค้า"); return { user: s?.displayName || "", group: cleanGrp, exercise: "วิ่ง", duration: 30, date: thaiDate(), note: "", photo: null, customCal: 300 }; });
@@ -1558,11 +1565,11 @@ const handleRegister = async () => {
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
               <h2 className="v2-section-title" style={{ marginBottom:0 }}>📋 บันทึกล่าสุด</h2>
               <div style={{ display:"flex", gap:6 }}>
-                <button onClick={()=>setDashFilter("all")}
+                <button onClick={()=>{setDashFilter("all");setDashLimit(50);}}
                   style={{ fontSize:11, padding:"4px 10px", borderRadius:20, border:"none", cursor:"pointer", fontWeight:700, background:dashFilter==="all"?"#16A34A":"#F3F4F6", color:dashFilter==="all"?"#fff":"#6B7280" }}>
                   ทั้งหมด
                 </button>
-                <button onClick={()=>setDashFilter("pending")}
+                <button onClick={()=>{setDashFilter("pending");setDashLimit(50);}}
                   style={{ fontSize:11, padding:"4px 10px", borderRadius:20, border:"none", cursor:"pointer", fontWeight:700, background:dashFilter==="pending"?"#F59E0B":"#F3F4F6", color:dashFilter==="pending"?"#fff":"#6B7280", display:"flex", alignItems:"center", gap:4 }}>
                   ⏳ รอตรวจสอบ
                   {logs.filter(l=>!l.verified).length > 0 && (
@@ -1575,21 +1582,21 @@ const handleRegister = async () => {
             </div>
             <div className="tab-scroll" style={{ gap:5, marginBottom:12 }}>
               {[{id:"newest",label:"ใหม่สุด"},{id:"oldest",label:"เก่าสุด"},{id:"name",label:"ชื่อ"},{id:"exercise",label:"กีฬา"},{id:"calories",label:"kcal🔥"}].map(s=>(
-                <button key={s.id} className="v2-sort" onClick={()=>setDashSort(s.id)}
+                <button key={s.id} className="v2-sort" onClick={()=>{setDashSort(s.id);setDashLimit(50);}}
                   style={{ background:dashSort===s.id?"#16A34A":"#FFFFFF", color:dashSort===s.id?"#fff":"#6B7280", border:dashSort===s.id?"none":"1px solid #E5E7EB", fontWeight:dashSort===s.id?700:500 }}>
                   {s.label}
                 </button>
               ))}
             </div>
             <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-              {[...(dashFilter==="pending" ? logs.filter(l=>!l.verified) : logs)].sort((a,b)=>{
+              {[...(dashFilter==="pending" ? logs.filter(l=>!l.verified) : (isAdmin ? logs : logs.filter(l=>l.verified)))].sort((a,b)=>{
                 if(dashSort==="newest") return b.date>a.date?1:b.date<a.date?-1:0;
                 if(dashSort==="oldest") return a.date>b.date?1:a.date<b.date?-1:0;
                 if(dashSort==="name") return a.user.localeCompare(b.user,"th");
                 if(dashSort==="exercise") return a.exercise.localeCompare(b.exercise,"th");
                 if(dashSort==="calories") return b.calories-a.calories;
                 return 0;
-              }).slice(0,50).map(log=>{
+              }).slice(0,dashLimit).map(log=>{
                 const ex=exercises.find(e=>e.name===log.exercise);
                 const logGroup=currentGroup(log);
                 const color=getGroupColor(logGroup);
@@ -1668,6 +1675,12 @@ const handleRegister = async () => {
                 );
               })}
               {logs.length===0&&<div style={{ textAlign:"center", padding:"48px 0", color:"#9CA3AF", fontSize:14 }}>ยังไม่มีข้อมูล — ลองบันทึกการออกกำลังกายแรก!</div>}
+              {(dashFilter==="pending" ? logs.filter(l=>!l.verified) : (isAdmin ? logs : logs.filter(l=>l.verified))).length > dashLimit && (
+                <button onClick={()=>setDashLimit(l=>l+50)}
+                  style={{ width:"100%", padding:"12px 0", borderRadius:12, border:"1.5px solid #D1D5DB", background:"#F9FAFB", color:"#374151", fontSize:13, fontWeight:700, cursor:"pointer", marginTop:4 }}>
+                  โหลดเพิ่ม 50 รายการ ({(dashFilter==="pending" ? logs.filter(l=>!l.verified) : (isAdmin ? logs : logs.filter(l=>l.verified))).length - dashLimit} รายการที่เหลือ)
+                </button>
+              )}
             </div>
           </div>
         )}
