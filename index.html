@@ -711,7 +711,20 @@ function CalorieTracker() {
   useEffect(() => {
     if (spStatus !== "connected") return;
     const iv = setInterval(() => {
-      sbFetchLogs().then(d => { if (d.length > 0) setLogs(d); setSpLastSync(new Date().toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit"})); }).catch(()=>{});
+      sbFetchLogs().then(d => {
+        if (d.length > 0) {
+          const cached = lsGet("tvohh_allusers",[]) || [];
+          const gmap = buildGroupMap(cached);
+          const nmap = Object.fromEntries(cached.filter(u=>u.empId).map(u=>[String(u.empId).trim(), u.user]));
+          const nByName = Object.fromEntries(cached.filter(u=>u.user).map(u=>[(u.user||'').trim(), u.user]));
+          setLogs(d.map(l => ({
+            ...l,
+            group: remapGroup(l, gmap),
+            user: (l.empId && nmap[String(l.empId).trim()]) || nByName[(l.user||'').trim()] || l.user,
+          })));
+        }
+        setSpLastSync(new Date().toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit"}));
+      }).catch(()=>{});
     }, 60000 + Math.random()*30000);
     return () => clearInterval(iv);
   }, [spStatus]);
