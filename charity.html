@@ -53,7 +53,6 @@
 <body>
 
 <div class="hdr">
-  <div class="hdr-icon">🍇</div>
   <h1>Calories Charity</h1>
   <p>ทุก 100 แคลที่เผาผลาญ = บริจาค 1 บาท สู่โรงพยาบาล</p>
   <div class="hdr-badge">🎯 เป้าหมาย 10,000 บาท</div>
@@ -327,20 +326,10 @@
     </g>
 
     <!-- ===== น้ององุ่น Bean (PNG mascot) ===== -->
-    <g id="grape" transform="translate(190,210)">
-      <!-- Drop shadow -->
-      <ellipse rx="22" ry="8" cy="6" fill="rgba(0,0,0,.25)"/>
-      <!-- Bean.png : width=55, height=87 (ratio 725:1150≈0.63), bottom aligned to road center -->
-      <image href="Bean.png" x="-27" y="-84" width="55" height="87" class="grape-hop"
-             style="image-rendering:auto"/>
-    </g>
+    
 
     <!-- Donation bubble -->
-    <g id="bubble" transform="translate(190,170)">
-      <rect x="-40" y="-22" width="80" height="27" rx="13" fill="#16A34A"/>
-      <polygon points="-7,5 7,5 0,14" fill="#16A34A"/>
-      <text id="bubble-txt" x="0" y="-2" text-anchor="middle" font-size="12" font-weight="800" fill="white" font-family="system-ui,sans-serif">฿0</text>
-    </g>
+    
 
     <!-- ===== DISTANCE RULER (bottom) ===== -->
     <g opacity=".5">
@@ -370,6 +359,9 @@
     คำนวณจากแคลอรีทั้งหมดที่สมาชิกบันทึกใน TVO Happy Health 2026<br/>
     100 แคล = 1 บาท &nbsp;|&nbsp; เป้าหมาย 1,000,000 แคล = 10,000 บาท
   </p>
+  <a href="index.html" style="display:inline-flex;align-items:center;gap:6px;margin-top:4px;margin-bottom:16px;padding:10px 22px;border-radius:99px;background:#F0FDF4;border:1px solid #D1FAE5;color:#16A34A;font-size:13px;font-weight:700;text-decoration:none;">
+    ← กลับหน้าแอพ
+  </a>
 </div>
 
 <script>
@@ -380,10 +372,7 @@ const GOAL = 10000;
 
 async function loadData() {
   try {
-    let { data, error } = await sb.from('exercise_logs').select('calories').eq('verified', true);
-    if (error || !data || data.length === 0) {
-      ({ data } = await sb.from('exercise_logs').select('calories'));
-    }
+    let { data, error } = await sb.from('exercise_logs').select('calories').eq('verified', true).limit(100000);
     const totalCal = (data||[]).reduce((s,r) => s + (Number(r.calories)||0), 0);
     const baht = Math.floor(totalCal / 100);
     render(totalCal, baht, Math.min(100, (baht / GOAL) * 100));
@@ -397,7 +386,7 @@ async function loadData() {
 async function loadLeaderboard() {
   try {
     const [r1, r2] = await Promise.all([
-      sb.from('exercise_logs').select('user,calories'),
+      sb.from('exercise_logs').select('user,calories').limit(100000),
       sb.from('user_profiles').select('display_name,group_name'),
     ]);
     renderLeaderboard(r1.data, r2.data);
@@ -416,28 +405,9 @@ function render(totalCal, baht, pct) {
   }, 80);
   // ruler-dot: x=78..822 (range 744)
   document.getElementById('ruler-dot').setAttribute('cx', (78 + 744*(pct/100)).toFixed(1));
-  placeGrape(pct/100, baht);
   document.getElementById('ts').textContent = new Date().toLocaleTimeString('th-TH');
   setTimeout(() => renderMilestones(pct), 120);
   renderCoins(pct);
-}
-
-function placeGrape(fraction, baht) {
-  const road = document.getElementById('roadpath');
-  if (!road) return;
-  const total = road.getTotalLength();
-  if (!total) return;
-  let gx = 190, gy = 210;
-  if (fraction > 0) {
-    const dist = Math.min(fraction * total, total - 2);
-    const pt = road.getPointAtLength(dist);
-    gx = pt.x; gy = pt.y;
-  }
-  document.getElementById('grape').setAttribute('transform', `translate(${gx.toFixed(1)},${gy.toFixed(1)})`);
-  const bx = Math.max(80, Math.min(860, gx));
-  const by = gy - 98;
-  document.getElementById('bubble').setAttribute('transform', `translate(${bx.toFixed(1)},${by.toFixed(1)})`);
-  document.getElementById('bubble-txt').textContent = '฿' + baht.toLocaleString('th-TH');
 }
 
 function renderMilestones(pct) {
@@ -543,4 +513,4 @@ function count(id, target, dur, fmt) {
 loadData();
 </script>
 </body>
-</html>                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      
+</html>                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               

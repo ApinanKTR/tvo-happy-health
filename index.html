@@ -1532,8 +1532,9 @@ const handleRegister = async () => {
           const calDisplay = totalCal.toLocaleString();
           return (
             <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:10, marginBottom:22, opacity:animateIn?1:0, transition:"all .5s ease .15s" }}>
-              {/* Calorie card — special with progress */}
-              <div className="v2-card" style={{ padding:"14px 8px", textAlign:"center", gridColumn:"1" }}>
+              {/* Calorie card — special with progress, links to charity */}
+              <a href="charity.html" style={{ textDecoration:"none" }}>
+              <div className="v2-card" style={{ padding:"14px 8px", textAlign:"center", gridColumn:"1", cursor:"pointer" }}>
                 <div style={{ width:36, height:36, borderRadius:11, background:"linear-gradient(135deg,#16A34A,#22C55E)", margin:"0 auto 8px", display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, boxShadow:"0 4px 12px rgba(22,163,74,0.25)" }}>🔥</div>
                 <div style={{ fontFamily:"'Prompt'", fontSize:19, fontWeight:800, color:"#111827", lineHeight:1 }}>{calDisplay}</div>
                 <div style={{ fontSize:8.5, color:"#16A34A", fontWeight:700, marginTop:2 }}>{pct.toFixed(1)}% of 1M</div>
@@ -1541,10 +1542,11 @@ const handleRegister = async () => {
                   <div style={{ height:"100%", borderRadius:999, background:"linear-gradient(90deg,#16A34A,#22C55E)", width:`${pct}%`, transition:"width 1s cubic-bezier(.25,.46,.45,.94)" }} />
                 </div>
               </div>
+              </a>
               {/* Session card */}
               <div className="v2-card" style={{ padding:"14px 8px", textAlign:"center" }}>
                 <div style={{ width:36, height:36, borderRadius:11, background:"linear-gradient(135deg,#0891B2,#06B6D4)", margin:"0 auto 8px", display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, boxShadow:"0 4px 12px rgba(8,145,178,0.22)" }}>⚡</div>
-                <div style={{ fontFamily:"'Prompt'", fontSize:20, fontWeight:800, color:"#111827", lineHeight:1 }}>{verifiedLogs.length}</div>
+                <div style={{ fontFamily:"'Prompt'", fontSize:20, fontWeight:800, color:"#111827", lineHeight:1 }}>{verifiedLogs.length.toLocaleString('th-TH')}</div>
                 <div style={{ fontSize:9.5, color:"#9CA3AF", marginTop:4, lineHeight:1.3 }}>ครั้ง<br/>ตรวจแล้ว</div>
               </div>
               {/* Members card */}
