@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TVO — HR System Implementation Gantt Chart</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700;800&display=swap');
+
+  :root {
+    --bg: #f0f7f2;
+    --bg2: #e4f2ea;
+    --card: #ffffff;
+    --card2: #f7fdf9;
+    --border: #b8dfc8;
+    --border2: #d4edd e;
+    --green-dark: #0d6e3f;
+    --green: #1a9a5c;
+    --green2: #22c772;
+    --green-light: #d1f0e0;
+    --green-xlight: #eaf8f1;
+    --green-mid: #4db882;
+    --teal: #0e8a6e;
+    --teal2: #17b98f;
+    --olive: #4a7c59;
+    --accent: #0b5e35;
+    --text: #1a3028;
+    --text2: #2d5040;
+    --muted: #5a806a;
+    --faint: #cce8d8;
+    --orange: #c96820;
+    --orange2: #e8863a;
+    --red: #c0392b;
+    --shadow: rgba(10,80,40,0.08);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Sarabun', 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 28px 32px;
+  }
+
+  /* ─── HEADER ─── */
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    background: linear-gradient(135deg, var(--accent) 0%, var(--green-dark) 60%, var(--teal) 100%);
+    border: none;
+    border-radius: 16px;
+    padding: 22px 32px;
+    margin-bottom: 20px;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 4px 20px rgba(10,80,40,0.18);
+  }
+  .header::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; height: 3px;
+    background: linear-gradient(90deg, #a8f0cc, #ffffff, #a8f0cc);
+  }
+  .header::after {
+    content: '';
+    position: absolute;
+    right: -40px; top: -40px;
+    width: 180px; height: 180px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.06);
+    pointer-events: none;
+  }
+  .header-left h1 {
+    font-size: 22px; font-weight: 800; color: #ffffff;
+    letter-spacing: 0.3px; margin-bottom: 4px;
+  }
+  .header-left p { font-size: 12px; color: rgba(255,255,255,0.65); }
+  .header-right { text-align: right; }
+  .badge {
+    display: inline-block;
+    background: rgba(255,255,255,0.18);
+    border: 1px solid rgba(255,255,255,0.35);
+    color: #ffffff; font-size: 10px; font-weight: 800;
+    padding: 4px 14px; border-radius: 20px; letter-spacing: 1.5px;
+    margin-bottom: 6px;
+  }
+  .header-right p { font-size: 11px; color: rgba(255,255,255,0.55); }
+
+  /* ─── LEGEND ─── */
+  .legend-row {
+    display: flex;
+    gap: 20px;
+    align-items: center;
+    margin-bottom: 18px;
+    flex-wrap: wrap;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 18px;
+    box-shadow: 0 1px 4px var(--shadow);
+  }
+  .legend-item {
+    display: flex; align-items: center; gap: 7px;
+    font-size: 11px; color: var(--muted);
+  }
+  .legend-dot {
+    width: 26px; height: 10px; border-radius: 3px;
+  }
+  .legend-sep { width: 1px; height: 20px; background: var(--border); }
+
+  /* ─── GANTT WRAPPER ─── */
+  .gantt-wrapper {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    overflow: hidden;
+    margin-bottom: 18px;
+    box-shadow: 0 2px 12px var(--shadow);
+  }
+
+  .gantt-module-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 20px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+  }
+  .gantt-module-header.mod1 {
+    background: linear-gradient(90deg, var(--green-xlight), #f7fdf9);
+    color: var(--accent);
+  }
+  .gantt-module-header.mod2 {
+    background: linear-gradient(90deg, #e8f6f0, #f7fdf9);
+    color: var(--teal);
+  }
+  .gantt-module-header::before {
+    content: '';
+    width: 3px; height: 16px; border-radius: 2px;
+    background: currentColor;
+    flex-shrink: 0;
+  }
+
+  /* ─── GANTT TABLE ─── */
+  .gantt-table { width: 100%; border-collapse: collapse; }
+
+  .gantt-table thead tr th {
+    background: var(--green-xlight);
+    font-size: 10px; font-weight: 600;
+    letter-spacing: 0.5px; text-transform: uppercase;
+    color: var(--olive);
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    border-right: 1px solid var(--faint);
+    text-align: center;
+  }
+  .gantt-table thead tr th.task-col {
+    text-align: left; padding-left: 20px; width: 280px; min-width: 280px;
+  }
+  .gantt-table thead tr th.owner-col { width: 90px; }
+
+  .month-header {
+    background: var(--bg2) !important;
+    border-bottom: 2px solid var(--border) !important;
+  }
+  .month-label {
+    font-size: 11px; font-weight: 700;
+    color: var(--accent);
+  }
+  .month-sub { font-size: 9px; color: var(--muted); margin-top: 2px; }
+
+  .gantt-table tbody tr {
+    border-bottom: 1px solid var(--faint);
+  }
+  .gantt-table tbody tr:nth-child(even) { background: #fafcfb; }
+  .gantt-table tbody tr:hover { background: var(--green-xlight); }
+  .gantt-table tbody tr:last-child { border-bottom: none; }
+
+  .task-cell {
+    padding: 10px 20px;
+    min-width: 280px; width: 280px;
+    border-right: 1px solid var(--border);
+  }
+  .task-no {
+    display: inline-block;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    font-size: 10px; font-weight: 700;
+    line-height: 22px; text-align: center;
+    margin-right: 8px; flex-shrink: 0;
+    vertical-align: middle;
+  }
+  .task-no.gold { background: rgba(13,110,63,0.12); color: var(--accent); }
+  .task-no.blue { background: rgba(14,138,110,0.12); color: var(--teal); }
+  .task-name {
+    font-size: 12px; font-weight: 500; color: var(--text);
+    vertical-align: middle; line-height: 1.4;
+  }
+  .task-name small { display: block; font-size: 10px; color: var(--muted); font-weight: 400; margin-top: 1px; }
+
+  .owner-cell {
+    width: 90px; text-align: center;
+    padding: 0 8px;
+    border-right: 1px solid var(--faint);
+  }
+  .owner-tag {
+    display: inline-block;
+    font-size: 9px; font-weight: 700;
+    padding: 3px 8px; border-radius: 6px;
+    letter-spacing: 0.5px;
+  }
+  .owner-joint { background: rgba(22,154,92,0.12); color: var(--green); border: 1px solid rgba(22,154,92,0.25); }
+  .owner-uni { background: rgba(13,110,63,0.1); color: var(--accent); border: 1px solid rgba(13,110,63,0.2); }
+  .owner-tvo { background: rgba(14,138,110,0.1); color: var(--teal); border: 1px solid rgba(14,138,110,0.2); }
+
+  .bar-cell {
+    padding: 6px 4px;
+    position: relative;
+    border-right: 1px solid var(--faint);
+  }
+
+  .gantt-bar {
+    height: 22px;
+    border-radius: 4px;
+    position: relative;
+    display: flex;
+    align-items: center;
+    padding: 0 8px;
+    font-size: 10px;
+    font-weight: 600;
+    color: #ffffff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+  }
+  .gantt-bar.full { width: 100%; }
+
+  /* Milestone diamond */
+  .milestone-cell {
+    position: relative;
+    text-align: center;
+    vertical-align: middle;
+  }
+  .milestone-diamond {
+    display: inline-block;
+    width: 14px; height: 14px;
+    background: var(--accent);
+    transform: rotate(45deg);
+    box-shadow: 0 0 8px rgba(13,110,63,0.5);
+  }
+
+  /* ─── TODAY LINE ─── */
+  .today-marker {
+    position: absolute;
+    top: 0; bottom: 0; width: 2px;
+    background: rgba(192,57,43,0.6);
+    z-index: 5;
+    pointer-events: none;
+  }
+  .today-label {
+    position: absolute;
+    top: 2px;
+    font-size: 9px; color: #c0392b; font-weight: 700;
+    white-space: nowrap;
+    transform: translateX(-50%);
+  }
+
+  /* ─── FOOTER STRIP ─── */
+  .footer-strip {
+    display: grid;
+    grid-template-columns: repeat(3,1fr);
+    gap: 14px;
+    margin-bottom: 16px;
+  }
+  .footer-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 20px;
+    position: relative; overflow: hidden;
+    box-shadow: 0 1px 6px var(--shadow);
+  }
+  .footer-card::before {
+    content: '';
+    position: absolute; bottom: 0; left: 0; right: 0; height: 2px;
+  }
+  .footer-card.risk::before { background: linear-gradient(90deg,var(--orange),var(--orange2)); }
+  .footer-card.action::before { background: linear-gradient(90deg,var(--teal),var(--teal2)); }
+  .footer-card.outcome::before { background: linear-gradient(90deg,var(--green),var(--green2)); }
+  .footer-card-title { font-size: 11px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; margin-bottom: 10px; }
+  .footer-card.risk .footer-card-title { color: var(--orange); }
+  .footer-card.action .footer-card-title { color: var(--teal); }
+  .footer-card.outcome .footer-card-title { color: var(--green-dark); }
+  .footer-card-body { font-size: 11px; color: var(--muted); line-height: 1.75; }
+
+  .page-footer {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 11px 20px;
+    background: var(--green-dark);
+    border: none;
+    border-radius: 10px;
+    font-size: 10px; color: rgba(255,255,255,0.55);
+  }
+  .page-footer .accent { color: #a8f0cc; font-weight: 700; }
+</style>
+</head>
+<body>
+
+<!-- ─── HEADER ─── -->
+<div class="header">
+  <div class="header-left">
+    <h1>📊 TVO HR System — Gantt Chart Implementation Plan</h1>
+    <p>Uni HR System Onboarding &nbsp;|&nbsp; Module 1: HR Standard &nbsp;&amp;&nbsp; Module 2: Uni Recruit &nbsp;|&nbsp; มิ.ย — ต.ค 2569</p>
+  </div>
+  <div class="header-right">
+    <div class="badge">EXECUTIVE PRESENTATION</div>
+    <p>Thai Vegetable Oil PCL &nbsp;|&nbsp; HR Compensation &amp; Benefits</p>
+    <p style="margin-top:4px;">Prepared: June 2026</p>
+  </div>
+</div>
+
+<!-- ─── LEGEND ─── -->
+<div class="legend-row">
+  <div class="legend-item">
+    <div class="legend-dot" style="background:linear-gradient(90deg,#0d6e3f,#22c772);"></div> Joint (Uni HR + TVO)
+  </div>
+  <div class="legend-item">
+    <div class="legend-dot" style="background:linear-gradient(90deg,#0e8a6e,#17b98f);"></div> Uni HR ดำเนินการ
+  </div>
+  <div class="legend-item">
+    <div class="legend-dot" style="background:linear-gradient(90deg,#4a9e6a,#6dc98a);"></div> TVO ดำเนินการ
+  </div>
+  <div class="legend-item">
+    <div class="legend-dot" style="background:linear-gradient(90deg,#c96820,#e8863a);"></div> Training / UAT
+  </div>
+  <div class="legend-item">
+    <div class="legend-dot" style="background:linear-gradient(90deg,#c0392b,#e05040);"></div> Go Live 🚀
+  </div>
+  <div class="legend-sep"></div>
+  <div class="legend-item">
+    <div style="width:14px;height:14px;background:#0d6e3f;transform:rotate(45deg);display:inline-block;flex-shrink:0;box-shadow:0 0 6px rgba(13,110,63,0.4);"></div>&nbsp; Milestone
+  </div>
+  <div class="legend-item">
+    <div style="width:2px;height:18px;background:rgba(192,57,43,0.6);display:inline-block;flex-shrink:0;"></div>&nbsp; วันนี้ (25 มิ.ย 69)
+  </div>
+</div>
+
+<!-- ─── MODULE 1 ─── -->
+<div class="gantt-wrapper" style="margin-bottom:16px;">
+  <div class="gantt-module-header mod1">
+    📦 Module 1 : Uni HR Standard — HR Central · Time/Leave/Shift · Payroll
+  </div>
+  <table class="gantt-table">
+    <thead>
+      <tr>
+        <th class="task-col">Activity</th>
+        <th class="owner-col">ผู้รับผิดชอบ</th>
+        <!-- 5 months: Jun / Jul / Aug / Sep / Oct — each split into halves (2 cols) -->
+        <th colspan="2" class="month-header">
+          <div class="month-label">มิ.ย 69</div>
+          <div class="month-sub">June 2026</div>
+        </th>
+        <th colspan="2" class="month-header">
+          <div class="month-label">ก.ค 69</div>
+          <div class="month-sub">July 2026</div>
+        </th>
+        <th colspan="2" class="month-header">
+          <div class="month-label">ส.ค 69</div>
+          <div class="month-sub">August 2026</div>
+        </th>
+        <th colspan="2" class="month-header">
+          <div class="month-label">ก.ย 69</div>
+          <div class="month-sub">September 2026</div>
+        </th>
+        <th colspan="2" class="month-header">
+          <div class="month-label">ต.ค 69</div>
+          <div class="month-sub">October 2026</div>
+        </th>
+      </tr>
+    </thead>
+    <tbody>
+
+      <!-- Step 1 -->
+      <tr>
+        <td class="task-cell">
+          <span class="task-no gold">1</span>
+          <span class="task-name">Kick-Off Project &amp; Project Members
+            <small>ประชุม Kick Off + ลิส Project Member</small>
+          </span>
+        </td>
+        <td class="owner-cell"><span class="owner-tag owner-joint">Joint</span></td>
+        <!-- Jun H1 -->
+        <td class="bar-cell" colspan="1">
+          <div class="gantt-bar" style="background:linear-gradient(90deg,#0d6e3f,#22c772);">Kick-Off</div>
+        </td>
+        <td class="bar-cell"></td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+      </tr>
+
+      <!-- Step 2 -->
+      <tr>
+        <td class="task-cell">
+          <span class="task-no gold">2</span>
+          <span class="task-name">เตรียมข้อมูล HR Central PIS (Excel)
+            <small>File Excel ตาม format HR Central เพื่อ Dump ระบบ</small>
+          </span>
+        </td>
+        <td class="owner-cell"><span class="owner-tag owner-tvo">TVO</span></td>
+        <td class="bar-cell"></td>
+        <td class="bar-cell" colspan="2">
+          <div class="gantt-bar" style="background:linear-gradient(90deg,#0e8a6e,#17b98f);">Data Prep</div>
+        </td>
+        <td class="bar-cell"></td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+      </tr>
+
+      <!-- Step 3 -->
+      <tr>
+        <td class="task-cell">
+          <span class="task-no gold">3</span>
+          <span class="task-name">Workshop 1 — Time/Shift Standard
+            <small>จัดการกติกาเรื่องเวลา ทำเป็นมาตรฐาน</small>
+          </span>
+        </td>
+        <td class="owner-cell"><span class="owner-tag owner-joint">Joint</span></td>
+        <td class="bar-cell"></td>
+        <td class="bar-cell" colspan="1">
+          <div class="gantt-bar" style="background:linear-gradient(90deg,#0d6e3f,#22c772);">Workshop 1</div>
+        </td>
+        <td class="bar-cell"></td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+      </tr>
+
+      <!-- Step 4 -->
+      <tr>
+        <td class="task-cell">
+          <span class="task-no gold">4</span>
+          <span class="task-name">เตรียมข้อมูลกะ / วันลา / วันหยุด
+            <small>File Excel เรื่อง Time ตาม format จุดต่างๆ</small>
+          </span>
+        </td>
+        <td class="owner-cell"><span class="owner-tag owner-tvo">TVO</span></td>
+        <td class="bar-cell"></td>
+        <td class="bar-cell"></td>
+        <td class="bar-cell" colspan="1">
+          <div class="gantt-bar" style="background:linear-gradient(90deg,#4a9e6a,#6dc98a);">Config Data</div>
+        </td>
+        <td class="bar-cell"></td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell"></td>
+      </tr>
+
+      <!-- Step 5 -->
+      <tr>
+        <td class="task-cell">
+          <span class="task-no gold">5</span>
+          <span class="task-name">ลงข้อมูล HR Core PIS (Uni HR)
+            <small>ลงข้อมูล HR Central + Time ในระบบ</small>
+          </span>
+        </td>
+        <td class="owner-cell"><span class="owner-tag owner-uni">Uni HR</span></td>
+        <td class="bar-cell"></td>
+        <td class="bar-cell"></td>
+        <td class="bar-cell" colspan="2">
+          <div class="gantt-bar" style="background:linear-gradient(90deg,#0d6e3f,#22c772);">Data Entry</div>
+        </td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell"></td>
+      </tr>
+
+      <!-- Step 6 -->
+      <tr>
+        <td class="task-cell">
+          <span class="task-no gold">6</span>
+          <span class="task-name">ตรวจสอบข้อมูล PIS HR Central (TVO)
+            <small>ตรวจสอบในระบบ Uni HR ส่วน HR Central</small>
+          </span>
+        </td>
+        <td class="owner-cell"><span class="owner-tag owner-tvo">TVO</span></td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell"></td>
+        <td class="bar-cell" colspan="1">
+          <div class="gantt-bar" style="background:linear-gradient(90deg,#4a9e6a,#6dc98a);">Data Check</div>
+        </td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell"></td>
+      </tr>
+
+      <!-- Step 7 -->
+      <tr>
+        <td class="task-cell">
+          <span class="task-no gold">7</span>
+          <span class="task-name">Workshop 2 — Payroll Configuration
+            <small>จัดการกติกาเรื่อง Payroll ทำเป็นมาตรฐาน</small>
+          </span>
+        </td>
+        <td class="owner-cell"><span class="owner-tag owner-joint">Joint</span></td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell"></td>
+        <td class="bar-cell" colspan="1">
+          <div class="gantt-bar" style="background:linear-gradient(90deg,#0d6e3f,#22c772);">Workshop 2</div>
+        </td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell"></td>
+      </tr>
+
+      <!-- Step 8 -->
+      <tr>
+        <td class="task-cell">
+          <span class="task-no gold">8</span>
+          <span class="task-name">Config กะ / วันลา / ตั้งค่าต่างๆ
+            <small>Uni HR Config รูปแบบกะ วันลา ตั้งค่าระบบ</small>
+          </span>
+        </td>
+        <td class="owner-cell"><span class="owner-tag owner-uni">Uni HR</span></td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell" colspan="1">
+          <div class="gantt-bar" style="background:linear-gradient(90deg,#0e8a6e,#17b98f);">System Config</div>
+        </td>
+        <td class="bar-cell"></td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell"></td>
+      </tr>
+
+      <!-- Step 9 -->
+      <tr>
+        <td class="task-cell">
+          <span class="task-no gold">9</span>
+          <span class="task-name">UAT — HR Central / Time / Leave / Shift
+            <small>ทดลองใช้โดยตัวแทนทีมงานลูกค้า</small>
+          </span>
+        </td>
+        <td class="owner-cell"><span class="owner-tag owner-tvo">TVO</span></td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell" colspan="1">
+          <div class="gantt-bar" style="background:linear-gradient(90deg,#c96820,#e8863a);">UAT Round 1</div>
+        </td>
+        <td class="bar-cell"></td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell"></td>
+      </tr>
+
+      <!-- Step 10 -->
+      <tr>
+        <td class="task-cell">
+          <span class="task-no gold">10</span>
+          <span class="task-name">เชื่อมต่อ Finger Scan กับ IT
+            <small>Integration Biometric + IT Infrastructure</small>
+          </span>
+        </td>
+        <td class="owner-cell"><span class="owner-tag owner-joint">Joint+IT</span></td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell" colspan="2">
+          <div class="gantt-bar" style="background:linear-gradient(90deg,#0d6e3f,#22c772);">Finger Scan Integration</div>
+        </td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell"></td>
+      </tr>
+
+      <!-- Step 11 -->
+      <tr>
+        <td class="task-cell">
+          <span class="task-no gold">11</span>
+          <span class="task-name">Config Payroll ตั้งค่าต่างๆ
+            <small>Payroll Rules, Allowances, Deductions Setup</small>
+          </span>
+        </td>
+        <td class="owner-cell"><span class="owner-tag owner-joint">Joint</span></td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell"></td>
+        <td class="bar-cell" colspan="1">
+          <div class="gantt-bar" style="background:linear-gradient(90deg,#0e8a6e,#17b98f);">Payroll Config</div>
+        </td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell"></td>
+      </tr>
+
+      <!-- Step 12 -->
+      <tr>
+        <td class="task-cell">
+          <span class="task-no gold">12</span>
+          <span class="task-name">UAT Payroll — ตรวจสอบโดยทีมลูกค้า
+            <small>ทดลองและตรวจสอบข้อมูล Payroll</small>
+          </span>
+        </td>
+        <td class="owner-cell"><span class="owner-tag owner-tvo">TVO</span></td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell"></td>
+        <td class="bar-cell" colspan="1">
+          <div class="gantt-bar" style="background:linear-gradient(90deg,#c96820,#e8863a);">UAT Payroll</div>
+        </td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell"></td>
+      </tr>
+
+      <!-- Step 13+14 -->
+      <tr>
+        <td class="task-cell">
+          <span class="task-no gold">13</span>
+          <span class="task-name">อบรม Admin + User + Manager
+            <small>Training Program ครบทุกกลุ่ม</small>
+          </span>
+        </td>
+        <td class="owner-cell"><span class="owner-tag owner-joint">Joint</span></td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell" colspan="2">
+          <div class="gantt-bar" style="background:linear-gradient(90deg,#c96820,#e8863a);">Training All Users</div>
+        </td>
+        <td class="bar-cell"></td>
+      </tr>
+
+      <!-- Step 15 Shadow -->
+      <tr>
+        <td class="task-cell">
+          <span class="task-no gold">15</span>
+          <span class="task-name">Shadow Mode — ใช้งานคู่ขนาน
+            <small>เริ่มการใช้งานแบบ Parallel Run</small>
+          </span>
+        </td>
+        <td class="owner-cell"><span class="owner-tag owner-joint">Joint</span></td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell" colspan="2">
+          <div class="gantt-bar" style="background:linear-gradient(90deg,#2e7d5a,#3fa870);">Shadow Mode</div>
+        </td>
+        <td class="bar-cell"></td>
+      </tr>
+
+      <!-- Step 16 Go Live -->
+      <tr style="background:rgba(192,57,43,0.04);">
+        <td class="task-cell">
+          <span class="task-no gold">16</span>
+          <span class="task-name" style="color:#0d6e3f;font-weight:700;">🚀 Go Live Full — HR Standard
+            <small style="color:#4a7c59;">เริ่มการใช้งานแบบ Full Production</small>
+          </span>
+        </td>
+        <td class="owner-cell"><span class="owner-tag owner-joint">Joint</span></td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell" colspan="1" style="text-align:center;vertical-align:middle;position:relative;">
+          <div style="display:flex;align-items:center;gap:6px;">
+            <div style="width:14px;height:14px;background:#0d6e3f;transform:rotate(45deg);flex-shrink:0;box-shadow:0 0 10px rgba(13,110,63,0.5);"></div>
+            <span style="font-size:11px;font-weight:700;color:#0d6e3f;">1 ต.ค</span>
+          </div>
+        </td>
+        <td class="bar-cell"></td>
+      </tr>
+
+    </tbody>
+  </table>
+</div>
+
+<!-- ─── MODULE 2 ─── -->
+<div class="gantt-wrapper" style="margin-bottom:18px;">
+  <div class="gantt-module-header mod2">
+    🔍 Module 2 : Uni Recruit — Recruitment Management System
+  </div>
+  <table class="gantt-table">
+    <thead>
+      <tr>
+        <th class="task-col">Activity</th>
+        <th class="owner-col">ผู้รับผิดชอบ</th>
+        <th colspan="2" class="month-header"><div class="month-label">มิ.ย 69</div><div class="month-sub">June</div></th>
+        <th colspan="2" class="month-header"><div class="month-label">ก.ค 69</div><div class="month-sub">July</div></th>
+        <th colspan="2" class="month-header"><div class="month-label">ส.ค 69</div><div class="month-sub">August</div></th>
+        <th colspan="2" class="month-header"><div class="month-label">ก.ย 69</div><div class="month-sub">September</div></th>
+        <th colspan="2" class="month-header"><div class="month-label">ต.ค 69</div><div class="month-sub">October</div></th>
+      </tr>
+    </thead>
+    <tbody>
+
+      <tr>
+        <td class="task-cell">
+          <span class="task-no blue">R1</span>
+          <span class="task-name">Workshop 1 — Recruit Flow Approval
+            <small>ระบบ Flow ขออนุมัติ Recruit</small>
+          </span>
+        </td>
+        <td class="owner-cell"><span class="owner-tag owner-joint">Joint</span></td>
+        <td class="bar-cell"></td>
+        <td class="bar-cell" colspan="1">
+          <div class="gantt-bar" style="background:linear-gradient(90deg,#0e8a6e,#17b98f);">Workshop</div>
+        </td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell"></td>
+      </tr>
+
+      <tr>
+        <td class="task-cell">
+          <span class="task-no blue">R2</span>
+          <span class="task-name">เตรียม HR Structure + HR Central
+            <small>ทีม HRM เตรียมโครงสร้างและ HR Central ให้เสร็จ</small>
+          </span>
+        </td>
+        <td class="owner-cell"><span class="owner-tag owner-joint">Joint</span></td>
+        <td class="bar-cell"></td>
+        <td class="bar-cell" colspan="2">
+          <div class="gantt-bar" style="background:linear-gradient(90deg,#0d6e3f,#22c772);">Structure Prep</div>
+        </td>
+        <td class="bar-cell"></td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell"></td>
+      </tr>
+
+      <tr>
+        <td class="task-cell">
+          <span class="task-no blue">R3</span>
+          <span class="task-name">Uni HR Config ระบบ Recruit
+            <small>ตั้งค่าให้ลูกค้า</small>
+          </span>
+        </td>
+        <td class="owner-cell"><span class="owner-tag owner-uni">Uni HR</span></td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell" colspan="2">
+          <div class="gantt-bar" style="background:linear-gradient(90deg,#0e8a6e,#17b98f);">System Config</div>
+        </td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell"></td>
+      </tr>
+
+      <tr>
+        <td class="task-cell">
+          <span class="task-no blue">R4</span>
+          <span class="task-name">เตรียม Candidate Data ลองลงระบบ
+            <small>ลูกค้าเตรียมข้อมูล Candidate มาลองลงระบบ</small>
+          </span>
+        </td>
+        <td class="owner-cell"><span class="owner-tag owner-tvo">TVO</span></td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell" colspan="2">
+          <div class="gantt-bar" style="background:linear-gradient(90deg,#4a9e6a,#6dc98a);">Candidate Data</div>
+        </td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell"></td>
+      </tr>
+
+      <tr>
+        <td class="task-cell">
+          <span class="task-no blue">R5</span>
+          <span class="task-name">UAT — เปิดงาน &rarr; ส่งคนปิดงาน
+            <small>ทดสอบ Flow Line Manager ถึง Closing</small>
+          </span>
+        </td>
+        <td class="owner-cell"><span class="owner-tag owner-tvo">TVO</span></td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell" colspan="2">
+          <div class="gantt-bar" style="background:linear-gradient(90deg,#c96820,#e8863a);">UAT Recruit</div>
+        </td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell"></td>
+      </tr>
+
+      <tr>
+        <td class="task-cell">
+          <span class="task-no blue">R6</span>
+          <span class="task-name">อบรม Admin — ระบบ Recruit
+            <small>Admin Training สำหรับระบบ Recruit</small>
+          </span>
+        </td>
+        <td class="owner-cell"><span class="owner-tag owner-joint">Joint</span></td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell"></td>
+        <td class="bar-cell" colspan="1">
+          <div class="gantt-bar" style="background:linear-gradient(90deg,#c96820,#e8863a);">Training</div>
+        </td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell"></td>
+      </tr>
+
+      <tr style="background:rgba(14,138,110,0.04);">
+        <td class="task-cell">
+          <span class="task-no blue">R7</span>
+          <span class="task-name" style="color:#0e8a6e;font-weight:700;">🚀 Go Live — Uni Recruit
+            <small style="color:#2d6050;">เริ่มการใช้งาน Recruit Full Production</small>
+          </span>
+        </td>
+        <td class="owner-cell"><span class="owner-tag owner-joint">Joint</span></td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell"></td><td class="bar-cell"></td>
+        <td class="bar-cell" colspan="1" style="text-align:center;vertical-align:middle;">
+          <div style="display:flex;align-items:center;gap:6px;">
+            <div style="width:14px;height:14px;background:#0e8a6e;transform:rotate(45deg);flex-shrink:0;box-shadow:0 0 10px rgba(14,138,110,0.5);"></div>
+            <span style="font-size:11px;font-weight:700;color:#0e8a6e;">1 ก.ย</span>
+          </div>
+        </td>
+        <td class="bar-cell"></td>
+        <td class="bar-cell"></td>
+      </tr>
+
+    </tbody>
+  </table>
+</div>
+
+<!-- ─── FOOTER CARDS ─── -->
+<div class="footer-strip">
+  <div class="footer-card risk">
+    <div class="footer-card-title">⚠️ Risk &amp; Dependencies</div>
+    <div class="footer-card-body">
+      • Customization ระหว่างทางต้องแยก Timeline ออกต่างหาก<br>
+      • ความล่าช้าในการเตรียมข้อมูลของ TVO จะส่งผลทอดต่อทุก Phase<br>
+      • Finger Scan Integration ขึ้นอยู่กับทีม IT ของ TVO<br>
+      • UAT Payroll ต้องใช้เวลาเพียงพอก่อน Go Live
+    </div>
+  </div>
+  <div class="footer-card action">
+    <div class="footer-card-title">📌 TVO Action Required</div>
+    <div class="footer-card-body">
+      • เตรียม HR Central PIS Excel (format Uni HR) → ภายใน 15 ก.ค 69<br>
+      • เตรียมข้อมูลกะ / โควต้าวันลา / วันหยุด → ภายใน 20 ก.ค 69<br>
+      • จัดทีมตัวแทน UAT (HR + Payroll + Recruit)<br>
+      • ประสาน IT เรื่อง Finger Scan → ก่อน 15 ส.ค 69
+    </div>
+  </div>
+  <div class="footer-card outcome">
+    <div class="footer-card-title">✅ Expected Outcomes</div>
+    <div class="footer-card-body">
+      • Uni Recruit Go Live → 1 กันยายน 2569<br>
+      • HR Standard (HR Central + Time + Payroll) Go Live → 1 ตุลาคม 2569<br>
+      • Admin + User + Manager ผ่านการอบรมครบถ้วน<br>
+      • ระบบ HR ครบ 4 Modules พร้อมใช้งานเต็มรูปแบบ
+    </div>
+  </div>
+</div>
+
+<div class="page-footer">
+  <div>Thai Vegetable Oil PCL (TVO) &nbsp;|&nbsp; HR Compensation &amp; Benefits Department</div>
+  <div class="accent">CONFIDENTIAL — EXECUTIVE USE ONLY</div>
+  <div>Prepared: June 2026 &nbsp;|&nbsp; Implementation Period: Jun–Oct 2569</div>
+</div>
+
+</body>
+</html>
