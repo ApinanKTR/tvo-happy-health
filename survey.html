@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="theme-color" content="#16A34A"/>
+  <title>สำรวจขนาดเสื้อ — TVO Happy Health</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Prompt',sans-serif;background:#F0FDF4;min-height:100vh;color:#1a2e1a}
+
+    .hdr{background:linear-gradient(135deg,#15803d 0%,#16A34A 60%,#22c55e 100%);color:#fff;text-align:center;padding:28px 16px 22px}
+    .hdr h1{font-size:20px;font-weight:800;margin-bottom:4px}
+    .hdr p{font-size:12px;opacity:.85}
+    .back-link{display:inline-flex;align-items:center;gap:6px;color:rgba(255,255,255,.85);font-size:13px;font-weight:600;text-decoration:none;margin-bottom:14px;padding:4px 0}
+    .back-link:hover{color:#fff}
+
+    .container{max-width:500px;margin:0 auto;padding:16px}
+
+    /* Login gate */
+    #login-gate{background:#fff;border-radius:20px;padding:32px 24px;text-align:center;box-shadow:0 2px 16px rgba(0,0,0,.08);margin-top:20px}
+    #login-gate h2{font-size:17px;font-weight:700;color:#111827;margin-bottom:6px}
+    #login-gate p{font-size:13px;color:#6B7280;margin-bottom:20px}
+    .inp{width:100%;padding:12px 14px;border:1.5px solid #D1FAE5;border-radius:12px;font-size:14px;font-family:'Prompt',sans-serif;outline:none;transition:border .2s}
+    .inp:focus{border-color:#16A34A}
+    .btn-green{width:100%;padding:13px;background:#16A34A;color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;font-family:'Prompt',sans-serif;cursor:pointer;margin-top:12px;transition:background .2s}
+    .btn-green:hover{background:#15803d}
+    .btn-green:disabled{background:#9CA3AF;cursor:not-allowed}
+    .err{color:#DC2626;font-size:12px;margin-top:8px;text-align:center}
+
+    #app{display:none}
+
+    /* Status badge */
+    .status-card{background:#fff;border-radius:16px;padding:16px 18px;box-shadow:0 2px 12px rgba(0,0,0,.07);margin-bottom:14px;display:flex;align-items:center;gap:14px}
+    .status-title{font-size:13px;color:#6B7280;font-weight:600}
+    .status-size{font-size:26px;font-weight:800;color:#16A34A;line-height:1.1}
+    .status-sub{font-size:11px;color:#9CA3AF;margin-top:2px}
+
+    /* Size picker */
+    .section-title{font-size:13px;font-weight:700;color:#374151;margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px}
+    .size-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px}
+    .size-btn{background:#fff;border:2px solid #E5E7EB;border-radius:14px;padding:14px 8px;text-align:center;cursor:pointer;transition:all .18s;font-family:'Prompt',sans-serif}
+    .size-btn:hover{border-color:#16A34A;background:#F0FDF4}
+    .size-btn.selected{border-color:#16A34A;background:#DCFCE7}
+    .size-btn .sz-name{font-size:22px;font-weight:800;color:#111827;line-height:1}
+    .size-btn.selected .sz-name{color:#15803d}
+    .size-btn .sz-chest{font-size:11px;color:#9CA3AF;margin-top:3px}
+    .size-btn.selected .sz-chest{color:#16A34A}
+
+    .btn-save{width:100%;padding:14px;background:#16A34A;color:#fff;border:none;border-radius:14px;font-size:16px;font-weight:700;font-family:'Prompt',sans-serif;cursor:pointer;transition:background .2s;margin-bottom:20px}
+    .btn-save:hover{background:#15803d}
+    .btn-save:disabled{background:#D1D5DB;color:#9CA3AF;cursor:not-allowed}
+
+    /* Size chart */
+    .chart-card{background:#fff;border-radius:16px;padding:18px;box-shadow:0 2px 12px rgba(0,0,0,.07);margin-bottom:20px;overflow-x:auto}
+    .size-table{width:100%;border-collapse:collapse;font-size:13px}
+    .size-table th{background:#F0FDF4;color:#15803d;font-weight:700;padding:8px 10px;text-align:center;border-bottom:2px solid #D1FAE5;white-space:nowrap}
+    .size-table td{padding:9px 10px;text-align:center;border-bottom:1px dashed #F3F4F6;color:#374151}
+    .size-table tr:last-child td{border-bottom:none}
+    .size-table tr:hover td{background:#F9FAFB}
+    .size-table .col-size{font-weight:800;color:#111827;font-size:15px}
+    .size-table tr.my-size td{background:#DCFCE7}
+    .size-table tr.my-size .col-size{color:#15803d}
+    .unit{font-size:10px;color:#9CA3AF;font-weight:400}
+
+    /* Summary */
+    .summary-card{background:#fff;border-radius:16px;padding:18px;box-shadow:0 2px 12px rgba(0,0,0,.07);margin-bottom:20px}
+    .summary-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #F3F4F6}
+    .summary-row:last-child{border-bottom:none}
+    .sum-size{font-size:16px;font-weight:800;color:#111827;width:44px}
+    .sum-bar-wrap{flex:1;background:#F3F4F6;border-radius:99px;height:10px;overflow:hidden}
+    .sum-bar{height:10px;background:#16A34A;border-radius:99px;transition:width .5s ease}
+    .sum-count{font-size:13px;font-weight:700;color:#374151;width:28px;text-align:right}
+    .sum-pct{font-size:11px;color:#9CA3AF;width:36px;text-align:right}
+
+    /* Participant list */
+    .plist-card{background:#fff;border-radius:16px;padding:18px;box-shadow:0 2px 12px rgba(0,0,0,.07);margin-bottom:24px}
+    .plist-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid #F3F4F6;font-size:13px}
+    .plist-row:last-child{border-bottom:none}
+    .plist-num{font-size:11px;color:#9CA3AF;width:20px;text-align:center;flex-shrink:0}
+    .plist-name{flex:1;font-weight:700;color:#111827;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .plist-name.me{color:#16A34A}
+    .plist-size{background:#DCFCE7;color:#15803d;font-weight:800;font-size:12px;padding:3px 9px;border-radius:99px;flex-shrink:0}
+    .plist-date{font-size:11px;color:#9CA3AF;flex-shrink:0;white-space:nowrap}
+
+    .toast{position:fixed;top:24px;left:50%;transform:translateX(-50%);background:#16A34A;color:#fff;padding:12px 22px;border-radius:99px;font-size:14px;font-weight:700;font-family:'Prompt',sans-serif;box-shadow:0 4px 20px rgba(22,163,74,.4);z-index:999;opacity:0;transition:opacity .3s;pointer-events:none}
+    .toast.show{opacity:1}
+    .loader{text-align:center;padding:32px 0;color:#9CA3AF;font-size:13px}
+  </style>
+</head>
+<body>
+
+<div class="hdr">
+  <a href="index.html" class="back-link">← กลับหน้าแอพ</a>
+  <div style="font-size:36px;margin-bottom:6px">👕</div>
+  <h1>สำรวจขนาดเสื้อ TVO Happy Health 2026</h1>
+  <p>เลือก size ที่เหมาะกับตัวคุณ — ข้อมูลนี้ใช้สั่งผลิตเสื้อ</p>
+</div>
+
+<div class="container">
+
+  <!-- Login gate -->
+  <div id="login-gate">
+    <div style="font-size:48px;margin-bottom:8px">🔐</div>
+    <h2>เข้าสู่ระบบก่อนสำรวจ</h2>
+    <p>ใช้รหัสพนักงานและรหัสผ่านเดียวกับแอพหลัก</p>
+    <input class="inp" id="inp-user" type="text" placeholder="รหัสพนักงาน (Employee ID)" autocomplete="username"/>
+    <input class="inp" id="inp-pass" type="password" placeholder="รหัสผ่าน" autocomplete="current-password" style="margin-top:8px"/>
+    <button class="btn-green" id="btn-login" onclick="doLogin()">เข้าสู่ระบบ</button>
+    <div class="err" id="login-err"></div>
+  </div>
+
+  <!-- Main app -->
+  <div id="app">
+
+    <!-- Current status -->
+    <div class="status-card">
+      <div style="font-size:32px;flex-shrink:0">👕</div>
+      <div>
+        <div class="status-title">size ที่เลือกปัจจุบัน</div>
+        <div class="status-size" id="cur-size">ยังไม่ได้เลือก</div>
+        <div class="status-sub" id="cur-user"></div>
+      </div>
+    </div>
+
+    <!-- Size picker -->
+    <div class="section-title">เลือก size ของคุณ</div>
+    <div class="size-grid" id="size-grid"></div>
+    <button class="btn-save" id="btn-save" disabled onclick="saveSize()">บันทึก size</button>
+
+    <!-- Size chart (before summary) -->
+    <div class="section-title">ตารางไซส์เสื้อ</div>
+    <div class="chart-card">
+      <table class="size-table" id="size-chart-table">
+        <thead>
+          <tr>
+            <th>ขนาด</th>
+            <th>รอบอก <span class="unit">(นิ้ว)</span></th>
+            <th>ความยาว <span class="unit">(นิ้ว)</span></th>
+            <th>ความยาวแขน <span class="unit">(นิ้ว)</span></th>
+            <th>ความกว้างไหล่ <span class="unit">(นิ้ว)</span></th>
+          </tr>
+        </thead>
+        <tbody id="chart-body">
+          <tr id="row-S"><td class="col-size">S</td><td>34</td><td>26</td><td>7.5</td><td>14.5</td></tr>
+          <tr id="row-M"><td class="col-size">M</td><td>37</td><td>27</td><td>8</td><td>15</td></tr>
+          <tr id="row-L"><td class="col-size">L</td><td>40</td><td>28</td><td>8.5</td><td>15.5</td></tr>
+          <tr id="row-XL"><td class="col-size">XL</td><td>43</td><td>28.5</td><td>9</td><td>16</td></tr>
+          <tr id="row-2XL"><td class="col-size">2XL</td><td>46</td><td>29</td><td>9.5</td><td>16.5</td></tr>
+          <tr id="row-3XL"><td class="col-size">3XL</td><td>49</td><td>29</td><td>10</td><td>17</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Summary -->
+    <div class="section-title">สรุปผลสำรวจ <span id="sum-total" style="color:#16A34A;font-weight:800"></span></div>
+    <div class="summary-card" id="summary-card">
+      <div class="loader">กำลังโหลด...</div>
+    </div>
+
+    <!-- Participant list -->
+    <div class="section-title">รายชื่อผู้สำรวจแล้ว</div>
+    <div class="plist-card" id="plist-card">
+      <div class="loader">กำลังโหลด...</div>
+    </div>
+
+  </div><!-- /app -->
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const SUPABASE_URL      = 'https://lnqtszvqglqdsdvzncbe.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxucXRzenZxZ2xxZHNkdnpuY2JlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA0NTAyODcsImV4cCI6MjA5NjAyNjI4N30.vhsbuZYK_lfnZEWbmCPmskWUk64ya1jxllRbc2_078w';
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const SIZES = ['S','M','L','XL','2XL','3XL'];
+const CHEST = {S:34,M:37,L:40,XL:43,'2XL':46,'3XL':49};
+
+let authUser  = null;
+let selected  = null;
+let savedSize = null;
+
+/* ── Auto-login from session ──────────────────────────── */
+function tryAutoLogin() {
+  try {
+    const raw = localStorage.getItem('tvohh_session');
+    if (!raw) return false;
+    const s = JSON.parse(raw);
+    if (!s || !s.displayName) return false;
+    authUser = { display_name: s.displayName, employee_id: s.empId || null, role: s.role || 'user' };
+    return true;
+  } catch { return false; }
+}
+
+function showApp() {
+  document.getElementById('login-gate').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  document.getElementById('cur-user').textContent = authUser.display_name;
+  buildSizeGrid();
+  loadMySize().then(() => loadSummary());
+}
+
+window.addEventListener('load', () => {
+  if (tryAutoLogin()) showApp();
+});
+
+/* ── Manual login ─────────────────────────────────────── */
+async function doLogin() {
+  const empId = document.getElementById('inp-user').value.trim();
+  const pass  = document.getElementById('inp-pass').value;
+  if (!empId || !pass) { showErr('กรุณากรอกรหัสพนักงานและรหัสผ่าน'); return; }
+  const btn = document.getElementById('btn-login');
+  btn.disabled = true; btn.textContent = 'กำลังตรวจสอบ...';
+  try {
+    const { data, error } = await sb.from('user_profiles')
+      .select('display_name,employee_id,role,password_hash')
+      .eq('employee_id', empId)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data || data.password_hash !== pass) {
+      showErr('รหัสพนักงานหรือรหัสผ่านไม่ถูกต้อง');
+      btn.disabled = false; btn.textContent = 'เข้าสู่ระบบ';
+      return;
+    }
+    authUser = data;
+    showApp();
+  } catch(e) {
+    showErr('เกิดข้อผิดพลาด: ' + e.message);
+    btn.disabled = false; btn.textContent = 'เข้าสู่ระบบ';
+  }
+}
+
+function showErr(msg) { document.getElementById('login-err').textContent = msg; }
+
+/* ── Size Grid ─────────────────────────────────────────── */
+function buildSizeGrid() {
+  document.getElementById('size-grid').innerHTML = SIZES.map(sz => `
+    <div class="size-btn" id="sizebtn-${sz}" onclick="pickSize('${sz}')">
+      <div class="sz-name">${sz}</div>
+      <div class="sz-chest">รอบอก ${CHEST[sz]}"</div>
+    </div>`).join('');
+}
+
+function pickSize(sz) {
+  selected = sz;
+  SIZES.forEach(s => document.getElementById('sizebtn-'+s).classList.toggle('selected', s === sz));
+  const btn = document.getElementById('btn-save');
+  btn.disabled = false;
+  btn.textContent = sz === savedSize ? `บันทึก size ${sz} (เปลี่ยน)` : `บันทึก size ${sz}`;
+  // highlight chart row
+  SIZES.forEach(s => document.getElementById('row-'+s)?.classList.toggle('my-size', s === sz));
+}
+
+/* ── Load my size ──────────────────────────────────────── */
+async function loadMySize() {
+  const { data } = await sb.from('shirt_survey')
+    .select('size')
+    .eq('display_name', authUser.display_name)
+    .maybeSingle();
+  if (data?.size) {
+    savedSize = data.size;
+    document.getElementById('cur-size').textContent = data.size;
+    pickSize(data.size);
+  }
+}
+
+/* ── Save ─────────────────────────────────────────────── */
+async function saveSize() {
+  if (!selected) return;
+  const btn = document.getElementById('btn-save');
+  btn.disabled = true; btn.textContent = 'กำลังบันทึก...';
+  try {
+    const { error } = await sb.from('shirt_survey').upsert({
+      display_name: authUser.display_name,
+      employee_id:  authUser.employee_id || null,
+      size:         selected,
+      updated_at:   new Date().toISOString()
+    }, { onConflict: 'display_name' });
+    if (error) throw error;
+    savedSize = selected;
+    document.getElementById('cur-size').textContent = selected;
+    showToast('✅ บันทึก size ' + selected + ' เรียบร้อย');
+    btn.disabled = false; btn.textContent = 'บันทึกแล้ว ✓';
+    await loadSummary();
+  } catch(e) {
+    showToast('❌ บันทึกไม่สำเร็จ: ' + e.message);
+    btn.disabled = false; btn.textContent = 'บันทึก size';
+  }
+}
+
+/* ── Summary + Participant List ───────────────────────── */
+async function loadSummary() {
+  try {
+    const { data, error } = await sb.from('shirt_survey')
+      .select('display_name,size,updated_at')
+      .order('updated_at', { ascending: false });
+    if (error) throw error;
+
+    const total = data.length;
+    document.getElementById('sum-total').textContent = total ? `(${total} คน)` : '';
+
+    // Summary chart
+    const counts = Object.fromEntries(SIZES.map(s => [s, 0]));
+    data.forEach(r => { if (counts[r.size] !== undefined) counts[r.size]++; });
+    const maxCount = Math.max(1, ...Object.values(counts));
+    document.getElementById('summary-card').innerHTML = SIZES.map(sz => {
+      const c = counts[sz];
+      const pct = total ? Math.round(c / total * 100) : 0;
+      const barW = Math.round(c / maxCount * 100);
+      const isMe = sz === savedSize;
+      return `<div class="summary-row" style="${isMe ? 'background:#F0FDF4;border-radius:10px;padding:8px 10px;margin:0 -10px' : ''}">
+        <div class="sum-size">${sz}${isMe ? ' 👤' : ''}</div>
+        <div class="sum-bar-wrap"><div class="sum-bar" style="width:${barW}%"></div></div>
+        <div class="sum-count">${c}</div>
+        <div class="sum-pct">${pct}%</div>
+      </div>`;
+    }).join('');
+
+    // Participant list
+    if (data.length === 0) {
+      document.getElementById('plist-card').innerHTML = '<div style="text-align:center;color:#9CA3AF;font-size:13px;padding:16px 0">ยังไม่มีผู้สำรวจ</div>';
+      return;
+    }
+    document.getElementById('plist-card').innerHTML = data.map((r, i) => {
+      const isMe = r.display_name === authUser?.display_name;
+      const dt = r.updated_at ? new Date(r.updated_at) : null;
+      const dateStr = dt ? dt.toLocaleDateString('th-TH', { day:'numeric', month:'short', year:'2-digit', timeZone:'Asia/Bangkok' }) : '-';
+      return `<div class="plist-row">
+        <div class="plist-num">${i+1}</div>
+        <div class="plist-name${isMe ? ' me' : ''}">${r.display_name}${isMe ? ' (คุณ)' : ''}</div>
+        <div class="plist-size">${r.size}</div>
+        <div class="plist-date">${dateStr}</div>
+      </div>`;
+    }).join('');
+
+  } catch(e) {
+    document.getElementById('summary-card').innerHTML = '<div style="color:#DC2626;font-size:13px;text-align:center">โหลดไม่ได้</div>';
+  }
+}
+
+/* ── Toast ─────────────────────────────────────────────── */
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && document.getElementById('login-gate').style.display !== 'none') doLogin();
+});
+</script>
+</body>
+</html>

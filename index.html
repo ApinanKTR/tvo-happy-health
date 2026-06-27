@@ -1572,6 +1572,18 @@ const handleRegister = async () => {
           );
         })()}
 
+        {/* ── SURVEY BANNER ── */}
+        <a href="survey.html" style={{ textDecoration:"none", display:"block", marginBottom:18 }}>
+          <div style={{ background:"linear-gradient(135deg,#15803D 0%,#16A34A 60%,#22C55E 100%)", borderRadius:16, padding:"14px 18px", display:"flex", alignItems:"center", gap:14, boxShadow:"0 4px 16px rgba(22,163,74,.3)", opacity:animateIn?1:0, transition:"all .5s ease .25s" }}>
+            <div style={{ fontSize:32, flexShrink:0 }}>👕</div>
+            <div style={{ flex:1 }}>
+              <div style={{ color:"#fff", fontWeight:800, fontSize:15, fontFamily:"'Prompt'" }}>สำรวจขนาดเสื้อ TVO 2026</div>
+              <div style={{ color:"rgba(255,255,255,.85)", fontSize:12, marginTop:2 }}>กดเพื่อเลือก size เสื้อของคุณ</div>
+            </div>
+            <div style={{ color:"rgba(255,255,255,.8)", fontSize:20 }}>›</div>
+          </div>
+        </a>
+
         {/* ── CONTENT TABS v2 ── */}
 
         {/* ───── DASHBOARD ───── */}
