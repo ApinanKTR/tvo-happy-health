@@ -86,13 +86,14 @@ const fetchMessages = async (teamKey) => {
 };
 
 const sendMessage = async (teamKey, empId, displayName, message) => {
-  const { error } = await supabase.from('chat_messages').insert({
+  const { data, error } = await supabase.from('chat_messages').insert({
     team: teamKey,
     employee_id: empId,
     display_name: displayName,
     message: message.trim(),
-  });
+  }).select().single();
   if (error) throw new Error(error.message);
+  return data;
 };
 
 // ── Notification helpers ──────────────────────────────────────
@@ -248,9 +249,11 @@ function ChatRoom({ session, teamKey, onBack }) {
     setSending(true);
     setError('');
     try {
-      await sendMessage(teamKey, session.empId, session.displayName, text);
+      const newMsg = await sendMessage(teamKey, session.empId, session.displayName, text);
+      setMessages(prev => prev.find(m => m.id === newMsg.id) ? prev : [...prev, newMsg]);
       setInput('');
       inputRef.current?.focus();
+      scrollToBottom();
     } catch(e) { setError(e.message); }
     finally { setSending(false); }
   };
