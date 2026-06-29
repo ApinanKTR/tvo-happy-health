@@ -218,14 +218,11 @@ function Avatar({ name, color, size = 36, photo, icon, rankPos }) {
   const inner = photo
     ? <img src={photo} alt="" className={rc} style={{ width:size, height:size, borderRadius:'50%', objectFit:'cover', display:'block' }} />
     : <div className={rc} style={{ width:size, height:size, borderRadius:'50%', background:color, color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:size*0.38, fontWeight:700, fontFamily:'Prompt,sans-serif' }}>
-        {icon || (name||'?').substring(0,2)}
+        {(name||'?').substring(0,2)}
       </div>;
   return (
     <div style={{ position:'relative', flexShrink:0, width:size, height:size }}>
       {inner}
-      {icon && photo && (
-        <span style={{ position:'absolute', bottom:-2, right:-4, fontSize:size*0.38, lineHeight:1, pointerEvents:'none' }}>{icon}</span>
-      )}
     </div>
   );
 }
