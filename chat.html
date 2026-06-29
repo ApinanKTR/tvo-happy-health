@@ -100,6 +100,19 @@ const fetchMessages = async (teamKey) => {
   return data || [];
 };
 
+const sbEditMessage = async (id, empId, newText) => {
+  const { error } = await supabase.from('chat_messages')
+    .update({ message: newText.trim(), edited: true })
+    .eq('id', id).eq('employee_id', empId);
+  if (error) throw new Error(error.message);
+};
+
+const sbDeleteMessage = async (id, empId) => {
+  const { error } = await supabase.from('chat_messages')
+    .delete().eq('id', id).eq('employee_id', empId);
+  if (error) throw new Error(error.message);
+};
+
 const sendMessage = async (teamKey, empId, displayName, message) => {
   const { data, error } = await supabase.from('chat_messages').insert({
     team: teamKey,
@@ -174,32 +187,88 @@ function Avatar({ name, color, size = 36 }) {
   );
 }
 
-function MessageBubble({ msg, isOwn, teamColor }) {
+function MessageBubble({ msg, isOwn, teamColor, menuOpen, onMenuToggle, onEdit, onDelete, isEditing, editText, onEditChange, onEditSave, onEditCancel }) {
   const timeStr = fmtTime(msg.created_at);
+  const editRef = useRef(null);
+
+  useEffect(() => {
+    if (isEditing) { editRef.current?.focus(); editRef.current?.select(); }
+  }, [isEditing]);
+
   return (
     <div style={{
       display:'flex', flexDirection: isOwn ? 'row-reverse' : 'row',
-      alignItems:'flex-end', gap:'8px', marginBottom:'12px',
+      alignItems:'flex-end', gap:'8px', marginBottom:'12px', position:'relative',
     }}>
       {!isOwn && <Avatar name={msg.display_name} color={teamColor} size={32} />}
-      <div style={{ maxWidth:'70%', display:'flex', flexDirection:'column', alignItems: isOwn ? 'flex-end' : 'flex-start' }}>
+      <div style={{ maxWidth:'72%', display:'flex', flexDirection:'column', alignItems: isOwn ? 'flex-end' : 'flex-start' }}>
         {!isOwn && (
           <div style={{ fontSize:'11px', color:'#6B7280', marginBottom:'2px', paddingLeft:'4px' }}>
             {msg.display_name}
           </div>
         )}
-        <div style={{
-          background: isOwn ? teamColor : '#fff',
-          color: isOwn ? '#fff' : '#1F2937',
-          padding:'10px 14px', borderRadius: isOwn ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
-          fontSize:'14px', lineHeight:1.5, wordBreak:'break-word',
-          boxShadow:'0 1px 4px rgba(0,0,0,0.1)',
-          border: isOwn ? 'none' : '1px solid #E5E7EB',
-        }}>
-          {msg.message}
-        </div>
-        <div style={{ fontSize:'10px', color:'#9CA3AF', marginTop:'2px', paddingLeft:'4px', paddingRight:'4px' }}>
+
+        {/* ── Inline edit mode ── */}
+        {isEditing ? (
+          <div style={{ display:'flex', flexDirection:'column', gap:'6px', width:'240px' }}>
+            <textarea
+              ref={editRef}
+              value={editText}
+              onChange={e => onEditChange(e.target.value.slice(0, MAX_LEN))}
+              onKeyDown={e => { if (e.key==='Enter'&&!e.shiftKey){e.preventDefault();onEditSave();} if(e.key==='Escape') onEditCancel(); }}
+              style={{
+                resize:'none', border:`1.5px solid ${teamColor}`, borderRadius:'12px',
+                padding:'8px 12px', fontSize:'14px', fontFamily:'Sarabun,sans-serif',
+                lineHeight:1.5, outline:'none', minHeight:'60px',
+              }}
+            />
+            <div style={{ display:'flex', gap:'6px', justifyContent:'flex-end' }}>
+              <button onClick={onEditCancel} style={{ fontSize:'12px', padding:'4px 12px', borderRadius:'8px', border:'1px solid #D1D5DB', background:'#fff', cursor:'pointer' }}>ยกเลิก</button>
+              <button onClick={onEditSave} style={{ fontSize:'12px', padding:'4px 12px', borderRadius:'8px', border:'none', background:teamColor, color:'#fff', cursor:'pointer', fontWeight:600 }}>บันทึก</button>
+            </div>
+          </div>
+        ) : (
+          <div style={{ position:'relative' }}>
+            <div
+              onClick={() => isOwn && onMenuToggle(msg.id)}
+              style={{
+                background: isOwn ? teamColor : '#fff',
+                color: isOwn ? '#fff' : '#1F2937',
+                padding:'10px 14px', borderRadius: isOwn ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
+                fontSize:'14px', lineHeight:1.5, wordBreak:'break-word',
+                boxShadow:'0 1px 4px rgba(0,0,0,0.1)',
+                border: isOwn ? 'none' : '1px solid #E5E7EB',
+                cursor: isOwn ? 'pointer' : 'default',
+              }}
+            >
+              {msg.message}
+            </div>
+            {/* Action menu */}
+            {isOwn && menuOpen && (
+              <div style={{
+                position:'absolute', right:0, bottom:'calc(100% + 4px)',
+                background:'#fff', borderRadius:'10px', boxShadow:'0 4px 16px rgba(0,0,0,0.15)',
+                border:'1px solid #E5E7EB', overflow:'hidden', zIndex:10, minWidth:'120px',
+              }}>
+                <button onClick={() => { onEdit(msg); onMenuToggle(null); }} style={{
+                  display:'flex', alignItems:'center', gap:'8px', width:'100%',
+                  padding:'10px 14px', border:'none', background:'none', cursor:'pointer',
+                  fontSize:'13px', color:'#374151',
+                }}>✏️ แก้ไข</button>
+                <div style={{ height:1, background:'#F3F4F6' }} />
+                <button onClick={() => { onDelete(msg.id); onMenuToggle(null); }} style={{
+                  display:'flex', alignItems:'center', gap:'8px', width:'100%',
+                  padding:'10px 14px', border:'none', background:'none', cursor:'pointer',
+                  fontSize:'13px', color:'#EF4444',
+                }}>🗑️ ลบ</button>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div style={{ fontSize:'10px', color:'#9CA3AF', marginTop:'2px', paddingLeft:'4px', paddingRight:'4px', display:'flex', gap:'4px' }}>
           {timeStr}
+          {msg.edited && <span style={{ color:'#D1D5DB' }}>· แก้ไขแล้ว</span>}
         </div>
       </div>
     </div>
@@ -223,10 +292,31 @@ function ChatRoom({ session, teamKey, onBack }) {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const [notifOn, setNotifOn] = useState(() => lsGet('tvohh_chat_notif', true));
-  const msgsRef = useRef(null);   // ref ที่ messages container โดยตรง
+  const [unread, setUnread] = useState(0);
+  const [menuMsgId, setMenuMsgId] = useState(null);  // id ของ bubble ที่เปิด menu อยู่
+  const [editingId, setEditingId] = useState(null);  // id ของ bubble ที่กำลัง edit
+  const [editText, setEditText] = useState('');
+  const msgsRef = useRef(null);
   const channelRef = useRef(null);
   const inputRef = useRef(null);
   const latestCreatedAt = useRef(null);
+  const BASE_TITLE = `${meta.icon} ${meta.label} — TVO Chat`;
+
+  // อัปเดต tab title เมื่อมีข้อความใหม่ / reset เมื่อ focus กลับมา
+  useEffect(() => {
+    document.title = unread > 0 ? `(${unread}) 💬 ข้อความใหม่ — TVO Chat` : BASE_TITLE;
+  }, [unread]);
+
+  useEffect(() => {
+    const reset = () => { if (document.visibilityState === 'visible') setUnread(0); };
+    document.addEventListener('visibilitychange', reset);
+    window.addEventListener('focus', reset);
+    return () => {
+      document.removeEventListener('visibilitychange', reset);
+      window.removeEventListener('focus', reset);
+      document.title = 'TVO Team Chat 💬'; // คืน title เมื่อออกจากหน้า
+    };
+  }, []);
 
   // scroll container โดยตรง — ไม่ใช้ scrollIntoView ซึ่งทำให้ iOS Safari เลื่อนทั้งหน้า
   const scrollToBottom = useCallback((behavior = 'smooth') => {
@@ -241,18 +331,20 @@ function ChatRoom({ session, teamKey, onBack }) {
     }, 60);
   }, []);
 
-  // merge ข้อความใหม่เข้า state (กัน duplicate + trigger notif)
+  // merge ข้อความใหม่เข้า state (กัน duplicate + trigger notif + นับ unread)
   const mergeNewMessages = useCallback((newMsgs, fromPoll = false) => {
     setMessages(prev => {
       const existingIds = new Set(prev.map(m => m.id));
       const added = newMsgs.filter(m => !existingIds.has(m.id));
       if (added.length === 0) return prev;
-      // notification สำหรับข้อความใหม่จากคนอื่น (เฉพาะ poll — Realtime handle เอง)
+      const othersAdded = added.filter(m => m.employee_id !== session.empId);
+      if (othersAdded.length > 0 && document.visibilityState === 'hidden') {
+        setUnread(n => n + othersAdded.length);
+      }
       if (fromPoll && notifOn) {
-        added.forEach(m => {
-          if (m.employee_id !== session.empId)
-            showNotif(`${meta.icon} ${meta.label}`, `${m.display_name}: ${m.message}`);
-        });
+        othersAdded.forEach(m =>
+          showNotif(`${meta.icon} ${meta.label}`, `${m.display_name}: ${m.message}`)
+        );
       }
       return [...prev, ...added];
     });
@@ -282,12 +374,20 @@ function ChatRoom({ session, teamKey, onBack }) {
         const msg = payload.new;
         setMessages(prev => {
           if (prev.find(m => m.id === msg.id)) return prev;
-          if (msg.employee_id !== session.empId && notifOn)
-            showNotif(`${meta.icon} ${meta.label}`, `${msg.display_name}: ${msg.message}`);
+          if (msg.employee_id !== session.empId) {
+            if (document.visibilityState === 'hidden') setUnread(n => n + 1);
+            if (notifOn) showNotif(`${meta.icon} ${meta.label}`, `${msg.display_name}: ${msg.message}`);
+          }
           return [...prev, msg];
         });
         latestCreatedAt.current = msg.created_at;
         scrollToBottom();
+      })
+      .on('postgres_changes', { event:'UPDATE', schema:'public', table:'chat_messages', filter:`team=eq.${teamKey}` }, (payload) => {
+        setMessages(prev => prev.map(m => m.id === payload.new.id ? { ...m, ...payload.new } : m));
+      })
+      .on('postgres_changes', { event:'DELETE', schema:'public', table:'chat_messages', filter:`team=eq.${teamKey}` }, (payload) => {
+        setMessages(prev => prev.filter(m => m.id !== payload.old.id));
       })
       .subscribe();
     channelRef.current = ch;
@@ -321,6 +421,24 @@ function ChatRoom({ session, teamKey, onBack }) {
     const timer = setInterval(poll, 5000);
     return () => { clearInterval(timer); document.removeEventListener('visibilitychange', onVisible); };
   }, [teamKey, mergeNewMessages]);
+
+  const handleEditStart = (msg) => { setEditingId(msg.id); setEditText(msg.message); };
+  const handleEditCancel = () => { setEditingId(null); setEditText(''); };
+  const handleEditSave = async () => {
+    if (!editText.trim() || editText.trim() === messages.find(m=>m.id===editingId)?.message) { handleEditCancel(); return; }
+    try {
+      await sbEditMessage(editingId, session.empId, editText);
+      setMessages(prev => prev.map(m => m.id===editingId ? {...m, message:editText.trim(), edited:true} : m));
+    } catch(e) { setError(e.message); }
+    handleEditCancel();
+  };
+  const handleDelete = async (id) => {
+    if (!window.confirm('ลบข้อความนี้?')) return;
+    try {
+      await sbDeleteMessage(id, session.empId);
+      setMessages(prev => prev.filter(m => m.id !== id));
+    } catch(e) { setError(e.message); }
+  };
 
   const handleSend = async () => {
     const text = input.trim();
@@ -394,8 +512,8 @@ function ChatRoom({ session, teamKey, onBack }) {
         )}
       </div>
 
-      {/* Messages area */}
-      <div ref={msgsRef} style={{
+      {/* Messages area — คลิก background ปิด menu */}
+      <div ref={msgsRef} onClick={() => setMenuMsgId(null)} style={{
         flex:1, overflowY:'auto', padding:'12px 16px',
         display:'flex', flexDirection:'column',
         WebkitOverflowScrolling:'touch',
@@ -417,6 +535,15 @@ function ChatRoom({ session, teamKey, onBack }) {
                 msg={item.msg}
                 isOwn={item.msg.employee_id === session.empId}
                 teamColor={meta.color}
+                menuOpen={menuMsgId === item.msg.id}
+                onMenuToggle={id => setMenuMsgId(prev => prev===id ? null : id)}
+                onEdit={handleEditStart}
+                onDelete={handleDelete}
+                isEditing={editingId === item.msg.id}
+                editText={editText}
+                onEditChange={setEditText}
+                onEditSave={handleEditSave}
+                onEditCancel={handleEditCancel}
               />
         )}
         {error && (
