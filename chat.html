@@ -202,10 +202,28 @@ function ChatRoom({ session, teamKey, onBack }) {
   const bottomRef = useRef(null);
   const channelRef = useRef(null);
   const inputRef = useRef(null);
+  const latestCreatedAt = useRef(null); // ใช้ track ข้อความล่าสุดสำหรับ polling
 
   const scrollToBottom = useCallback((behavior = 'smooth') => {
     setTimeout(() => bottomRef.current?.scrollIntoView({ behavior }), 60);
   }, []);
+
+  // merge ข้อความใหม่เข้า state (กัน duplicate + trigger notif)
+  const mergeNewMessages = useCallback((newMsgs, fromPoll = false) => {
+    setMessages(prev => {
+      const existingIds = new Set(prev.map(m => m.id));
+      const added = newMsgs.filter(m => !existingIds.has(m.id));
+      if (added.length === 0) return prev;
+      // notification สำหรับข้อความใหม่จากคนอื่น (เฉพาะ poll — Realtime handle เอง)
+      if (fromPoll && notifOn) {
+        added.forEach(m => {
+          if (m.employee_id !== session.empId)
+            showNotif(`${meta.icon} ${meta.label}`, `${m.display_name}: ${m.message}`);
+        });
+      }
+      return [...prev, ...added];
+    });
+  }, [notifOn, session.empId, meta]);
 
   // Load initial messages
   useEffect(() => {
@@ -213,12 +231,13 @@ function ChatRoom({ session, teamKey, onBack }) {
       try {
         const msgs = await fetchMessages(teamKey);
         setMessages(msgs);
+        if (msgs.length > 0) latestCreatedAt.current = msgs[msgs.length - 1].created_at;
         scrollToBottom('instant');
       } catch(e) { setError(e.message); }
     })();
   }, [teamKey]);
 
-  // Real-time subscription
+  // Realtime subscription (ถ้า Replication เปิดอยู่จะทำงานทันที)
   useEffect(() => {
     const ch = supabase.channel(`chat_${teamKey}`)
       .on('postgres_changes', {
@@ -230,18 +249,40 @@ function ChatRoom({ session, teamKey, onBack }) {
         const msg = payload.new;
         setMessages(prev => {
           if (prev.find(m => m.id === msg.id)) return prev;
+          if (msg.employee_id !== session.empId && notifOn)
+            showNotif(`${meta.icon} ${meta.label}`, `${msg.display_name}: ${msg.message}`);
           return [...prev, msg];
         });
-        // Notify only if not own message
-        if (msg.employee_id !== session.empId && notifOn) {
-          showNotif(`${meta.icon} ${meta.label}`, `${msg.display_name}: ${msg.message}`);
-        }
+        latestCreatedAt.current = msg.created_at;
         scrollToBottom();
       })
       .subscribe();
     channelRef.current = ch;
     return () => { supabase.removeChannel(ch); };
   }, [teamKey, notifOn, session.empId]);
+
+  // Polling ทุก 5 วินาที — fallback กรณี Realtime ยังไม่ได้เปิด Replication
+  useEffect(() => {
+    const poll = async () => {
+      try {
+        const since = latestCreatedAt.current;
+        if (!since) return;
+        const { data } = await supabase
+          .from('chat_messages')
+          .select('id,employee_id,display_name,message,created_at')
+          .eq('team', teamKey)
+          .gt('created_at', since)
+          .order('created_at', { ascending: true });
+        if (data && data.length > 0) {
+          mergeNewMessages(data, true);
+          latestCreatedAt.current = data[data.length - 1].created_at;
+          scrollToBottom();
+        }
+      } catch {}
+    };
+    const timer = setInterval(poll, 5000);
+    return () => clearInterval(timer);
+  }, [teamKey, mergeNewMessages]);
 
   const handleSend = async () => {
     const text = input.trim();
@@ -251,6 +292,7 @@ function ChatRoom({ session, teamKey, onBack }) {
     try {
       const newMsg = await sendMessage(teamKey, session.empId, session.displayName, text);
       setMessages(prev => prev.find(m => m.id === newMsg.id) ? prev : [...prev, newMsg]);
+      latestCreatedAt.current = newMsg.created_at;
       setInput('');
       inputRef.current?.focus();
       scrollToBottom();
