@@ -230,7 +230,7 @@ function MessageBubble({ msg, isOwn, teamColor, menuOpen, onMenuToggle, onEdit, 
         ) : (
           <div style={{ position:'relative' }}>
             <div
-              onClick={() => isOwn && onMenuToggle(msg.id)}
+              onClick={e => { if (!isOwn) return; e.stopPropagation(); onMenuToggle(msg.id); }}
               style={{
                 background: isOwn ? teamColor : '#fff',
                 color: isOwn ? '#fff' : '#1F2937',
@@ -250,13 +250,13 @@ function MessageBubble({ msg, isOwn, teamColor, menuOpen, onMenuToggle, onEdit, 
                 background:'#fff', borderRadius:'10px', boxShadow:'0 4px 16px rgba(0,0,0,0.15)',
                 border:'1px solid #E5E7EB', overflow:'hidden', zIndex:10, minWidth:'120px',
               }}>
-                <button onClick={() => { onEdit(msg); onMenuToggle(null); }} style={{
+                <button onClick={e => { e.stopPropagation(); onEdit(msg); onMenuToggle(null); }} style={{
                   display:'flex', alignItems:'center', gap:'8px', width:'100%',
                   padding:'10px 14px', border:'none', background:'none', cursor:'pointer',
                   fontSize:'13px', color:'#374151',
                 }}>✏️ แก้ไข</button>
                 <div style={{ height:1, background:'#F3F4F6' }} />
-                <button onClick={() => { onDelete(msg.id); onMenuToggle(null); }} style={{
+                <button onClick={e => { e.stopPropagation(); onDelete(msg.id); onMenuToggle(null); }} style={{
                   display:'flex', alignItems:'center', gap:'8px', width:'100%',
                   padding:'10px 14px', border:'none', background:'none', cursor:'pointer',
                   fontSize:'13px', color:'#EF4444',
