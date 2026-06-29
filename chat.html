@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="TVO Team Chat" />
+<meta name="theme-color" content="#16A34A" />
+<link rel="apple-touch-icon" href="logo.png" />
+<link rel="icon" type="image/png" href="logo.png" />
+<title>TVO Team Chat 💬</title>
+<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;600;700&family=Sarabun:wght@400;600&display=swap" rel="stylesheet" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#F0FDF4;font-family:'Sarabun',sans-serif;min-height:100vh;display:flex;flex-direction:column}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-presets="env,react">
+const { useState, useEffect, useRef, useCallback } = React;
+
+// ─── Config ──────────────────────────────────────────────────
+const SUPABASE_URL      = 'https://lnqtszvqglqdsdvzncbe.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxucXRzenZxZ2xxZHNkdnpuY2JlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA0NTAyODcsImV4cCI6MjA5NjAyNjI4N30.vhsbuZYK_lfnZEWbmCPmskWUk64ya1jxllRbc2_078w';
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const TEAM_META = {
+  'A': { label:'A : ใส่ใจลูกค้า',      color:'#16A34A', bg:'#F0FDF4', border:'#86EFAC', icon:'🤝' },
+  'B': { label:'B : ร่วมแรงร่วมใจ',    color:'#0EA5E9', bg:'#F0F9FF', border:'#7DD3FC', icon:'💙' },
+  'C': { label:'C : ยืดหยุ่นคล่องตัว', color:'#8B5CF6', bg:'#F5F3FF', border:'#C4B5FD', icon:'⚡' },
+  'D': { label:'D : ว่องไวเป็นเลิศ',   color:'#F59E0B', bg:'#FFFBEB', border:'#FCD34D', icon:'🚀' },
+};
+
+const MAX_LEN = 500;
+const RETENTION_DAYS = 30;
+
+// helpers
+const lsGet = (k, fb) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : fb; } catch { return fb; } };
+const lsSet = (k, v)  => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+
+const getTeamKey = (group = '') => {
+  const m = group.trim().match(/^([A-D])/i);
+  return m ? m[1].toUpperCase() : null;
+};
+
+const fmtTime = (iso) => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return d.toLocaleTimeString('th-TH', { hour:'2-digit', minute:'2-digit', timeZone:'Asia/Bangkok' });
+};
+const fmtDate = (iso) => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return d.toLocaleDateString('th-TH', { day:'numeric', month:'short', timeZone:'Asia/Bangkok' });
+};
+
+// ── Auth helpers ─────────────────────────────────────────────
+const getSession = () => {
+  const s = lsGet('tvohh_session', null);
+  if (!s) return null;
+  // normalize group → teamKey
+  const group = typeof s.group === 'string' ? s.group : (s.group?.Value || 'A : ใส่ใจลูกค้า');
+  return { ...s, group };
+};
+
+// ── Supabase API ──────────────────────────────────────────────
+const fetchMessages = async (teamKey) => {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - RETENTION_DAYS);
+  const { data, error } = await supabase
+    .from('chat_messages')
+    .select('id,employee_id,display_name,message,created_at')
+    .eq('team', teamKey)
+    .gte('created_at', cutoff.toISOString())
+    .order('created_at', { ascending: true })
+    .limit(200);
+  if (error) throw new Error(error.message);
+  return data || [];
+};
+
+const sendMessage = async (teamKey, empId, displayName, message) => {
+  const { error } = await supabase.from('chat_messages').insert({
+    team: teamKey,
+    employee_id: empId,
+    display_name: displayName,
+    message: message.trim(),
+  });
+  if (error) throw new Error(error.message);
+};
+
+// ── Notification helpers ──────────────────────────────────────
+const requestNotifPermission = async () => {
+  if (!('Notification' in window)) return false;
+  if (Notification.permission === 'granted') return true;
+  const perm = await Notification.requestPermission();
+  return perm === 'granted';
+};
+
+const showNotif = (title, body) => {
+  if (Notification.permission !== 'granted') return;
+  try { new Notification(title, { body, icon: 'logo.png', badge: 'logo.png' }); } catch {}
+};
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Components
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+function NotLoggedIn() {
+  return (
+    <div style={{
+      display:'flex', flexDirection:'column', alignItems:'center',
+      justifyContent:'center', minHeight:'100vh', padding:'24px', gap:'16px',
+    }}>
+      <div style={{ fontSize:'48px' }}>💬</div>
+      <div style={{
+        fontFamily:'Prompt,sans-serif', fontSize:'20px', fontWeight:700, color:'#15803D'
+      }}>TVO Team Chat</div>
+      <div style={{ color:'#6B7280', textAlign:'center', lineHeight:1.6 }}>
+        กรุณาเข้าสู่ระบบก่อนใช้งานแชท
+      </div>
+      <a href="index.html" style={{
+        background:'#16A34A', color:'#fff', padding:'12px 28px',
+        borderRadius:'12px', textDecoration:'none', fontWeight:600,
+        fontFamily:'Prompt,sans-serif', fontSize:'15px',
+      }}>เข้าสู่ระบบ</a>
+    </div>
+  );
+}
+
+function Avatar({ name, color, size = 36 }) {
+  const initials = (name || '?').substring(0, 2);
+  return (
+    <div style={{
+      width: size, height: size, borderRadius:'50%',
+      background: color, color:'#fff',
+      display:'flex', alignItems:'center', justifyContent:'center',
+      fontSize: size * 0.38, fontWeight:700, flexShrink:0,
+      fontFamily:'Prompt,sans-serif',
+    }}>
+      {initials}
+    </div>
+  );
+}
+
+function MessageBubble({ msg, isOwn, teamColor }) {
+  const timeStr = fmtTime(msg.created_at);
+  return (
+    <div style={{
+      display:'flex', flexDirection: isOwn ? 'row-reverse' : 'row',
+      alignItems:'flex-end', gap:'8px', marginBottom:'12px',
+    }}>
+      {!isOwn && <Avatar name={msg.display_name} color={teamColor} size={32} />}
+      <div style={{ maxWidth:'70%', display:'flex', flexDirection:'column', alignItems: isOwn ? 'flex-end' : 'flex-start' }}>
+        {!isOwn && (
+          <div style={{ fontSize:'11px', color:'#6B7280', marginBottom:'2px', paddingLeft:'4px' }}>
+            {msg.display_name}
+          </div>
+        )}
+        <div style={{
+          background: isOwn ? teamColor : '#fff',
+          color: isOwn ? '#fff' : '#1F2937',
+          padding:'10px 14px', borderRadius: isOwn ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
+          fontSize:'14px', lineHeight:1.5, wordBreak:'break-word',
+          boxShadow:'0 1px 4px rgba(0,0,0,0.1)',
+          border: isOwn ? 'none' : '1px solid #E5E7EB',
+        }}>
+          {msg.message}
+        </div>
+        <div style={{ fontSize:'10px', color:'#9CA3AF', marginTop:'2px', paddingLeft:'4px', paddingRight:'4px' }}>
+          {timeStr}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DateDivider({ label }) {
+  return (
+    <div style={{ display:'flex', alignItems:'center', gap:'8px', margin:'16px 0 8px' }}>
+      <div style={{ flex:1, height:1, background:'#E5E7EB' }} />
+      <div style={{ fontSize:'11px', color:'#9CA3AF', whiteSpace:'nowrap' }}>{label}</div>
+      <div style={{ flex:1, height:1, background:'#E5E7EB' }} />
+    </div>
+  );
+}
+
+function ChatRoom({ session, teamKey, onBack }) {
+  const meta = TEAM_META[teamKey];
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState('');
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState('');
+  const [notifOn, setNotifOn] = useState(() => lsGet('tvohh_chat_notif', true));
+  const bottomRef = useRef(null);
+  const channelRef = useRef(null);
+  const inputRef = useRef(null);
+
+  const scrollToBottom = useCallback((behavior = 'smooth') => {
+    setTimeout(() => bottomRef.current?.scrollIntoView({ behavior }), 60);
+  }, []);
+
+  // Load initial messages
+  useEffect(() => {
+    (async () => {
+      try {
+        const msgs = await fetchMessages(teamKey);
+        setMessages(msgs);
+        scrollToBottom('instant');
+      } catch(e) { setError(e.message); }
+    })();
+  }, [teamKey]);
+
+  // Real-time subscription
+  useEffect(() => {
+    const ch = supabase.channel(`chat_${teamKey}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'chat_messages',
+        filter: `team=eq.${teamKey}`,
+      }, (payload) => {
+        const msg = payload.new;
+        setMessages(prev => {
+          if (prev.find(m => m.id === msg.id)) return prev;
+          return [...prev, msg];
+        });
+        // Notify only if not own message
+        if (msg.employee_id !== session.empId && notifOn) {
+          showNotif(`${meta.icon} ${meta.label}`, `${msg.display_name}: ${msg.message}`);
+        }
+        scrollToBottom();
+      })
+      .subscribe();
+    channelRef.current = ch;
+    return () => { supabase.removeChannel(ch); };
+  }, [teamKey, notifOn, session.empId]);
+
+  const handleSend = async () => {
+    const text = input.trim();
+    if (!text || sending) return;
+    setSending(true);
+    setError('');
+    try {
+      await sendMessage(teamKey, session.empId, session.displayName, text);
+      setInput('');
+      inputRef.current?.focus();
+    } catch(e) { setError(e.message); }
+    finally { setSending(false); }
+  };
+
+  const handleKey = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
+  };
+
+  const toggleNotif = async () => {
+    if (!notifOn) {
+      const ok = await requestNotifPermission();
+      if (!ok) { setError('กรุณาอนุญาต Notification ในเบราว์เซอร์ก่อน'); return; }
+    }
+    const next = !notifOn;
+    setNotifOn(next);
+    lsSet('tvohh_chat_notif', next);
+  };
+
+  // Group messages by date
+  const grouped = [];
+  let lastDate = null;
+  messages.forEach(msg => {
+    const d = fmtDate(msg.created_at);
+    if (d !== lastDate) { grouped.push({ type:'divider', label:d }); lastDate = d; }
+    grouped.push({ type:'msg', msg });
+  });
+
+  const remaining = MAX_LEN - input.length;
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', height:'100vh', background:'#F9FAFB' }}>
+      {/* Header */}
+      <div style={{
+        background: meta.color, color:'#fff',
+        padding:'12px 16px', paddingTop:'max(12px, env(safe-area-inset-top))',
+        display:'flex', alignItems:'center', gap:'12px',
+        boxShadow:'0 2px 8px rgba(0,0,0,0.15)', flexShrink:0,
+      }}>
+        <button onClick={onBack} style={{
+          background:'rgba(255,255,255,0.2)', border:'none', color:'#fff',
+          borderRadius:'8px', padding:'6px 10px', cursor:'pointer', fontSize:'16px',
+        }}>←</button>
+        <div style={{ flex:1 }}>
+          <div style={{ fontFamily:'Prompt,sans-serif', fontWeight:700, fontSize:'16px' }}>
+            {meta.icon} {meta.label}
+          </div>
+          <div style={{ fontSize:'12px', opacity:0.85 }}>แชทภายในทีม • เก็บข้อมูล 30 วัน</div>
+        </div>
+        {/* Notification toggle */}
+        <button onClick={toggleNotif} title={notifOn ? 'ปิดการแจ้งเตือน' : 'เปิดการแจ้งเตือน'} style={{
+          background:'rgba(255,255,255,0.2)', border:'none', color:'#fff',
+          borderRadius:'8px', padding:'6px 10px', cursor:'pointer', fontSize:'18px',
+          transition:'background 0.2s',
+        }}>
+          {notifOn ? '🔔' : '🔕'}
+        </button>
+      </div>
+
+      {/* Messages area */}
+      <div style={{
+        flex:1, overflowY:'auto', padding:'12px 16px',
+        display:'flex', flexDirection:'column',
+      }}>
+        {messages.length === 0 && (
+          <div style={{
+            flex:1, display:'flex', flexDirection:'column', alignItems:'center',
+            justifyContent:'center', gap:'8px', color:'#9CA3AF', paddingTop:'60px',
+          }}>
+            <div style={{ fontSize:'40px' }}>💬</div>
+            <div style={{ fontSize:'14px' }}>ยังไม่มีข้อความ เริ่มสนทนากันได้เลย!</div>
+          </div>
+        )}
+        {grouped.map((item, i) =>
+          item.type === 'divider'
+            ? <DateDivider key={`d${i}`} label={item.label} />
+            : <MessageBubble
+                key={item.msg.id}
+                msg={item.msg}
+                isOwn={item.msg.employee_id === session.empId}
+                teamColor={meta.color}
+              />
+        )}
+        {error && (
+          <div style={{
+            background:'#FEE2E2', color:'#991B1B', padding:'8px 12px',
+            borderRadius:'8px', fontSize:'13px', marginTop:'8px',
+          }}>{error}</div>
+        )}
+        <div ref={bottomRef} />
+      </div>
+
+      {/* Input area */}
+      <div style={{
+        background:'#fff', borderTop:'1px solid #E5E7EB',
+        padding:'10px 12px', paddingBottom:'max(10px, env(safe-area-inset-bottom))',
+        flexShrink:0,
+      }}>
+        <div style={{ display:'flex', gap:'8px', alignItems:'flex-end' }}>
+          <div style={{ flex:1, position:'relative' }}>
+            <textarea
+              ref={inputRef}
+              value={input}
+              onChange={e => setInput(e.target.value.slice(0, MAX_LEN))}
+              onKeyDown={handleKey}
+              placeholder="พิมพ์ข้อความ... (Enter ส่ง)"
+              rows={1}
+              style={{
+                width:'100%', resize:'none', border:'1.5px solid #D1FAE5',
+                borderRadius:'12px', padding:'10px 14px',
+                fontSize:'14px', fontFamily:'Sarabun,sans-serif',
+                outline:'none', lineHeight:1.5, maxHeight:'120px',
+                overflowY:'auto',
+                transition:'border-color 0.2s',
+              }}
+              onFocus={e => e.target.style.borderColor = meta.color}
+              onBlur={e => e.target.style.borderColor = '#D1FAE5'}
+            />
+            {input.length > 0 && (
+              <div style={{
+                position:'absolute', right:'10px', bottom:'6px',
+                fontSize:'10px', color: remaining < 50 ? '#EF4444' : '#9CA3AF',
+              }}>{remaining}</div>
+            )}
+          </div>
+          <button
+            onClick={handleSend}
+            disabled={!input.trim() || sending}
+            style={{
+              background: input.trim() ? meta.color : '#E5E7EB',
+              color: input.trim() ? '#fff' : '#9CA3AF',
+              border:'none', borderRadius:'12px',
+              width:'44px', height:'44px', cursor: input.trim() ? 'pointer' : 'default',
+              fontSize:'20px', display:'flex', alignItems:'center', justifyContent:'center',
+              transition:'background 0.2s', flexShrink:0,
+            }}
+          >
+            {sending ? '⏳' : '➤'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TeamSelector({ session, onSelect }) {
+  const myTeamKey = getTeamKey(session.group);
+
+  return (
+    <div style={{ minHeight:'100vh', background:'#F0FDF4' }}>
+      {/* Back link — เลื่อนลงมา 2 บรรทัด */}
+      <div style={{
+        background:'#16A34A',
+        paddingTop:'max(52px, calc(env(safe-area-inset-top) + 36px))',
+        paddingLeft:'16px', paddingRight:'16px', paddingBottom:'0',
+      }}>
+        <a href="index.html" style={{
+          display:'inline-flex', alignItems:'center', gap:'6px',
+          background:'rgba(255,255,255,0.2)', color:'#fff',
+          borderRadius:'8px', padding:'6px 12px', textDecoration:'none', fontSize:'13px',
+        }}>← กลับหน้าแอพ</a>
+      </div>
+      {/* Header */}
+      <div style={{
+        background:'#16A34A', color:'#fff',
+        padding:'12px 16px 16px',
+        display:'flex', alignItems:'center', gap:'12px',
+      }}>
+        <div style={{ flex:1 }}>
+          <div style={{ fontFamily:'Prompt,sans-serif', fontWeight:700, fontSize:'18px' }}>
+            💬 TVO Team Chat
+          </div>
+          <div style={{ fontSize:'12px', opacity:0.85 }}>สนทนาภายในทีม</div>
+        </div>
+        <Avatar name={session.displayName} color="rgba(255,255,255,0.3)" size={36} />
+      </div>
+
+      {/* Greeting */}
+      <div style={{ padding:'20px 16px 8px' }}>
+        <div style={{ color:'#374151', fontSize:'14px' }}>
+          สวัสดี <strong>{session.displayName}</strong> 👋
+        </div>
+        <div style={{ color:'#6B7280', fontSize:'13px', marginTop:'4px' }}>
+          ทีมของคุณคือ {myTeamKey ? `${TEAM_META[myTeamKey]?.icon} ${TEAM_META[myTeamKey]?.label}` : 'ไม่ระบุ'}
+        </div>
+      </div>
+
+      {/* Team cards */}
+      <div style={{ padding:'12px 16px', display:'flex', flexDirection:'column', gap:'12px' }}>
+        {Object.entries(TEAM_META).map(([key, meta]) => {
+          const isMyTeam = key === myTeamKey;
+          return (
+            <button
+              key={key}
+              onClick={() => isMyTeam && onSelect(key)}
+              disabled={!isMyTeam}
+              style={{
+                background: isMyTeam ? meta.bg : '#F9FAFB',
+                border: `2px solid ${isMyTeam ? meta.color : '#E5E7EB'}`,
+                borderRadius:'16px', padding:'16px 20px',
+                display:'flex', alignItems:'center', gap:'16px',
+                cursor: isMyTeam ? 'pointer' : 'not-allowed',
+                textAlign:'left', opacity: isMyTeam ? 1 : 0.45,
+                boxShadow: isMyTeam ? `0 2px 12px ${meta.color}30` : 'none',
+                transition:'transform 0.15s',
+              }}
+              onMouseDown={e => isMyTeam && (e.currentTarget.style.transform='scale(0.98)')}
+              onMouseUp={e => isMyTeam && (e.currentTarget.style.transform='scale(1)')}
+              onMouseLeave={e => isMyTeam && (e.currentTarget.style.transform='scale(1)')}
+            >
+              <div style={{
+                fontSize:'28px', width:'48px', height:'48px',
+                display:'flex', alignItems:'center', justifyContent:'center',
+                background: `${meta.color}${isMyTeam ? '20' : '10'}`, borderRadius:'12px',
+              }}>{meta.icon}</div>
+              <div style={{ flex:1 }}>
+                <div style={{
+                  fontFamily:'Prompt,sans-serif', fontWeight:700, fontSize:'15px',
+                  color: isMyTeam ? meta.color : '#9CA3AF',
+                }}>{meta.label}</div>
+                <div style={{ fontSize:'12px', color:'#9CA3AF', marginTop:'2px' }}>
+                  {isMyTeam ? '✅ ทีมของคุณ — แตะเพื่อเข้าแชท' : '🔒 เฉพาะสมาชิกในทีมเท่านั้น'}
+                </div>
+              </div>
+              <div style={{ fontSize:'20px', color: isMyTeam ? meta.color : '#D1D5DB' }}>
+                {isMyTeam ? '›' : '🔒'}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Info */}
+      <div style={{
+        margin:'8px 16px 24px',
+        background:'#ECFDF5', border:'1px solid #A7F3D0',
+        borderRadius:'12px', padding:'12px 16px',
+        fontSize:'12px', color:'#065F46', lineHeight:1.7,
+      }}>
+        ℹ️ ข้อความจะถูกเก็บ <strong>30 วัน</strong> และลบโดยอัตโนมัติ<br/>
+        ไม่รองรับการส่งรูปภาพหรือไฟล์
+      </div>
+    </div>
+  );
+}
+
+// ── Main App — เข้าแชทของทีมตัวเองทันที ─────────────────────
+function App() {
+  const session = getSession();
+
+  if (!session) return <NotLoggedIn />;
+
+  const teamKey = getTeamKey(session.group);
+
+  if (!teamKey) {
+    return (
+      <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', minHeight:'100vh', gap:'12px', padding:'24px' }}>
+        <div style={{ fontSize:'40px' }}>⚠️</div>
+        <div style={{ fontFamily:'Prompt,sans-serif', fontWeight:700, color:'#92400E', fontSize:'16px' }}>ไม่พบข้อมูลทีม</div>
+        <div style={{ color:'#6B7280', fontSize:'13px', textAlign:'center' }}>กรุณาติดต่อ Admin เพื่อกำหนดทีมของคุณ</div>
+        <a href="index.html" style={{ color:'#16A34A', fontSize:'14px' }}>← กลับหน้าแอพ</a>
+      </div>
+    );
+  }
+
+  return <ChatRoom session={session} teamKey={teamKey} onBack={() => { location.href = 'index.html'; }} />;
+}
+
+ReactDOM.render(<App />, document.getElementById('root'));
+</script>
+</body>
+</html>
