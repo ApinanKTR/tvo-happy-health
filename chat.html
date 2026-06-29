@@ -18,12 +18,13 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-html{height:-webkit-fill-available}
-body{background:#F0FDF4;font-family:'Sarabun',sans-serif;
-  min-height:100vh;min-height:-webkit-fill-available;
-  display:flex;flex-direction:column}
-/* dvh สำหรับ browser ใหม่ที่รองรับ (Chrome 108+, Safari 16+) */
-@supports (height:100dvh){.chat-fullh{height:100dvh!important}}
+html,body{height:100%;overflow:hidden}
+body{background:#F0FDF4;font-family:'Sarabun',sans-serif}
+#chat-wrap{
+  display:flex;flex-direction:column;
+  height:100vh;height:100dvh; /* dvh = viewport ลบ address bar บน mobile */
+  overflow:hidden;
+}
 </style>
 </head>
 <body>
@@ -302,6 +303,29 @@ function ChatRoom({ session, teamKey, onBack }) {
   const latestCreatedAt = useRef(null);
   const BASE_TITLE = `${meta.icon} ${meta.label} — TVO Chat`;
 
+  // Visual Viewport API — ปรับความสูงให้ถูกต้องเมื่อ keyboard เปิด/ปิดบน iOS
+  useEffect(() => {
+    const wrap = document.getElementById('chat-wrap');
+    if (!wrap) return;
+    const resize = () => {
+      const h = (window.visualViewport ? window.visualViewport.height : window.innerHeight);
+      wrap.style.height = h + 'px';
+    };
+    resize();
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', resize);
+      window.visualViewport.addEventListener('scroll', resize);
+    }
+    window.addEventListener('resize', resize);
+    return () => {
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener('resize', resize);
+        window.visualViewport.removeEventListener('scroll', resize);
+      }
+      window.removeEventListener('resize', resize);
+    };
+  }, []);
+
   // อัปเดต tab title เมื่อมีข้อความใหม่ / reset เมื่อ focus กลับมา
   useEffect(() => {
     document.title = unread > 0 ? `(${unread}) 💬 ข้อความใหม่ — TVO Chat` : BASE_TITLE;
@@ -482,7 +506,7 @@ function ChatRoom({ session, teamKey, onBack }) {
   const remaining = MAX_LEN - input.length;
 
   return (
-    <div className="chat-fullh" style={{ display:'flex', flexDirection:'column', height:'100vh', background:'#F9FAFB' }}>
+    <div id="chat-wrap" style={{ background:'#F9FAFB' }}>
       {/* Header */}
       <div style={{
         background: meta.color, color:'#fff',
@@ -554,11 +578,11 @@ function ChatRoom({ session, teamKey, onBack }) {
         )}
       </div>
 
-      {/* Input area */}
+      {/* Input area — flexShrink:0 ทำให้ไม่ถูกบีบออกจากจอ */}
       <div style={{
         background:'#fff', borderTop:'1px solid #E5E7EB',
-        padding:'10px 12px', paddingBottom:'max(10px, env(safe-area-inset-bottom))',
-        flexShrink:0,
+        padding:'10px 12px 10px',
+        flexShrink:0, flexGrow:0,
       }}>
         <div style={{ display:'flex', gap:'8px', alignItems:'flex-end' }}>
           <div style={{ flex:1, position:'relative' }}>
