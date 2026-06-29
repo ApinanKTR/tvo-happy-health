@@ -18,7 +18,12 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:#F0FDF4;font-family:'Sarabun',sans-serif;min-height:100vh;display:flex;flex-direction:column}
+html{height:-webkit-fill-available}
+body{background:#F0FDF4;font-family:'Sarabun',sans-serif;
+  min-height:100vh;min-height:-webkit-fill-available;
+  display:flex;flex-direction:column}
+/* dvh สำหรับ browser ใหม่ที่รองรับ (Chrome 108+, Safari 16+) */
+@supports (height:100dvh){.chat-fullh{height:100dvh!important}}
 </style>
 </head>
 <body>
@@ -52,13 +57,23 @@ const getTeamKey = (group = '') => {
 
 const fmtTime = (iso) => {
   if (!iso) return '';
-  const d = new Date(iso);
-  return d.toLocaleTimeString('th-TH', { hour:'2-digit', minute:'2-digit', timeZone:'Asia/Bangkok' });
+  try {
+    const d = new Date(iso);
+    return d.toLocaleTimeString('th-TH', { hour:'2-digit', minute:'2-digit', timeZone:'Asia/Bangkok' });
+  } catch {
+    const d = new Date(new Date(iso).getTime() + 7*3600*1000); // UTC+7 fallback
+    return d.toISOString().substring(11, 16);
+  }
 };
 const fmtDate = (iso) => {
   if (!iso) return '';
-  const d = new Date(iso);
-  return d.toLocaleDateString('th-TH', { day:'numeric', month:'short', timeZone:'Asia/Bangkok' });
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString('th-TH', { day:'numeric', month:'short', timeZone:'Asia/Bangkok' });
+  } catch {
+    const d = new Date(iso);
+    return `${d.getDate()}/${d.getMonth()+1}/${d.getFullYear()}`;
+  }
 };
 
 // ── Auth helpers ─────────────────────────────────────────────
@@ -97,16 +112,25 @@ const sendMessage = async (teamKey, empId, displayName, message) => {
 };
 
 // ── Notification helpers ──────────────────────────────────────
-const requestNotifPermission = async () => {
-  if (!('Notification' in window)) return false;
-  if (Notification.permission === 'granted') return true;
-  const perm = await Notification.requestPermission();
-  return perm === 'granted';
-};
+// iOS Safari ไม่รองรับ Notification API เลย — ต้องเช็คก่อนเสมอ
+const NOTIF_SUPPORTED = (typeof window !== 'undefined') && ('Notification' in window);
+
+const requestNotifPermission = () => new Promise(resolve => {
+  if (!NOTIF_SUPPORTED) return resolve(false);
+  if (Notification.permission === 'granted') return resolve(true);
+  if (Notification.permission === 'denied') return resolve(false);
+  try {
+    // บาง browser เก่าคืน callback ไม่ใช่ Promise
+    const result = Notification.requestPermission(perm => resolve(perm === 'granted'));
+    if (result && typeof result.then === 'function') {
+      result.then(perm => resolve(perm === 'granted')).catch(() => resolve(false));
+    }
+  } catch { resolve(false); }
+});
 
 const showNotif = (title, body) => {
-  if (Notification.permission !== 'granted') return;
-  try { new Notification(title, { body, icon: 'logo.png', badge: 'logo.png' }); } catch {}
+  if (!NOTIF_SUPPORTED || Notification.permission !== 'granted') return;
+  try { new Notification(title, { body, icon: 'logo.png' }); } catch {}
 };
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -199,13 +223,22 @@ function ChatRoom({ session, teamKey, onBack }) {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const [notifOn, setNotifOn] = useState(() => lsGet('tvohh_chat_notif', true));
-  const bottomRef = useRef(null);
+  const msgsRef = useRef(null);   // ref ที่ messages container โดยตรง
   const channelRef = useRef(null);
   const inputRef = useRef(null);
-  const latestCreatedAt = useRef(null); // ใช้ track ข้อความล่าสุดสำหรับ polling
+  const latestCreatedAt = useRef(null);
 
+  // scroll container โดยตรง — ไม่ใช้ scrollIntoView ซึ่งทำให้ iOS Safari เลื่อนทั้งหน้า
   const scrollToBottom = useCallback((behavior = 'smooth') => {
-    setTimeout(() => bottomRef.current?.scrollIntoView({ behavior }), 60);
+    setTimeout(() => {
+      const el = msgsRef.current;
+      if (!el) return;
+      try {
+        el.scrollTo({ top: el.scrollHeight, behavior });
+      } catch {
+        el.scrollTop = el.scrollHeight; // fallback: Safari เก่า / browser ที่ไม่รองรับ options
+      }
+    }, 60);
   }, []);
 
   // merge ข้อความใหม่เข้า state (กัน duplicate + trigger notif)
@@ -262,8 +295,10 @@ function ChatRoom({ session, teamKey, onBack }) {
   }, [teamKey, notifOn, session.empId]);
 
   // Polling ทุก 5 วินาที — fallback กรณี Realtime ยังไม่ได้เปิด Replication
+  // หยุด poll เมื่อ page อยู่ background (Page Visibility API) เพื่อประหยัด resource
   useEffect(() => {
     const poll = async () => {
+      if (document.visibilityState === 'hidden') return; // หยุดถ้า page ซ่อนอยู่
       try {
         const since = latestCreatedAt.current;
         if (!since) return;
@@ -280,8 +315,11 @@ function ChatRoom({ session, teamKey, onBack }) {
         }
       } catch {}
     };
+    // poll ทันทีเมื่อ page กลับมา visible
+    const onVisible = () => { if (document.visibilityState === 'visible') poll(); };
+    document.addEventListener('visibilitychange', onVisible);
     const timer = setInterval(poll, 5000);
-    return () => clearInterval(timer);
+    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', onVisible); };
   }, [teamKey, mergeNewMessages]);
 
   const handleSend = async () => {
@@ -326,7 +364,7 @@ function ChatRoom({ session, teamKey, onBack }) {
   const remaining = MAX_LEN - input.length;
 
   return (
-    <div style={{ display:'flex', flexDirection:'column', height:'100vh', background:'#F9FAFB' }}>
+    <div className="chat-fullh" style={{ display:'flex', flexDirection:'column', height:'100vh', background:'#F9FAFB' }}>
       {/* Header */}
       <div style={{
         background: meta.color, color:'#fff',
@@ -344,20 +382,23 @@ function ChatRoom({ session, teamKey, onBack }) {
           </div>
           <div style={{ fontSize:'12px', opacity:0.85 }}>แชทภายในทีม • เก็บข้อมูล 30 วัน</div>
         </div>
-        {/* Notification toggle */}
-        <button onClick={toggleNotif} title={notifOn ? 'ปิดการแจ้งเตือน' : 'เปิดการแจ้งเตือน'} style={{
-          background:'rgba(255,255,255,0.2)', border:'none', color:'#fff',
-          borderRadius:'8px', padding:'6px 10px', cursor:'pointer', fontSize:'18px',
-          transition:'background 0.2s',
-        }}>
-          {notifOn ? '🔔' : '🔕'}
-        </button>
+        {/* Notification toggle — ซ่อนบน iOS Safari ที่ไม่รองรับ */}
+        {NOTIF_SUPPORTED && (
+          <button onClick={toggleNotif} title={notifOn ? 'ปิดการแจ้งเตือน' : 'เปิดการแจ้งเตือน'} style={{
+            background:'rgba(255,255,255,0.2)', border:'none', color:'#fff',
+            borderRadius:'8px', padding:'6px 10px', cursor:'pointer', fontSize:'18px',
+            transition:'background 0.2s',
+          }}>
+            {notifOn ? '🔔' : '🔕'}
+          </button>
+        )}
       </div>
 
       {/* Messages area */}
-      <div style={{
+      <div ref={msgsRef} style={{
         flex:1, overflowY:'auto', padding:'12px 16px',
         display:'flex', flexDirection:'column',
+        WebkitOverflowScrolling:'touch',
       }}>
         {messages.length === 0 && (
           <div style={{
@@ -384,7 +425,6 @@ function ChatRoom({ session, teamKey, onBack }) {
             borderRadius:'8px', fontSize:'13px', marginTop:'8px',
           }}>{error}</div>
         )}
-        <div ref={bottomRef} />
       </div>
 
       {/* Input area */}
