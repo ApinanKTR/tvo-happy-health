@@ -193,7 +193,7 @@ const sbFetchLogs = async () => {
   while (true) {
     const { data, error } = await supabase
       .from('exercise_logs')
-      .select('id,employee_id,user_name,group_name,exercise,duration,calories,log_date,note,likes,verified,admin_comment,photo')
+      .select('id,employee_id,user_name,group_name,exercise,duration,calories,log_date,note,likes,verified,admin_comment')
       .order('log_date', { ascending: false })
       .order('created_at', { ascending: false })
       .range(from, from + BATCH - 1);
@@ -210,21 +210,27 @@ const sbFetchLogs = async () => {
     user: i.user_name || '', group: i.group_name || '',
     exercise: i.exercise || '', duration: Number(i.duration) || 0,
     calories: Number(i.calories) || 0, date: i.log_date || '',
-    note: i.note || '', likes: Number(i.likes) || 0, photo: i.photo || null,
+    note: i.note || '', likes: Number(i.likes) || 0, hasPhoto: false,
     verified: i.verified || false,
     adminComment: i.admin_comment || '',
   }));
 };
 
 const sbFetchLogPhotoIds = async () => {
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - 180);
-  const { data } = await supabase
-    .from('exercise_logs')
-    .select('id')
-    .not('photo', 'is', null)
-    .gte('log_date', thaiDate(cutoff));
-  return new Set((data || []).map(r => r.id));
+  const BATCH = 1000;
+  let allIds = [], from = 0;
+  while (true) {
+    const { data } = await supabase
+      .from('exercise_logs')
+      .select('id')
+      .not('photo', 'is', null)
+      .range(from, from + BATCH - 1);
+    if (!data || data.length === 0) break;
+    allIds = allIds.concat(data.map(r => r.id));
+    if (data.length < BATCH) break;
+    from += BATCH;
+  }
+  return new Set(allIds);
 };
 const sbFetchLogPhoto = async (id) => {
   const { data } = await supabase.from('exercise_logs').select('photo').eq('id', id).single();
@@ -686,8 +692,8 @@ function CalorieTracker() {
   useEffect(() => {
     setSpStatus("connecting");
     const t = setTimeout(() => {
-      sbFetchLogs()
-        .then(d => {
+      Promise.all([sbFetchLogs(), sbFetchLogPhotoIds()])
+        .then(([d, photoIds]) => {
           if (d.length > 0) {
             // remap group + ชื่อปัจจุบัน — empId ก่อน, fallback display_name
             const cached = lsGet("tvohh_allusers",[]) || [];
@@ -697,6 +703,7 @@ function CalorieTracker() {
               ...l,
               group: remapGroup(l, gmap),
               user: (l.empId && nmap[String(l.empId).trim()]) || l.user,
+              hasPhoto: photoIds.has(l.id),
             })));
           }
           setSpStatus("connected");
@@ -718,7 +725,7 @@ function CalorieTracker() {
   useEffect(() => {
     if (spStatus !== "connected") return;
     const iv = setInterval(() => {
-      sbFetchLogs().then(d => {
+      Promise.all([sbFetchLogs(), sbFetchLogPhotoIds()]).then(([d, photoIds]) => {
         if (d.length > 0) {
           const cached = lsGet("tvohh_allusers",[]) || [];
           const gmap = buildGroupMap(cached);
@@ -728,6 +735,7 @@ function CalorieTracker() {
             ...l,
             group: remapGroup(l, gmap),
             user: (l.empId && nmap[String(l.empId).trim()]) || nByName[(l.user||'').trim()] || l.user,
+            hasPhoto: photoIds.has(l.id),
           })));
         }
         setSpLastSync(new Date().toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit"}));
@@ -839,7 +847,14 @@ const handleAdd = async () => {
     catch(e) { toast("❌ บันทึกไม่สำเร็จ: " + e.message); }
   };
 
-  const openEditLog = (log) => setEditLogModal({ log, form: { exercise: log.exercise, date: log.date, duration: log.duration, calories: log.calories, photo: log.photo }, saving: false });
+  const openEditLog = (log) => {
+    setEditLogModal({ log, form: { exercise: log.exercise, date: log.date, duration: log.duration, calories: log.calories, photo: null }, saving: false });
+    if (log.hasPhoto) {
+      sbFetchLogPhoto(log.id).then(p => {
+        setEditLogModal(prev => prev ? { ...prev, form: { ...prev.form, photo: p } } : null);
+      }).catch(() => {});
+    }
+  };
 
   const handleEditLogSave = async () => {
     const { log, form } = editLogModal;
@@ -1503,12 +1518,12 @@ const handleRegister = async () => {
           <div style={{ display:"flex", alignItems:"center", gap:10 }}>
             <div onClick={()=>{
               setSpStatus("connecting");
-              sbFetchLogs().then(d=>{
+              Promise.all([sbFetchLogs(), sbFetchLogPhotoIds()]).then(([d, photoIds])=>{
                 if(d.length>0){
                   const cached=lsGet("tvohh_allusers",[])||[];
                   const gmap=buildGroupMap(cached);
                   const nmap=Object.fromEntries(cached.filter(u=>u.empId).map(u=>[String(u.empId).trim(),u.user]));
-                  setLogs(d.map(l=>({...l,group:remapGroup(l,gmap),user:(l.empId&&nmap[String(l.empId).trim()])||l.user})));
+                  setLogs(d.map(l=>({...l,group:remapGroup(l,gmap),user:(l.empId&&nmap[String(l.empId).trim()])||l.user,hasPhoto:photoIds.has(l.id)})));
                 }
                 setSpStatus("connected");
                 setSpLastSync(new Date().toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit"}));
@@ -1688,7 +1703,7 @@ const handleRegister = async () => {
                             {liked?"❤️":"🤍"}
                           </button>
                           {log.likes>0&&<span onClick={()=>handleShowLikers(log.id)} style={{ fontSize:12, fontWeight:700, color:"#6B7280", cursor:"pointer" }}>{log.likes}</span>}
-                          {log.photo&&<div className="v2-pthumb" onClick={()=>setZoomPhoto(log.photo)} style={{ width:30, height:30, background:"#F3F4F6", borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, cursor:"pointer" }}>📷</div>}
+                          {log.hasPhoto&&<div className="v2-pthumb" onClick={()=>sbFetchLogPhoto(log.id).then(p=>setZoomPhoto(p))} style={{ width:30, height:30, background:"#F3F4F6", borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, cursor:"pointer" }}>📷</div>}
                         </div>
                       </div>
                       {/* Calorie chip + exercise icon */}
@@ -2462,7 +2477,7 @@ const handleRegister = async () => {
                                       </>)}
                                       <button className={`v2-like ${liked?"v2-like-on":""}`} onClick={()=>handleLike(log.id)}>{liked?"❤️":"🤍"}</button>
                                       {log.likes>0&&<span onClick={()=>handleShowLikers(log.id)} style={{ fontSize:12, fontWeight:700, color:"#6B7280", cursor:"pointer" }}>{log.likes}</span>}
-                                      {log.photo&&<div className="v2-pthumb" onClick={()=>setZoomPhoto(log.photo)} style={{ width:28, height:28, background:"#F3F4F6", borderRadius:7, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, cursor:"pointer" }}>📷</div>}
+                                      {log.hasPhoto&&<div className="v2-pthumb" onClick={()=>sbFetchLogPhoto(log.id).then(p=>setZoomPhoto(p))} style={{ width:28, height:28, background:"#F3F4F6", borderRadius:7, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, cursor:"pointer" }}>📷</div>}
                                     </div>
                                   </div>
                                   <div style={{ flexShrink:0, textAlign:"right" }}>
