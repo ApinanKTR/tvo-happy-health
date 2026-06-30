@@ -298,7 +298,7 @@ async function loadSummary() {
   try {
     // fetch all 3 tables in parallel
     const [surveyRes, profileRes, calRes] = await Promise.all([
-      sb.from('shirt_survey').select('display_name,size,updated_at'),
+      sb.from('shirt_survey').select('display_name,employee_id,size,updated_at'),
       sb.from('user_profiles').select('employee_id,display_name').limit(5000),
       (async () => {
         // pagination เพื่อให้ได้ครบทุก record
@@ -362,15 +362,17 @@ async function loadSummary() {
       return;
     }
     document.getElementById('plist-card').innerHTML = data.map((r, i) => {
-      const isMe = r.display_name === authUser?.display_name;
+      // remap ชื่อปัจจุบันจาก employee_id (แก้ชื่อเก่าใน shirt_survey)
+      const currentName = (r.employee_id && empToName[String(r.employee_id).trim()]) || r.display_name;
+      const isMe = currentName === authUser?.display_name || r.display_name === authUser?.display_name;
       const dt   = r.updated_at ? new Date(r.updated_at) : null;
       const dateStr = dt ? dt.toLocaleDateString('th-TH', { day:'numeric', month:'short', year:'2-digit', timeZone:'Asia/Bangkok' }) : '-';
-      const cal    = calMap[r.display_name] || 0;
+      const cal    = calMap[currentName] || 0;
       const calStr = cal > 0 ? cal.toLocaleString() + ' kcal' : '-';
       const elite  = cal >= 5000;
       return `<div class="plist-row">
         <div class="plist-num">${i+1}</div>
-        <div class="plist-name${isMe ? ' me' : ''}" style="${elite ? 'color:#D97706;font-weight:800' : ''}">${r.display_name}${isMe ? ' (คุณ)' : ''}</div>
+        <div class="plist-name${isMe ? ' me' : ''}" style="${elite ? 'color:#D97706;font-weight:800' : ''}">${currentName}${isMe ? ' (คุณ)' : ''}</div>
         <div class="plist-size">${r.size}</div>
         <div class="plist-cal" style="${elite ? 'color:#D97706;font-weight:800' : ''}">${calStr}</div>
         <div class="plist-date">${dateStr}</div>
