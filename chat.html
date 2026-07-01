@@ -21,16 +21,6 @@
 html,body{height:100%;overflow:hidden}
 body{background:#F0FDF4;font-family:'Sarabun',sans-serif}
 #chat-wrap{display:flex;flex-direction:column;height:100vh;height:100dvh;overflow:hidden}
-/* ── Rank effects (เหมือนหน้าหลัก) ── */
-.rnk-1,.rnk-2,.rnk-3,.rnk-4{outline-style:solid;outline-offset:2px}
-.rnk-1{border:3px solid #F59E0B!important;outline-width:3px;outline-color:#F59E0B;animation:goldGlow 1.8s ease-in-out infinite}
-.rnk-2{border:2.5px solid #C0C0C0!important;outline-width:2.5px;outline-color:#C0C0C0;animation:silverShine 2.2s ease-in-out infinite}
-.rnk-3{border:2.5px solid #E8711A!important;outline-width:2px;outline-color:#E8711A;animation:bronzeGlow 2.5s ease-in-out infinite}
-.rnk-4{border:2px solid #06B6D4!important;outline-style:solid;outline-width:2px;outline-color:#06B6D4;outline-offset:1px;animation:tealPulse 3s ease-in-out infinite}
-@keyframes goldGlow{0%,100%{outline-color:#F59E0B;outline-offset:2px}50%{outline-color:#FEF3C7;outline-offset:5px}}
-@keyframes silverShine{0%,100%{outline-color:#C0C0C0;outline-offset:2px}50%{outline-color:#F1F5F9;outline-offset:4px}}
-@keyframes bronzeGlow{0%,100%{outline-color:#E8711A;outline-offset:2px}50%{outline-color:#FED7AA;outline-offset:4px}}
-@keyframes tealPulse{0%,100%{outline-color:#06B6D4;outline-offset:1px}50%{outline-color:#CFFAFE;outline-offset:3px}}
 </style>
 </head>
 <body>
@@ -83,10 +73,6 @@ const fmtDate = (iso) => {
   }
 };
 
-// ── Rank helper ───────────────────────────────────────────────
-const rankClass = pos =>
-  pos === 0 ? 'rnk-1' : pos === 1 ? 'rnk-2' : pos === 2 ? 'rnk-3' : pos <= 9 ? 'rnk-4' : '';
-
 // ── Auth helpers ─────────────────────────────────────────────
 const getSession = () => {
   const s = lsGet('tvohh_session', null);
@@ -111,34 +97,25 @@ const fetchMessages = async (teamKey) => {
   return data || [];
 };
 
-// ดึงข้อมูล profile + rank ของสมาชิกในทีม
+// ดึง photo + icon จาก user_profiles เท่านั้น พร้อม cache 1 ชั่วโมง
+const CACHE_TTL = 60 * 60 * 1000; // 1 hour
 const fetchTeamUserData = async (teamLabel) => {
-  const [{ data: users }, { data: logs }] = await Promise.all([
-    supabase.from('user_profiles')
-      .select('employee_id,display_name,photo,profile_icon')
-      .eq('group_name', teamLabel),
-    supabase.from('exercise_logs')
-      .select('employee_id,user_name,calories')
-      .eq('group_name', teamLabel),
-  ]);
-  // รวม calories ต่อ user
-  const calMap = {};
-  (logs || []).forEach(l => {
-    const key = l.employee_id || l.user_name;
-    calMap[key] = (calMap[key] || 0) + (Number(l.calories) || 0);
+  const cacheKey = `tvohh_chat_userdata_${teamLabel}`;
+  const cached = lsGet(cacheKey, null);
+  if (cached && (Date.now() - cached.ts) < CACHE_TTL) {
+    return { avatarMap: cached.avatarMap, iconMap: cached.iconMap };
+  }
+  const { data: users } = await supabase
+    .from('user_profiles')
+    .select('display_name,photo,profile_icon')
+    .eq('group_name', teamLabel);
+  const avatarMap = {}, iconMap = {};
+  (users || []).forEach(u => {
+    if (u.photo)        avatarMap[u.display_name] = u.photo;
+    if (u.profile_icon) iconMap[u.display_name]   = u.profile_icon;
   });
-  // sort หาอันดับ
-  const sorted = (users || [])
-    .map(u => ({ ...u, total: calMap[u.employee_id] || calMap[u.display_name] || 0 }))
-    .sort((a, b) => b.total - a.total);
-
-  const avatarMap = {}, iconMap = {}, rankMap = {};
-  sorted.forEach((u, i) => {
-    if (u.photo)         avatarMap[u.display_name] = u.photo;
-    if (u.profile_icon)  iconMap[u.display_name]   = u.profile_icon;
-    rankMap[u.display_name] = i;
-  });
-  return { avatarMap, iconMap, rankMap };
+  lsSet(cacheKey, { avatarMap, iconMap, ts: Date.now() });
+  return { avatarMap, iconMap };
 };
 
 const sbEditMessage = async (id, empId, newText) => {
@@ -213,11 +190,10 @@ function NotLoggedIn() {
   );
 }
 
-function Avatar({ name, color, size = 36, photo, icon, rankPos }) {
-  const rc = (rankPos !== undefined && rankPos !== null) ? rankClass(rankPos) : '';
+function Avatar({ name, color, size = 36, photo, icon }) {
   const inner = photo
-    ? <img src={photo} alt="" className={rc} style={{ width:size, height:size, borderRadius:'50%', objectFit:'cover', display:'block' }} />
-    : <div className={rc} style={{ width:size, height:size, borderRadius:'50%', background:color, color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:size*0.38, fontWeight:700, fontFamily:'Prompt,sans-serif' }}>
+    ? <img src={photo} alt="" style={{ width:size, height:size, borderRadius:'50%', objectFit:'cover', display:'block' }} />
+    : <div style={{ width:size, height:size, borderRadius:'50%', background:color, color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:size*0.38, fontWeight:700, fontFamily:'Prompt,sans-serif' }}>
         {(name||'?').substring(0,2)}
       </div>;
   return (
@@ -227,7 +203,7 @@ function Avatar({ name, color, size = 36, photo, icon, rankPos }) {
   );
 }
 
-function MessageBubble({ msg, isOwn, teamColor, photo, icon, rankPos, menuOpen, onMenuToggle, onEdit, onDelete, isEditing, editText, onEditChange, onEditSave, onEditCancel }) {
+function MessageBubble({ msg, isOwn, teamColor, photo, icon, menuOpen, onMenuToggle, onEdit, onDelete, isEditing, editText, onEditChange, onEditSave, onEditCancel }) {
   const timeStr = fmtTime(msg.created_at);
   const editRef = useRef(null);
 
@@ -240,7 +216,7 @@ function MessageBubble({ msg, isOwn, teamColor, photo, icon, rankPos, menuOpen, 
       display:'flex', flexDirection: isOwn ? 'row-reverse' : 'row',
       alignItems:'flex-end', gap:'8px', marginBottom:'12px', position:'relative',
     }}>
-      {!isOwn && <Avatar name={msg.display_name} color={teamColor} size={36} photo={photo} icon={icon} rankPos={rankPos} />}
+      {!isOwn && <Avatar name={msg.display_name} color={teamColor} size={36} photo={photo} icon={icon} />}
       <div style={{ maxWidth:'72%', display:'flex', flexDirection:'column', alignItems: isOwn ? 'flex-end' : 'flex-start' }}>
         {!isOwn && (
           <div style={{ fontSize:'11px', color:'#6B7280', marginBottom:'2px', paddingLeft:'4px', display:'flex', alignItems:'center', gap:'3px' }}>
@@ -340,7 +316,6 @@ function ChatRoom({ session, teamKey, onBack }) {
   // user data: photo, icon, rank
   const [avatarMap, setAvatarMap] = useState(() => lsGet('tvohh_avatars', {}));
   const [iconMap,   setIconMap]   = useState(() => lsGet('tvohh_profileicons', {}));
-  const [rankMap,   setRankMap]   = useState({});
   const msgsRef = useRef(null);
   const channelRef = useRef(null);
   const inputRef = useRef(null);
@@ -349,10 +324,9 @@ function ChatRoom({ session, teamKey, onBack }) {
 
   // โหลด user data (photo, icon, rank) ของทีม
   useEffect(() => {
-    fetchTeamUserData(meta.label).then(({ avatarMap: av, iconMap: ic, rankMap: rk }) => {
+    fetchTeamUserData(meta.label).then(({ avatarMap: av, iconMap: ic }) => {
       setAvatarMap(prev => ({ ...prev, ...av }));
       setIconMap(prev => ({ ...prev, ...ic }));
-      setRankMap(rk);
     }).catch(() => {});
   }, [teamKey]);
 
@@ -435,8 +409,22 @@ function ChatRoom({ session, teamKey, onBack }) {
         setMessages(msgs);
         if (msgs.length > 0) latestCreatedAt.current = msgs[msgs.length - 1].created_at;
         scrollToBottom('instant');
+        // บันทึกเวลาที่เปิดอ่านล่าสุด
+        lsSet('tvohh_chat_seen_' + teamKey, new Date().toISOString());
       } catch(e) { setError(e.message); }
     })();
+  }, [teamKey]);
+
+  // อัปเดต last-seen เมื่อ user กลับมาที่หน้าแชท
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        lsSet('tvohh_chat_seen_' + teamKey, new Date().toISOString());
+        setUnread(0);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
   }, [teamKey]);
 
   // Realtime subscription (ถ้า Replication เปิดอยู่จะทำงานทันที)
@@ -615,7 +603,7 @@ function ChatRoom({ session, teamKey, onBack }) {
                 teamColor={meta.color}
                 photo={avatarMap[item.msg.display_name] || null}
                 icon={iconMap[item.msg.display_name] || null}
-                rankPos={rankMap[item.msg.display_name] ?? null}
+
                 menuOpen={menuMsgId === item.msg.id}
                 onMenuToggle={id => setMenuMsgId(prev => prev===id ? null : id)}
                 onEdit={handleEditStart}
