@@ -626,7 +626,8 @@ function ChatRoom({ session, teamKey, onBack }) {
       {/* Input area — flexShrink:0 ทำให้ไม่ถูกบีบออกจากจอ */}
       <div style={{
         background:'#fff', borderTop:'1px solid #E5E7EB',
-        padding:'10px 12px 10px',
+        padding:'10px 12px',
+        paddingBottom:'max(10px, calc(env(safe-area-inset-bottom) + 6px))',
         flexShrink:0, flexGrow:0,
       }}>
         <div style={{ display:'flex', gap:'8px', alignItems:'flex-end' }}>
