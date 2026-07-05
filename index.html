@@ -464,6 +464,18 @@ const SPECIAL_EVENTS = [
       return total >= 42;
     },
   },
+  {
+    id: "diamond_777_jul2026",
+    icon: "🍀",
+    name: "Miracle 7",
+    desc: "บันทึกกิจกรรม 7 ครั้ง แคลอรี่ ≥ 777 kcal ในเดือนกรกฎาคม 2026",
+    check: (userLogs) => {
+      const qualifying = userLogs.filter(
+        l => l.date >= "2026-07-01" && l.date <= "2026-07-31" && Number(l.calories) >= 777
+      );
+      return qualifying.length >= 7;
+    },
+  },
 ];
 
 const SPECIAL_ICON_SET = new Set(SPECIAL_EVENTS.map(e => e.icon));
@@ -471,7 +483,7 @@ const SPECIAL_ICON_SET = new Set(SPECIAL_EVENTS.map(e => e.icon));
 // render ชื่อ: ถ้า icon เป็น special event → สีรุ้งวิ่งไปมา
 const WiggleName = ({ name, icon }) => {
   if (!icon || !SPECIAL_ICON_SET.has(icon)) return React.createElement(React.Fragment, null, name);
-  const classMap = { "🌈": "pride-name", "🎂": "birthday-name" };
+  const classMap = { "🌈": "pride-name", "🎂": "birthday-name", "🍀": "diamond-name" };
   const cls = classMap[icon] || "pride-name";
   return React.createElement('span', { className: cls }, name);
 };
@@ -501,6 +513,76 @@ const getLast7Days = (userLogs) => {
   }
   return days;
 };
+
+// ── Diamond 777 Matrix Popup ─────────────────────────────────
+function DiamondMatrixPopup({ userName, onClose }) {
+  const canvasRef = React.useRef(null);
+  React.useEffect(() => {
+    const cv = canvasRef.current;
+    if (!cv) return;
+    const cx = cv.getContext('2d');
+    cv.width  = cv.offsetWidth;
+    cv.height = cv.offsetHeight;
+    const W = cv.width, H = cv.height;
+    const nameChars = [...(userName || 'YOU')];
+    const pool = [
+      ...nameChars,...nameChars,...nameChars,
+      '7','7','7','💎','0','1','2','3','4','5','6','8','9','·','✦',
+    ];
+    const cols = Math.floor(W / 15);
+    const drops = Array.from({length: cols}, () => Math.random() * -(H / 15));
+    const timer = setInterval(() => {
+      cx.fillStyle = 'rgba(0,0,0,0.055)';
+      cx.fillRect(0, 0, W, H);
+      drops.forEach((y, i) => {
+        const ch = pool[Math.floor(Math.random() * pool.length)];
+        const isName = nameChars.includes(ch);
+        cx.shadowBlur = 0;
+        if (ch === '💎') {
+          cx.font = '12px monospace'; cx.fillStyle = '#93C5FD';
+          cx.shadowBlur = 6; cx.shadowColor = '#3B82F6';
+        } else if (isName) {
+          cx.font = 'bold 14px monospace';
+          cx.fillStyle = `rgba(96,${150 + Math.random()*105|0},253,.9)`;
+          cx.shadowBlur = 12; cx.shadowColor = '#60A5FA';
+        } else if (ch === '7') {
+          cx.font = 'bold 14px monospace'; cx.fillStyle = '#fff';
+          cx.shadowBlur = 14; cx.shadowColor = '#93C5FD';
+        } else {
+          cx.font = '12px monospace';
+          cx.fillStyle = `rgba(20,50,${70+Math.random()*70|0},.45)`;
+        }
+        cx.fillText(ch, i * 15, y * 15);
+        cx.shadowBlur = 0;
+        if (y * 15 > H && Math.random() > 0.975) drops[i] = 0;
+        drops[i]++;
+      });
+    }, 40);
+    return () => clearInterval(timer);
+  }, [userName]);
+
+  return (
+    <div onClick={onClose} style={{ position:'fixed', inset:0, zIndex:900, display:'flex', alignItems:'center', justifyContent:'center' }}>
+      <canvas ref={canvasRef} style={{ position:'absolute', inset:0, width:'100%', height:'100%', background:'#000' }} />
+      <div onClick={e=>e.stopPropagation()} style={{
+        position:'relative', background:'rgba(0,0,0,.88)', border:'2px solid #60A5FA',
+        borderRadius:24, padding:'28px 32px 22px', textAlign:'center', width:270,
+        boxShadow:'0 0 60px rgba(96,165,250,.5)', animation:'pop-in .5s cubic-bezier(.34,1.56,.64,1) both',
+      }}>
+        <div style={{ fontSize:9, color:'#93C5FD', letterSpacing:4, fontFamily:'monospace', marginBottom:12 }}>✦ SPECIAL ACHIEVEMENT ✦</div>
+        <div style={{ fontSize:80, filter:'drop-shadow(0 0 18px #00ff41) drop-shadow(0 0 40px #00cc33)', animation:'float 3s ease-in-out infinite', display:'block', marginBottom:10 }}>🍀</div>
+        <div style={{ fontFamily:'monospace', fontSize:26, fontWeight:900, letterSpacing:6, color:'#60A5FA', textShadow:'0 0 20px #3B82F6', marginBottom:6 }}>7·7·7</div>
+        <div style={{ fontFamily:'monospace', fontSize:17, fontWeight:900, letterSpacing:2, color:'#DBEAFE', textShadow:'0 0 10px #60A5FA', marginBottom:4 }}>MIRACLE 7</div>
+        <div style={{ fontSize:10, color:'#6B94C8', marginBottom:14 }}>7 sessions ≥ 777 kcal · กรกฎาคม 2026</div>
+        <div style={{ background:'rgba(96,165,250,.12)', border:'1.5px solid rgba(96,165,250,.4)', borderRadius:12, padding:'10px 16px', marginBottom:16 }}>
+          <div style={{ fontSize:8, color:'#60A5FA', letterSpacing:3, fontFamily:'monospace', marginBottom:5 }}>UNLOCKED BY</div>
+          <div style={{ fontSize:24, fontWeight:900, color:'#fff', letterSpacing:2, fontFamily:'monospace', textShadow:'0 0 18px #60A5FA, 0 0 40px #3B82F6' }}>{userName}</div>
+        </div>
+        <button onClick={onClose} style={{ background:'#3B82F6', color:'#fff', border:'none', borderRadius:10, padding:'8px 24px', fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:'Prompt,sans-serif' }}>ปิด</button>
+      </div>
+    </div>
+  );
+}
 
 function CalorieTracker() {
   // ไม่ load logs จาก localStorage — ดึงสดจาก SharePoint ทุกครั้ง เพื่อป้องกัน log เก่าค้าง
@@ -596,6 +678,7 @@ function CalorieTracker() {
   const [editingGrp, setEditingGrp] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [badgePopup, setBadgePopup] = useState(null); // { icon, name, desc }
+  const [showDiamondPopup, setShowDiamondPopup] = useState(false);
   const [chatUnread, setChatUnread] = useState(0);
   const [editLogModal, setEditLogModal] = useState(null); // { log, form, saving }
   const editLogPhotoRef = React.useRef(null);
@@ -810,6 +893,16 @@ const handleAdd = async () => {
     const userLogsAfter = [newLog, ...userLogsNow];
     const newBadges = getBadges(userLogsAfter.reduce((s,l)=>s+l.calories,0), userLogsAfter.length, userLogsAfter).filter(b=>!badgesBefore.has(b.name));
     if (newBadges.length > 0) setTimeout(() => setBadgePopup(newBadges[0]), 800);
+
+    // ตรวจ Diamond 777 unlock
+    const diamondEvent = SPECIAL_EVENTS.find(e => e.id === 'diamond_777_jul2026');
+    if (diamondEvent) {
+      const wasBefore = diamondEvent.check(userLogsNow);
+      const isAfter   = diamondEvent.check(userLogsAfter);
+      if (!wasBefore && isAfter && !lsGet('tvohh_diamond_seen_' + (authUser?.empId || ''), false)) {
+        setTimeout(() => setShowDiamondPopup(true), 1200);
+      }
+    }
 
     // อัปเดตข้อมูลขึ้นหน้าจอ UI ทันที
     setLogs(prev => [newLog, ...prev]);
@@ -1226,6 +1319,8 @@ const handleRegister = async () => {
         .pride-name{color:#e85d04;background:linear-gradient(90deg,#ff4e50,#fc913a,#f9d62e,#4caf50,#2196f3,#9c27b0,#ff4e50);background-size:200% auto;-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;animation:rainbow-slide 1.8s linear infinite;display:inline;}
         @keyframes bday-shimmer{0%{background-position:0% 50%}100%{background-position:200% 50%}}
         .birthday-name{color:#f59e0b;background:linear-gradient(90deg,#f59e0b,#fbbf24,#fde68a,#fb7185,#fbbf24,#f59e0b);background-size:200% auto;-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;animation:bday-shimmer 1.6s linear infinite;display:inline;font-weight:700;}
+        @keyframes green-flow{0%{background-position:0% 50%}100%{background-position:200% 50%}}
+        .diamond-name{background:linear-gradient(90deg,#166534,#16A34A,#22C55E,#4ADE80,#16A34A,#166534);background-size:200% auto;-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;animation:green-flow 2s linear infinite;font-weight:700;display:inline;}
 
         /* Like button */
         .v2-like{background:none;border:1.5px solid #E5E7EB;border-radius:999px;cursor:pointer;display:inline-flex;align-items:center;gap:4px;padding:4px 12px;font-size:12px;color:#6B7280;transition:all .2s;font-family:'Sarabun'}
@@ -1314,6 +1409,17 @@ const handleRegister = async () => {
         </div>
       )}
 
+      {/* Diamond 777 Matrix Popup */}
+      {showDiamondPopup && (
+        <DiamondMatrixPopup
+          userName={authUser?.displayName || ''}
+          onClose={() => {
+            setShowDiamondPopup(false);
+            lsSet('tvohh_diamond_seen_' + (authUser?.empId || ''), true);
+          }}
+        />
+      )}
+
       {/* Likers modal */}
       {likersModal && (
         <div className="v2-ovl" onClick={()=>setLikersModal(null)} style={{ zIndex:700 }}>
@@ -1391,7 +1497,7 @@ const handleRegister = async () => {
                 </div>
               )}
               <input ref={editLogPhotoRef} type="file" accept="image/*" style={{ display:"none" }}
-                onChange={e=>{ const f=e.target.files?.[0]; if(!f) return; resizeImage(f).then(b64=>setEditLogModal(p=>({...p,form:{...p.form,photo:b64}}))); }} />
+                onChange={e=>{ const f=e.target.files?.[0]; e.target.value=''; if(!f) return; resizeImage(f).then(b64=>setEditLogModal(p=>({...p,form:{...p.form,photo:b64}}))); }} />
             </div>
 
             {/* Duration */}
@@ -1814,7 +1920,7 @@ const handleRegister = async () => {
                     <div style={{ fontSize:10, color:"#9CA3AF", marginTop:3 }}>PNG / JPG / WEBP · บีบอัดอัตโนมัติ ≤ 500 KB</div>
                   </div>
                 )}
-                <input ref={addPhotoRef} type="file" accept="image/*" style={{ display:"none" }} onChange={e=>handlePhotoUpload(e.target.files[0])} />
+                <input ref={addPhotoRef} type="file" accept="image/*" style={{ display:"none" }} onChange={e=>{ const f=e.target.files[0]; e.target.value=''; handlePhotoUpload(f); }} />
               </div>
 
               {/* Duration + Cal — same row */}
@@ -2038,7 +2144,7 @@ const handleRegister = async () => {
                       <div style={{ fontSize:11, fontWeight:700, color:"#7C3AED", marginBottom:8 }}>✨ Special Icons</div>
                       <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
                         {SPECIAL_EVENTS.map(e=>{
-                          const earned = e.check(logs.filter(l=>l.user===profileUser));
+                          const earned = isAdmin || e.check(logs.filter(l=>l.user===profileUser));
                           return (
                             <div key={e.id} className="v2-badge" style={{ opacity:earned?1:0.3, filter:earned?"none":"grayscale(1)", border:earned?"1.5px solid #C4B5FD":"1.5px solid #E5E7EB", background:earned?"#F5F3FF":"#F9FAFB" }} title={e.desc}>
                               <span style={{ fontSize:18 }}>{e.icon}</span>
