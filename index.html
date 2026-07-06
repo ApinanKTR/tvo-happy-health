@@ -465,6 +465,13 @@ const SPECIAL_EVENTS = [
     },
   },
   {
+    id: "million_cal",
+    icon: "🎀",
+    name: "1M Calories",
+    desc: "แคลอรี่สะสมรวมทั้งองค์กรครบ 1,000,000 kcal",
+    check: () => lsGet('tvohh_million_reached', false),
+  },
+  {
     id: "diamond_777_jul2026",
     icon: "🍀",
     name: "Miracle 7",
@@ -483,7 +490,7 @@ const SPECIAL_ICON_SET = new Set(SPECIAL_EVENTS.map(e => e.icon));
 // render ชื่อ: ถ้า icon เป็น special event → สีรุ้งวิ่งไปมา
 const WiggleName = ({ name, icon }) => {
   if (!icon || !SPECIAL_ICON_SET.has(icon)) return React.createElement(React.Fragment, null, name);
-  const classMap = { "🌈": "pride-name", "🎂": "birthday-name", "🍀": "diamond-name" };
+  const classMap = { "🌈": "pride-name", "🎂": "birthday-name", "🍀": "diamond-name", "🎀": "bow-name" };
   const cls = classMap[icon] || "pride-name";
   return React.createElement('span', { className: cls }, name);
 };
@@ -584,6 +591,61 @@ function DiamondMatrixPopup({ userName, onClose }) {
   );
 }
 
+// ── 1,000,000 kcal Milestone Popup ───────────────────────────
+function MillionPopup({ onClose }) {
+  const canvasRef = React.useRef(null);
+  React.useEffect(() => {
+    const cv = canvasRef.current; if (!cv) return;
+    const cx = cv.getContext('2d');
+    cv.width = cv.offsetWidth; cv.height = cv.offsetHeight;
+    const W = cv.width, H = cv.height;
+    // confetti particles
+    const particles = Array.from({length: 120}, () => ({
+      x: Math.random() * W, y: Math.random() * H - H,
+      r: 4 + Math.random() * 6,
+      color: ['#f472b6','#ec4899','#db2777','#fbcfe8','#f9a8d4','#fce7f3','#ff80ab'][Math.floor(Math.random()*7)],
+      vx: (Math.random() - 0.5) * 2, vy: 1.5 + Math.random() * 2.5,
+      rot: Math.random() * 360, rv: (Math.random()-0.5)*4,
+    }));
+    const timer = setInterval(() => {
+      cx.clearRect(0,0,W,H);
+      particles.forEach(p => {
+        cx.save(); cx.translate(p.x, p.y); cx.rotate(p.rot * Math.PI/180);
+        cx.fillStyle = p.color; cx.fillRect(-p.r/2, -p.r/2, p.r, p.r*1.5);
+        cx.restore();
+        p.x += p.vx; p.y += p.vy; p.rot += p.rv;
+        if (p.y > H) { p.y = -10; p.x = Math.random()*W; }
+      });
+    }, 30);
+    return () => clearInterval(timer);
+  }, []);
+
+  return (
+    <div onClick={onClose} style={{ position:'fixed', inset:0, zIndex:900, display:'flex', alignItems:'center', justifyContent:'center' }}>
+      <canvas ref={canvasRef} style={{ position:'absolute', inset:0, width:'100%', height:'100%', background:'rgba(0,0,0,.55)' }} />
+      <div onClick={e=>e.stopPropagation()} style={{
+        position:'relative', background:'#fff', border:'2px solid #f472b6',
+        borderRadius:28, padding:'30px 32px 24px', textAlign:'center', width:290,
+        boxShadow:'0 0 60px rgba(244,114,182,.45)', animation:'pop-in .5s cubic-bezier(.34,1.56,.64,1) both',
+      }}>
+        <div style={{ fontSize:8, color:'#db2777', letterSpacing:4, fontFamily:'monospace', marginBottom:12, fontWeight:700 }}>✦ MILESTONE REACHED ✦</div>
+        <div style={{ fontSize:72, marginBottom:8, animation:'float 3s ease-in-out infinite', display:'block' }}>🎀</div>
+        <div style={{ marginBottom:6 }}>
+          <span className="bow-name" style={{ fontSize:26 }}>1,000,000</span>
+        </div>
+        <div style={{ fontSize:13, color:'#db2777', fontWeight:700, marginBottom:4 }}>แคลอรี่</div>
+        <div style={{ fontSize:11, color:'#9d174d', marginBottom:16 }}>แคลอรี่สะสมรวมขององค์กรครบ 1 ล้านแคลแล้ว! 🎉</div>
+        <div style={{ background:'#fdf2f8', border:'1.5px solid #f9a8d4', borderRadius:14, padding:'10px 16px', marginBottom:18 }}>
+          <div style={{ fontSize:11, color:'#9d174d', lineHeight:1.8 }}>
+            TVO Happy Health · พวกเราทำได้แล้ว 🏆
+          </div>
+        </div>
+        <button onClick={onClose} style={{ background:'linear-gradient(135deg,#db2777,#f472b6)', color:'#fff', border:'none', borderRadius:12, padding:'10px 28px', fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:"'Prompt',sans-serif", boxShadow:'0 4px 16px rgba(219,39,119,.3)' }}>ยินดีด้วย! 🎀</button>
+      </div>
+    </div>
+  );
+}
+
 function CalorieTracker() {
   // ไม่ load logs จาก localStorage — ดึงสดจาก SharePoint ทุกครั้ง เพื่อป้องกัน log เก่าค้าง
   const [logs, setLogs] = useState(INITIAL_LOGS);
@@ -679,6 +741,7 @@ function CalorieTracker() {
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [badgePopup, setBadgePopup] = useState(null); // { icon, name, desc }
   const [showDiamondPopup, setShowDiamondPopup] = useState(false);
+  const [showMillionPopup, setShowMillionPopup] = useState(false);
   const [chatUnread, setChatUnread] = useState(0);
   const [editLogModal, setEditLogModal] = useState(null); // { log, form, saving }
   const editLogPhotoRef = React.useRef(null);
@@ -798,6 +861,19 @@ function CalorieTracker() {
     return () => clearTimeout(t);
   }, []);
 
+
+  // ตรวจแคลอรี่สะสมรวมองค์กร 1,000,000 — แสดงครั้งเดียว
+  useEffect(() => {
+    if (spStatus !== "connected" || logs.length === 0) return;
+    if (lsGet('tvohh_million_seen', false)) return;
+    const totalVerified = logs.filter(l => l.verified).reduce((s, l) => s + (Number(l.calories)||0), 0);
+    if (totalVerified >= 1000000) {
+      lsSet('tvohh_million_reached', true);
+      if (!lsGet('tvohh_million_seen', false)) {
+        setTimeout(() => setShowMillionPopup(true), 1500);
+      }
+    }
+  }, [spStatus, logs.length]);
 
   // auto-set ตัวเองเมื่อเปิด profile ถ้ายังไม่ได้เลือกใคร
   useEffect(() => {
@@ -1320,6 +1396,8 @@ const handleRegister = async () => {
         @keyframes bday-shimmer{0%{background-position:0% 50%}100%{background-position:200% 50%}}
         .birthday-name{color:#f59e0b;background:linear-gradient(90deg,#f59e0b,#fbbf24,#fde68a,#fb7185,#fbbf24,#f59e0b);background-size:200% auto;-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;animation:bday-shimmer 1.6s linear infinite;display:inline;font-weight:700;}
         @keyframes green-flow{0%{background-position:0% 50%}100%{background-position:200% 50%}}
+        @keyframes pink-flow{0%{background-position:0% 50%}100%{background-position:200% 50%}}
+        .bow-name{background:linear-gradient(90deg,#9d174d,#db2777,#f472b6,#fbcfe8,#f472b6,#db2777,#9d174d);background-size:200% auto;-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;animation:pink-flow 2s linear infinite;font-weight:700;display:inline;}
         .diamond-name{background:linear-gradient(90deg,#166534,#16A34A,#22C55E,#4ADE80,#16A34A,#166534);background-size:200% auto;-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;animation:green-flow 2s linear infinite;font-weight:700;display:inline;}
 
         /* Like button */
@@ -1407,6 +1485,11 @@ const handleRegister = async () => {
             <button className="v2-btn-primary" onClick={()=>setBadgePopup(null)} style={{ width:"100%", padding:13, fontSize:14 }}>เยี่ยมเลย! 🎉</button>
           </div>
         </div>
+      )}
+
+      {/* 1,000,000 kcal Milestone Popup */}
+      {showMillionPopup && (
+        <MillionPopup onClose={() => { setShowMillionPopup(false); lsSet('tvohh_million_seen', true); }} />
       )}
 
       {/* Diamond 777 Matrix Popup */}
