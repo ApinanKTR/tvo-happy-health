@@ -475,12 +475,13 @@ const SPECIAL_EVENTS = [
     id: "diamond_777_jul2026",
     icon: "🍀",
     name: "Miracle 7",
-    desc: "บันทึกกิจกรรม 7 ครั้ง แคลอรี่ ≥ 777 kcal ในเดือนกรกฎาคม 2026",
+    desc: "บันทึกกิจกรรม 7 ครั้ง แคลอรี่รวม ≥ 777 kcal ในเดือนกรกฎาคม 2026",
     check: (userLogs) => {
-      const qualifying = userLogs.filter(
-        l => l.date >= "2026-07-01" && l.date <= "2026-07-31" && Number(l.calories) >= 777
+      const julyLogs = userLogs.filter(
+        l => l.date >= "2026-07-01" && l.date <= "2026-07-31"
       );
-      return qualifying.length >= 7;
+      const totalCal = julyLogs.reduce((s, l) => s + (Number(l.calories) || 0), 0);
+      return julyLogs.length >= 7 && totalCal >= 777;
     },
   },
 ];
@@ -2244,18 +2245,19 @@ const handleRegister = async () => {
                           const userLogsForCheck = logs.filter(l=>l.user===profileUser);
                           const earned = isAdmin || e.check(userLogsForCheck);
                           // progress สำหรับ Miracle 7
-                          const miracle7Count = e.id === 'diamond_777_jul2026'
-                            ? userLogsForCheck.filter(l => l.date >= "2026-07-01" && l.date <= "2026-07-31" && Number(l.calories) >= 777).length
-                            : null;
+                          const miracle7Data = e.id === 'diamond_777_jul2026' ? (() => {
+                            const jl = userLogsForCheck.filter(l => l.date >= "2026-07-01" && l.date <= "2026-07-31");
+                            return { count: jl.length, cal: jl.reduce((s,l) => s + (Number(l.calories)||0), 0) };
+                          })() : null;
                           return (
                             <div key={e.id} className="v2-badge" style={{ opacity:earned?1:0.3, filter:earned?"none":"grayscale(1)", border:earned?"1.5px solid #C4B5FD":"1.5px solid #E5E7EB", background:earned?"#F5F3FF":"#F9FAFB" }} title={e.desc}>
                               <span style={{ fontSize:18 }}>{e.icon}</span>
                               <div>
                                 <div style={{ fontSize:11, fontWeight:700, color:earned?"#7C3AED":"#9CA3AF" }}>{e.name}</div>
                                 <div style={{ fontSize:9.5, color:"#9CA3AF" }}>{e.desc}</div>
-                                {miracle7Count !== null && !isAdmin && (
+                                {miracle7Data !== null && !isAdmin && (
                                   <div style={{ fontSize:9.5, fontWeight:700, color:earned?"#16A34A":"#9CA3AF", marginTop:2 }}>
-                                    {miracle7Count}/7 ครั้ง{earned?" ✓":""}
+                                    {miracle7Data.count}/7 ครั้ง • {miracle7Data.cal}/777 kcal{earned?" ✓":""}
                                   </div>
                                 )}
                               </div>
