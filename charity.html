@@ -55,7 +55,7 @@
 <div class="hdr">
   <h1>Calories Charity</h1>
   <p>ทุก 100 แคลที่เผาผลาญ = บริจาค 1 บาท สู่โรงพยาบาล</p>
-  <div class="hdr-badge">🎯 เป้าหมาย 10,000 บาท</div>
+  <div class="hdr-badge">🎯 เป้าหมาย 20,000 บาท</div>
 </div>
 
 <div id="loader" class="loader">⏳ กำลังโหลดข้อมูล...</div>
@@ -64,7 +64,7 @@
   <div class="stats">
     <div class="card"><div class="card-lbl">🔥 แคลรวม</div><div class="card-val c-amber" id="v-cal">0</div><div class="card-unit">แคลอรี</div></div>
     <div class="card"><div class="card-lbl">💚 ยอดบริจาค</div><div class="card-val c-green" id="v-baht">0</div><div class="card-unit">บาท</div></div>
-    <div class="card"><div class="card-lbl">🏁 คงเหลือ</div><div class="card-val c-purple" id="v-remain">10,000</div><div class="card-unit">บาท</div></div>
+    <div class="card"><div class="card-lbl">🏁 คงเหลือ</div><div class="card-val c-purple" id="v-remain">20,000</div><div class="card-unit">บาท</div></div>
   </div>
 
   <div class="prog-wrap">
@@ -79,7 +79,7 @@
       <div class="prog-ms" style="left:75%"><div class="prog-ms-dot"></div></div>
     </div>
     <div style="display:flex;justify-content:space-between;font-size:10px;color:#9CA3AF;margin-top:5px;padding:0 2px">
-      <span>🏭 โรงงาน TVO</span><span>🌉 5,000 ฿</span><span>🏥 โรงพยาบาล</span>
+      <span>🏭 โรงงาน TVO</span><span>🌉 10,000 ฿</span><span>🏥 โรงพยาบาล</span>
     </div>
   </div>
 
@@ -370,7 +370,7 @@
   </div>
   <p class="footnote">
     คำนวณจากแคลอรีทั้งหมดที่สมาชิกบันทึกใน TVO Happy Health 2026<br/>
-    100 แคล = 1 บาท &nbsp;|&nbsp; เป้าหมาย 1,000,000 แคล = 10,000 บาท
+    100 แคล = 1 บาท &nbsp;|&nbsp; เป้าหมาย 2,000,000 แคล = 20,000 บาท
   </p>
   <a href="index.html" style="display:inline-flex;align-items:center;gap:6px;margin-top:4px;margin-bottom:16px;padding:10px 22px;border-radius:99px;background:#F0FDF4;border:1px solid #D1FAE5;color:#16A34A;font-size:13px;font-weight:700;text-decoration:none;">
     ← กลับหน้าแอพ
@@ -381,7 +381,7 @@
 const SURL = 'https://lnqtszvqglqdsdvzncbe.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxucXRzenZxZ2xxZHNkdnpuY2JlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA0NTAyODcsImV4cCI6MjA5NjAyNjI4N30.vhsbuZYK_lfnZEWbmCPmskWUk64ya1jxllRbc2_078w';
 const sb = window.supabase.createClient(SURL, SKEY);
-const GOAL = 10000;
+const GOAL = 20000;
 
 async function loadData() {
   try {
@@ -460,9 +460,9 @@ function renderMilestones(pct) {
   layer.innerHTML = '';
   const NS = 'http://www.w3.org/2000/svg';
   const defs = [
-    {frac:0.25, label:'2,500 ฿', icon:'🌱', col:'#22c55e'},
-    {frac:0.50, label:'5,000 ฿', icon:'🌿', col:'#16A34A'},
-    {frac:0.75, label:'7,500 ฿', icon:'🌳', col:'#15803D'},
+    {frac:0.25, label:'5,000 ฿', icon:'🌱', col:'#22c55e'},
+    {frac:0.50, label:'10,000 ฿', icon:'🌿', col:'#16A34A'},
+    {frac:0.75, label:'15,000 ฿', icon:'🌳', col:'#15803D'},
   ];
   defs.forEach(m => {
     const pt = road.getPointAtLength(m.frac * total);

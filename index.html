@@ -388,22 +388,24 @@ const RUN_APPS = [
   { name: "Apple Health", icon: "🍎", color: "#FA2D55", url: "https://www.apple.com/ios/health/", hint: "Health App → Browse → Activity → Active Energy" },
 ];
 
+// calMin = MET_เบา × 50kg × 3.5 / 200 | calMax = MET_หนัก × 100kg × 3.5 / 200
+// calPerMin = ค่าอ้างอิงเฉลี่ย (ปรับตามช่วงกลาง calMin-calMax)
 const INIT_EXERCISES = [
-  { id: 1,  name: "วิ่ง",          icon: "🏃",  calPerMin: 10, calMin: 7,  calMax: 14, image: null },
-  { id: 2,  name: "ว่ายน้ำ",       icon: "🏊",  calPerMin: 8,  calMin: 6,  calMax: 12, image: null },
-  { id: 3,  name: "ปั่นจักรยาน",   icon: "🚴",  calPerMin: 7,  calMin: 5,  calMax: 10, image: null },
-  { id: 4,  name: "เดิน",           icon: "🚶",  calPerMin: 4,  calMin: 3,  calMax: 6,  image: null },
-  { id: 5,  name: "โยคะ",           icon: "🧘",  calPerMin: 3,  calMin: 2,  calMax: 5,  image: null },
-  { id: 6,  name: "ยกเวท",          icon: "🏋️", calPerMin: 6,  calMin: 4,  calMax: 9,  image: null },
-  { id: 7,  name: "HIIT",           icon: "⚡",  calPerMin: 12, calMin: 9,  calMax: 16, image: null },
-  { id: 8,  name: "กระโดดเชือก",   icon: "🪢",  calPerMin: 11, calMin: 8,  calMax: 14, image: null },
-  { id: 9,  name: "แบดมินตัน",     icon: "🏸",  calPerMin: 7,  calMin: 5,  calMax: 10, image: null },
-  { id: 10, name: "ฟุตบอล",         icon: "⚽",  calPerMin: 8,  calMin: 6,  calMax: 11, image: null },
-  { id: 11, name: "พายเรือ",        icon: "🚣",  calPerMin: 7,  calMin: 5,  calMax: 10, image: null },
-  { id: 12, name: "เต้น",            icon: "💃",  calPerMin: 6,  calMin: 4,  calMax: 9,  image: null },
-  { id: 13, name: "มวย",            icon: "🥊",  calPerMin: 10, calMin: 7,  calMax: 13, image: null },
-  { id: 14, name: "กอล์ฟ",          icon: "⛳",  calPerMin: 3,  calMin: 2,  calMax: 5,  image: null },
-  { id: 15, name: "อื่นๆ",          icon: "🤸",  calPerMin: 5,  calMin: 3,  calMax: 8,  image: null },
+  { id: 1,  name: "วิ่ง",          icon: "🏃",  calPerMin: 12, calMin: 6,  calMax: 19, image: null }, // MET 7–11
+  { id: 2,  name: "ว่ายน้ำ",       icon: "🏊",  calPerMin: 10, calMin: 5,  calMax: 18, image: null }, // MET 6–10
+  { id: 3,  name: "ปั่นจักรยาน",   icon: "🚴",  calPerMin: 10, calMin: 4,  calMax: 18, image: null }, // MET 4–10
+  { id: 4,  name: "เดิน",           icon: "🚶",  calPerMin: 5,  calMin: 3,  calMax: 9,  image: null }, // MET 3–5
+  { id: 5,  name: "โยคะ",           icon: "🧘",  calPerMin: 4,  calMin: 2,  calMax: 7,  image: null }, // MET 2–4
+  { id: 6,  name: "ยกเวท",          icon: "🏋️", calPerMin: 6,  calMin: 3,  calMax: 11, image: null }, // MET 3–6
+  { id: 7,  name: "HIIT",           icon: "⚡",  calPerMin: 14, calMin: 7,  calMax: 21, image: null }, // MET 8–12
+  { id: 8,  name: "กระโดดเชือก",   icon: "🪢",  calPerMin: 14, calMin: 8,  calMax: 21, image: null }, // MET 9–12
+  { id: 9,  name: "แบดมินตัน",     icon: "🏸",  calPerMin: 8,  calMin: 4,  calMax: 12, image: null }, // MET 4.5–7
+  { id: 10, name: "ฟุตบอล",         icon: "⚽",  calPerMin: 12, calMin: 6,  calMax: 18, image: null }, // MET 7–10
+  { id: 11, name: "พายเรือ",        icon: "🚣",  calPerMin: 12, calMin: 5,  calMax: 21, image: null }, // MET 6–12
+  { id: 12, name: "เต้น",            icon: "💃",  calPerMin: 8,  calMin: 3,  calMax: 14, image: null }, // MET 3–8
+  { id: 13, name: "มวย",            icon: "🥊",  calPerMin: 14, calMin: 7,  calMax: 23, image: null }, // MET 8–13
+  { id: 14, name: "กอล์ฟ",          icon: "⛳",  calPerMin: 5,  calMin: 2,  calMax: 9,  image: null }, // MET 2.5–5
+  { id: 15, name: "อื่นๆ",          icon: "🤸",  calPerMin: 6,  calMin: 3,  calMax: 11, image: null }, // MET 3–6.5
 ];
 
 const INIT_GROUPS = [
@@ -467,9 +469,9 @@ const SPECIAL_EVENTS = [
   {
     id: "million_cal",
     icon: "🎀",
-    name: "1M Calories",
-    desc: "แคลอรี่สะสมรวมทั้งองค์กรครบ 1,000,000 kcal",
-    check: () => lsGet('tvohh_million_reached', false),
+    name: "2M Calories",
+    desc: "แคลอรี่สะสมรวมทั้งองค์กรครบ 2,000,000 kcal",
+    check: () => lsGet('tvohh_2m_reached', false),
   },
   {
     id: "diamond_777_jul2026",
@@ -632,10 +634,10 @@ function MillionPopup({ onClose }) {
         <div style={{ fontSize:8, color:'#db2777', letterSpacing:4, fontFamily:'monospace', marginBottom:12, fontWeight:700 }}>✦ MILESTONE REACHED ✦</div>
         <div style={{ fontSize:72, marginBottom:8, animation:'float 3s ease-in-out infinite', display:'block' }}>🎀</div>
         <div style={{ marginBottom:6 }}>
-          <span className="bow-name" style={{ fontSize:26 }}>1,000,000</span>
+          <span className="bow-name" style={{ fontSize:26 }}>2,000,000</span>
         </div>
         <div style={{ fontSize:13, color:'#db2777', fontWeight:700, marginBottom:4 }}>แคลอรี่</div>
-        <div style={{ fontSize:11, color:'#9d174d', marginBottom:16 }}>แคลอรี่สะสมรวมขององค์กรครบ 1 ล้านแคลแล้ว! 🎉</div>
+        <div style={{ fontSize:11, color:'#9d174d', marginBottom:16 }}>แคลอรี่สะสมรวมขององค์กรครบ 2 ล้านแคลแล้ว! 🎉</div>
         <div style={{ background:'#fdf2f8', border:'1.5px solid #f9a8d4', borderRadius:14, padding:'10px 16px', marginBottom:18 }}>
           <div style={{ fontSize:11, color:'#9d174d', lineHeight:1.8 }}>
             TVO Happy Health · พวกเราทำได้แล้ว 🏆
@@ -863,14 +865,14 @@ function CalorieTracker() {
   }, []);
 
 
-  // ตรวจแคลอรี่สะสมรวมองค์กร 1,000,000 — แสดงครั้งเดียว
+  // ตรวจแคลอรี่สะสมรวมองค์กร 2,000,000 — แสดงครั้งเดียว
   useEffect(() => {
     if (spStatus !== "connected" || logs.length === 0) return;
-    if (lsGet('tvohh_million_seen', false)) return;
+    if (lsGet('tvohh_2m_seen', false)) return;
     const totalVerified = logs.filter(l => l.verified).reduce((s, l) => s + (Number(l.calories)||0), 0);
-    if (totalVerified >= 1000000) {
-      lsSet('tvohh_million_reached', true);
-      if (!lsGet('tvohh_million_seen', false)) {
+    if (totalVerified >= 2000000) {
+      lsSet('tvohh_2m_reached', true);
+      if (!lsGet('tvohh_2m_seen', false)) {
         setTimeout(() => setShowMillionPopup(true), 1500);
       }
     }
@@ -962,7 +964,7 @@ const handleAdd = async () => {
       finalPhotoUrl = uploadedUrl || null; // null ถ้า upload ล้มเหลว
     }
 
-    const calories = Math.min(9999, form.customCal || 0);
+    const calories = form.customCal || 0;
     const newLog = {
       id: String(Date.now()),
       spId: "",
@@ -1504,7 +1506,7 @@ const handleRegister = async () => {
 
       {/* 1,000,000 kcal Milestone Popup */}
       {showMillionPopup && (
-        <MillionPopup onClose={() => { setShowMillionPopup(false); lsSet('tvohh_million_seen', true); }} />
+        <MillionPopup onClose={() => { setShowMillionPopup(false); lsSet('tvohh_2m_seen', true); }} />
       )}
 
       {/* Diamond 777 Matrix Popup */}
@@ -1665,15 +1667,20 @@ const handleRegister = async () => {
               {[
                 ["กิจกรรม", form.exercise],
                 ["ระยะเวลา", `${form.duration} นาที`],
-                ["แคลอรี่ที่กรอก", `${form.customCal} kcal 🔥`],
                 ["ช่วงมาตรฐาน", calRange ? `${Math.round(calRange.min)}–${Math.round(calRange.max)} kcal` : "-"],
                 ["วันที่", form.date?new Date(form.date+"T00:00:00").toLocaleDateString("th-TH"):new Date().toLocaleDateString("th-TH")]
               ].map(([k,v])=>(
                 <div key={k} style={{ display:"flex", justifyContent:"space-between", marginBottom:8 }}>
                   <span style={{ color:"#6B7280" }}>{k}</span>
-                  <span style={{ fontWeight:700, color: k==="แคลอรี่ที่กรอก"?"#16A34A": k==="ช่วงมาตรฐาน"?"#0891B2":"#111827", fontSize: k==="แคลอรี่ที่กรอก"?15:13 }}>{v}</span>
+                  <span style={{ fontWeight:700, color: k==="ช่วงมาตรฐาน"?"#0891B2":"#111827", fontSize:13 }}>{v}</span>
                 </div>
               ))}
+              <div style={{ display:"flex", justifyContent:"space-between", marginBottom:8 }}>
+                <span style={{ color:"#6B7280" }}>แคลอรี่ที่บันทึก</span>
+                <span style={{ fontWeight:700, fontSize:15, color:"#16A34A" }}>
+                  {form.customCal} kcal 🔥
+                </span>
+              </div>
             </div>
             {anomaly&&(
               <div style={{ background:"#FEF9C3", border:"1.5px solid #FDE047", borderRadius:12, padding:"11px 14px", marginBottom:14, fontSize:12, color:"#713F12", lineHeight:1.6 }}>
@@ -1784,7 +1791,7 @@ const handleRegister = async () => {
         {/* ── STATS BAR v2 ── */}
         {(() => {
           const totalCal = verifiedLogs.reduce((s,l)=>s+l.calories,0);
-          const TARGET = 1000000;
+          const TARGET = 2000000;
           const pct = Math.min(100, (totalCal / TARGET) * 100);
           const calDisplay = totalCal.toLocaleString();
           return (
@@ -1794,7 +1801,7 @@ const handleRegister = async () => {
               <div className="v2-card" style={{ padding:"14px 8px", textAlign:"center", gridColumn:"1", cursor:"pointer" }}>
                 <div style={{ width:36, height:36, borderRadius:11, background:"linear-gradient(135deg,#16A34A,#22C55E)", margin:"0 auto 8px", display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, boxShadow:"0 4px 12px rgba(22,163,74,0.25)" }}>🔥</div>
                 <div style={{ fontFamily:"'Prompt'", fontSize:19, fontWeight:800, color:"#111827", lineHeight:1 }}>{calDisplay}</div>
-                <div style={{ fontSize:8.5, color:"#16A34A", fontWeight:700, marginTop:2 }}>{pct.toFixed(1)}% of 1M</div>
+                <div style={{ fontSize:8.5, color:"#16A34A", fontWeight:700, marginTop:2 }}>{pct.toFixed(1)}% of 2M</div>
                 <div style={{ background:"#F3F4F6", borderRadius:999, height:5, overflow:"hidden", margin:"5px 4px 0" }}>
                   <div style={{ height:"100%", borderRadius:999, background:"linear-gradient(90deg,#16A34A,#22C55E)", width:`${pct}%`, transition:"width 1s cubic-bezier(.25,.46,.45,.94)" }} />
                 </div>
@@ -2703,11 +2710,20 @@ const handleRegister = async () => {
                                       ):log.verified&&(
                                         <span title="ตรวจสอบโดย Admin แล้ว" style={{ fontSize:13, flexShrink:0 }}>✅</span>
                                       )}
-                                      {(isAdmin||log.user===authUser?.displayName)&&(<>
+                                      {isAdmin&&(<>
                                         <button onClick={()=>openEditLog(log)} style={{ background:"#EFF6FF", border:"1px solid #BFDBFE", borderRadius:7, width:26, height:26, cursor:"pointer", fontSize:12, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, color:"#2563EB" }}>✏️</button>
                                         <button onClick={()=>setDeleteConfirm({name:`${log.exercise} ${log.date}`,fn:async()=>{ await sbRemoveLog(log.id); setLogs(p=>p.filter(l=>l.id!==log.id)); setCalSelectedDate(null); setDeleteConfirm(null); }})}
                                           style={{ background:"#FEE2E2", border:"1px solid #FECACA", borderRadius:7, width:26, height:26, cursor:"pointer", fontSize:12, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>🗑️</button>
                                       </>)}
+                                      {!isAdmin&&log.user===authUser?.displayName&&(
+                                        log.verified ? (
+                                          <span title="Admin ตรวจสอบแล้ว ไม่สามารถแก้ไขได้" style={{ fontSize:15, cursor:"help", flexShrink:0 }}>🔒</span>
+                                        ) : (<>
+                                          <button onClick={()=>openEditLog(log)} style={{ background:"#EFF6FF", border:"1px solid #BFDBFE", borderRadius:7, width:26, height:26, cursor:"pointer", fontSize:12, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, color:"#2563EB" }}>✏️</button>
+                                          <button onClick={()=>setDeleteConfirm({name:`${log.exercise} ${log.date}`,fn:async()=>{ await sbRemoveLog(log.id); setLogs(p=>p.filter(l=>l.id!==log.id)); setCalSelectedDate(null); setDeleteConfirm(null); }})}
+                                            style={{ background:"#FEE2E2", border:"1px solid #FECACA", borderRadius:7, width:26, height:26, cursor:"pointer", fontSize:12, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>🗑️</button>
+                                        </>)
+                                      )}
                                       <button className={`v2-like ${liked?"v2-like-on":""}`} onClick={()=>handleLike(log.id)}>{liked?"❤️":"🤍"}</button>
                                       {log.likes>0&&<span onClick={()=>handleShowLikers(log.id)} style={{ fontSize:12, fontWeight:700, color:"#6B7280", cursor:"pointer" }}>{log.likes}</span>}
                                       {log.hasPhoto&&<div className="v2-pthumb" onClick={()=>sbFetchLogPhoto(log.id).then(p=>setZoomPhoto(p))} style={{ width:28, height:28, background:"#F3F4F6", borderRadius:7, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, cursor:"pointer" }}>📷</div>}
@@ -2954,6 +2970,7 @@ const handleRegister = async () => {
                   <div>❌ ไม่นับการเดินประจำวัน (Daily Walking)</div>
                   <div>❌ ไม่นับกิจกรรมที่ใช้เวลาน้อยกว่า 15 นาที</div>
                 </div>
+
               </div>
             </div>
 
