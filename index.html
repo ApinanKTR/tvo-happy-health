@@ -1019,6 +1019,7 @@ function CalorieTracker() {
   const calcCalories = (name, duration) => { const ex = exercises.find(e => e.name === name); return ex ? ex.calPerMin * duration : 0; };
   const calcCalRange = (name, duration) => { const ex = exercises.find(e => e.name === name); if(!ex) return null; return { min: (ex.calMin||ex.calPerMin*0.7)*duration, max: (ex.calMax||ex.calPerMin*1.5)*duration }; };
   const isCalAnomaly = (name, duration, cal) => { const r = calcCalRange(name, duration); if(!r) return false; return cal > r.max * 1.5; };
+  const isSystemCapped = (name, duration, cal) => { const r = calcCalRange(name, duration); if(!r) return false; return Number(cal) === Math.round(r.max); };
   const getGroupColor = (gName) => groups.find(g => g.name === gName)?.color || "#16A34A";
 
   const [showSaveConfirm, setShowSaveConfirm] = useState(false);
@@ -1039,7 +1040,9 @@ const handleAdd = async () => {
       finalPhotoUrl = uploadedUrl || null; // null ถ้า upload ล้มเหลว
     }
 
-    const calories = form.customCal || 0;
+    const calRangeForCap = calcCalRange(form.exercise, form.duration);
+    const capMax = calRangeForCap ? Math.round(calRangeForCap.max) : 9999;
+    const calories = Math.min(capMax, form.customCal || 0);
     const newLog = {
       id: String(Date.now()),
       spId: "",
@@ -1738,6 +1741,9 @@ const handleRegister = async () => {
         const calRange = calcCalRange(form.exercise, form.duration);
         const anomaly = calRange ? form.customCal > calRange.max * 1.5 : false;
         const overPct = calRange ? Math.round(((form.customCal - calRange.max) / calRange.max) * 100) : 0;
+        const capMax = calRange ? Math.round(calRange.max) : null;
+        const isCapped = capMax !== null && (form.customCal || 0) > capMax;
+        const savedCal = isCapped ? capMax : (form.customCal || 0);
         return (
         <div className="v2-ovl" onClick={()=>setShowSaveConfirm(false)}>
           <div className="v2-modal" onClick={e=>e.stopPropagation()}>
@@ -1759,12 +1765,22 @@ const handleRegister = async () => {
               ))}
               <div style={{ display:"flex", justifyContent:"space-between", marginBottom:8 }}>
                 <span style={{ color:"#6B7280" }}>แคลอรี่ที่บันทึก</span>
-                <span style={{ fontWeight:700, fontSize:15, color:"#16A34A" }}>
-                  {form.customCal} kcal 🔥
+                <span style={{ fontWeight:700, fontSize:15, color: isCapped?"#EC4899":"#16A34A" }}>
+                  {isCapped && (
+                    <span style={{ color:"#9CA3AF", textDecoration:"line-through", fontWeight:400, fontSize:12, marginRight:5 }}>{form.customCal}</span>
+                  )}
+                  {savedCal} kcal 🔥
                 </span>
               </div>
             </div>
-            {anomaly&&(
+            {isCapped&&(
+              <div style={{ background:"#FDF2F8", border:"1.5px solid #F9A8D4", borderRadius:12, padding:"11px 14px", marginBottom:14, fontSize:12, color:"#9D174D", lineHeight:1.7 }}>
+                🔄 <strong>ระบบปรับแคลอรี่อัตโนมัติ</strong><br/>
+                แคลอรี่ที่กรอก ({form.customCal} kcal) เกินค่าสูงสุดมาตรฐาน ({Math.round(calRange.max)} kcal)<br/>
+                ระบบจะบันทึก <strong>{savedCal} kcal</strong> แทน
+              </div>
+            )}
+            {!isCapped&&anomaly&&(
               <div style={{ background:"#FEF9C3", border:"1.5px solid #FDE047", borderRadius:12, padding:"11px 14px", marginBottom:14, fontSize:12, color:"#713F12", lineHeight:1.6 }}>
                 ⚠️ <strong>แคลอรี่สูงผิดปกติ</strong> — {form.customCal} kcal เกินค่าสูงสุดมาตรฐาน ({Math.round(calRange.max)} kcal) {overPct}%
               </div>
@@ -2024,7 +2040,7 @@ const handleRegister = async () => {
                           {ex?.image?<img src={ex.image} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} />:(ex?.icon||"🏃")}
                         </div>
                         <div style={{ fontFamily:"'Prompt'", fontWeight:800, fontSize:18, color, lineHeight:1 }}>
-                          {log.calories}{isCalAnomaly(log.exercise,log.duration,log.calories)&&<span style={{ fontSize:14, marginLeft:2 }} title="แคลสูงกว่ามาตรฐาน">👀</span>}
+                          {log.calories}{isSystemCapped(log.exercise,log.duration,log.calories)&&<span style={{ fontSize:13, marginLeft:2 }} title="ระบบปรับแคลอัตโนมัติ">⭐</span>}{!isSystemCapped(log.exercise,log.duration,log.calories)&&isCalAnomaly(log.exercise,log.duration,log.calories)&&<span style={{ fontSize:14, marginLeft:2 }} title="แคลสูงกว่ามาตรฐาน">👀</span>}
                         </div>
                         <div style={{ fontSize:9.5, color:"#9CA3AF", marginTop:2 }}>kcal</div>
                       </div>
@@ -2813,7 +2829,7 @@ const handleRegister = async () => {
                                   </div>
                                   <div style={{ flexShrink:0, textAlign:"right" }}>
                                     <div style={{ fontFamily:"'Prompt'", fontWeight:800, fontSize:16, color:lc }}>
-                                      {log.calories}{isCalAnomaly(log.exercise,log.duration,log.calories)&&<span style={{ fontSize:12, marginLeft:2 }}>👀</span>}
+                                      {log.calories}{isSystemCapped(log.exercise,log.duration,log.calories)&&<span style={{ fontSize:12, marginLeft:2 }} title="ระบบปรับแคลอัตโนมัติ">⭐</span>}{!isSystemCapped(log.exercise,log.duration,log.calories)&&isCalAnomaly(log.exercise,log.duration,log.calories)&&<span style={{ fontSize:12, marginLeft:2 }}>👀</span>}
                                     </div>
                                     <div style={{ fontSize:10, color:"#9CA3AF" }}>kcal</div>
                                   </div>
@@ -3051,6 +3067,23 @@ const handleRegister = async () => {
                 <div style={{ marginTop:8, paddingLeft:12, borderLeft:"3px solid #FCA5A5", color:"#DC2626" }}>
                   <div>❌ ไม่นับการเดินประจำวัน (Daily Walking)</div>
                   <div>❌ ไม่นับกิจกรรมที่ใช้เวลาน้อยกว่า 15 นาที</div>
+                </div>
+
+                {/* Cap rule */}
+                <div style={{ marginTop:14, background:"#FDF2F8", border:"1.5px solid #F9A8D4", borderRadius:12, padding:"12px 14px" }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:6 }}>
+                    <span style={{ fontSize:15 }}>⭐</span>
+                    <span style={{ fontFamily:"'Prompt'", fontWeight:700, fontSize:13, color:"#9D174D" }}>เกณฑ์การปรับแคลอรี่อัตโนมัติ</span>
+                  </div>
+                  <div style={{ fontSize:12, color:"#9D174D", lineHeight:1.9 }}>
+                    <div>🔄 หากแคลอรี่ที่กรอกเกินค่าสูงสุดมาตรฐานของกิจกรรมนั้น</div>
+                    <div style={{ paddingLeft:18 }}>ระบบจะปรับยอดให้เหลือเพียง <strong>ค่าสูงสุด (calMax)</strong> โดยอัตโนมัติ</div>
+                    <div style={{ marginTop:6, paddingLeft:12, borderLeft:"2px solid #F9A8D4" }}>
+                      <div style={{ color:"#6B7280", fontStyle:"italic" }}>ตัวอย่าง: โยคะ 63 นาที ช่วงมาตรฐาน 126–441 kcal</div>
+                      <div style={{ color:"#6B7280", fontStyle:"italic" }}>หากกรอก 615 kcal → ระบบบันทึกเป็น <strong style={{ color:"#EC4899" }}>441 kcal ⭐</strong></div>
+                    </div>
+                    <div style={{ marginTop:6 }}>📌 รายการที่ถูกปรับจะแสดงสัญลักษณ์ <strong>⭐</strong> ต่อท้ายตัวเลขแคลในบัตรกิจกรรม</div>
+                  </div>
                 </div>
 
               </div>
