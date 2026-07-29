@@ -1993,7 +1993,7 @@ const handleRegister = async () => {
                         <div style={{ color:"#6B7280", fontSize:12 }}>{log.exercise} · {log.duration} นาที · {log.date}{(()=>{ const r=calcCalRange(log.exercise,log.duration); return r?<span style={{ color:"#C4C4C4", marginLeft:4 }}>({r.min}–{r.max} kcal)</span>:null; })()}</div>
                         {log.note&&<div style={{ color:"#9CA3AF", fontSize:11, marginTop:3, fontStyle:"italic" }}>"{log.note}"</div>}
                         {/* admin comment — เห็น owner + admin */}
-                        {!log.verified && log.adminComment && !isAdmin && log.user===authUser?.displayName && (
+                        {!log.verified && log.adminComment && !isAdmin && log.empId===authUser?.empId && (
                           <div style={{ marginTop:5, background:"#FEF9C3", border:"1px solid #FDE047", borderRadius:10, padding:"6px 10px", display:"flex", alignItems:"flex-start", gap:6 }}>
                             <span style={{ fontSize:13, flexShrink:0 }}>💬</span>
                             <span style={{ fontSize:11, color:"#92400E", lineHeight:1.6 }}><strong>Admin:</strong> {log.adminComment}</span>
@@ -2025,6 +2025,20 @@ const handleRegister = async () => {
                             </button>
                           ):log.verified&&(
                             <span title="ตรวจสอบโดย Admin แล้ว" style={{ fontSize:14, flexShrink:0 }}>✅</span>
+                          )}
+                          {isAdmin&&(<>
+                            <button onClick={()=>openEditLog(log)} style={{ background:"#EFF6FF", border:"1px solid #BFDBFE", borderRadius:8, width:28, height:28, cursor:"pointer", fontSize:13, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, color:"#2563EB" }}>✏️</button>
+                            <button onClick={()=>setDeleteConfirm({name:`${log.exercise} ${log.date}`,fn:async()=>{ await sbRemoveLog(log.id); setLogs(p=>p.filter(l=>l.id!==log.id)); setDeleteConfirm(null); }})}
+                              style={{ background:"#FEE2E2", border:"1px solid #FECACA", borderRadius:8, width:28, height:28, cursor:"pointer", fontSize:13, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>🗑️</button>
+                          </>)}
+                          {!isAdmin&&log.empId===authUser?.empId&&(
+                            log.verified ? (
+                              <span title="Admin ตรวจสอบแล้ว ไม่สามารถแก้ไขได้" style={{ fontSize:15, cursor:"help", flexShrink:0 }}>🔒</span>
+                            ) : (<>
+                              <button onClick={()=>openEditLog(log)} style={{ background:"#EFF6FF", border:"1px solid #BFDBFE", borderRadius:8, width:28, height:28, cursor:"pointer", fontSize:13, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, color:"#2563EB" }}>✏️</button>
+                              <button onClick={()=>setDeleteConfirm({name:`${log.exercise} ${log.date}`,fn:async()=>{ await sbRemoveLog(log.id); setLogs(p=>p.filter(l=>l.id!==log.id)); setDeleteConfirm(null); }})}
+                                style={{ background:"#FEE2E2", border:"1px solid #FECACA", borderRadius:8, width:28, height:28, cursor:"pointer", fontSize:13, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>🗑️</button>
+                            </>)
                           )}
                           <button className={`v2-like ${liked?"v2-like-on":""}`} onClick={()=>handleLike(log.id)}>
                             {liked?"❤️":"🤍"}
@@ -2789,7 +2803,7 @@ const handleRegister = async () => {
                                   <div style={{ flex:1, minWidth:0 }}>
                                     <div style={{ fontWeight:700, fontSize:13, color:"#111827" }}>{log.exercise}</div>
                                     <div style={{ fontSize:11, color:"#9CA3AF" }}>{log.duration} นาที{(()=>{ const r=calcCalRange(log.exercise,log.duration); return r?<span style={{ color:"#C4C4C4", marginLeft:4 }}>({r.min}–{r.max} kcal)</span>:null; })()}</div>
-                                    {!log.verified && log.adminComment && (log.user===authUser?.displayName || isAdmin) && (
+                                    {!log.verified && log.adminComment && (log.empId===authUser?.empId || isAdmin) && (
                                       <div style={{ marginTop:4, background:"#FEF9C3", border:"1px solid #FDE047", borderRadius:8, padding:"5px 8px", display:"flex", alignItems:"flex-start", gap:5 }}>
                                         <span style={{ fontSize:12, flexShrink:0 }}>💬</span>
                                         <span style={{ fontSize:11, color:"#92400E", lineHeight:1.5 }}>
@@ -2813,7 +2827,7 @@ const handleRegister = async () => {
                                         <button onClick={()=>setDeleteConfirm({name:`${log.exercise} ${log.date}`,fn:async()=>{ await sbRemoveLog(log.id); setLogs(p=>p.filter(l=>l.id!==log.id)); setCalSelectedDate(null); setDeleteConfirm(null); }})}
                                           style={{ background:"#FEE2E2", border:"1px solid #FECACA", borderRadius:7, width:26, height:26, cursor:"pointer", fontSize:12, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>🗑️</button>
                                       </>)}
-                                      {!isAdmin&&log.user===authUser?.displayName&&(
+                                      {!isAdmin&&log.empId===authUser?.empId&&(
                                         log.verified ? (
                                           <span title="Admin ตรวจสอบแล้ว ไม่สามารถแก้ไขได้" style={{ fontSize:15, cursor:"help", flexShrink:0 }}>🔒</span>
                                         ) : (<>
