@@ -2031,15 +2031,6 @@ const handleRegister = async () => {
                             <button onClick={()=>setDeleteConfirm({name:`${log.exercise} ${log.date}`,fn:async()=>{ await sbRemoveLog(log.id); setLogs(p=>p.filter(l=>l.id!==log.id)); setDeleteConfirm(null); }})}
                               style={{ background:"#FEE2E2", border:"1px solid #FECACA", borderRadius:8, width:28, height:28, cursor:"pointer", fontSize:13, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>🗑️</button>
                           </>)}
-                          {!isAdmin&&log.empId===authUser?.empId&&(
-                            log.verified ? (
-                              <span title="Admin ตรวจสอบแล้ว ไม่สามารถแก้ไขได้" style={{ fontSize:15, cursor:"help", flexShrink:0 }}>🔒</span>
-                            ) : (<>
-                              <button onClick={()=>openEditLog(log)} style={{ background:"#EFF6FF", border:"1px solid #BFDBFE", borderRadius:8, width:28, height:28, cursor:"pointer", fontSize:13, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, color:"#2563EB" }}>✏️</button>
-                              <button onClick={()=>setDeleteConfirm({name:`${log.exercise} ${log.date}`,fn:async()=>{ await sbRemoveLog(log.id); setLogs(p=>p.filter(l=>l.id!==log.id)); setDeleteConfirm(null); }})}
-                                style={{ background:"#FEE2E2", border:"1px solid #FECACA", borderRadius:8, width:28, height:28, cursor:"pointer", fontSize:13, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>🗑️</button>
-                            </>)
-                          )}
                           <button className={`v2-like ${liked?"v2-like-on":""}`} onClick={()=>handleLike(log.id)}>
                             {liked?"❤️":"🤍"}
                           </button>
