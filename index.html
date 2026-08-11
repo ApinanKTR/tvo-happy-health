@@ -481,6 +481,26 @@ const SPECIAL_EVENTS = [
     check: () => lsGet('tvohh_2m_reached', false),
   },
   {
+    id: "love_mom_aug2026",
+    icon: "💐",
+    name: "Love Mom",
+    desc: "ออกกำลังกายรวม ≥ 15 นาที และมีเพื่อนในกลุ่ม ≥ 12 คน ส่ง log วันที่ 12 ส.ค. 2026",
+    check: (userLogs, allLogs, authUser) => {
+      const myTotal = userLogs
+        .filter(l => l.date === "2026-08-12")
+        .reduce((s, l) => s + (Number(l.duration) || 0), 0);
+      if (myTotal < 15) return false;
+      if (!allLogs || !authUser) return false;
+      const myGroup = authUser.group;
+      const groupMembers = new Set(
+        allLogs
+          .filter(l => l.date === "2026-08-12" && l.group === myGroup)
+          .map(l => l.empId || l.user)
+      );
+      return groupMembers.size >= 12;
+    },
+  },
+  {
     id: "diamond_777_jul2026",
     icon: "🍀",
     name: "Miracle 7",
@@ -500,19 +520,19 @@ const SPECIAL_ICON_SET = new Set(SPECIAL_EVENTS.map(e => e.icon));
 // render ชื่อ: ถ้า icon เป็น special event → สีรุ้งวิ่งไปมา
 const WiggleName = ({ name, icon }) => {
   if (!icon || !SPECIAL_ICON_SET.has(icon)) return React.createElement(React.Fragment, null, name);
-  const classMap = { "🌈": "pride-name", "🎂": "birthday-name", "🍀": "diamond-name", "🎀": "bow-name", "❤️": "heart-name" };
+  const classMap = { "🌈": "pride-name", "🎂": "birthday-name", "🍀": "diamond-name", "🎀": "bow-name", "❤️": "heart-name", "💐": "love-mom-name" };
   const cls = classMap[icon] || "pride-name";
   return React.createElement('span', { className: cls }, name);
 };
 
 // คืน array ของ special icons ที่ user ปลดล็อกแล้ว
-const getSpecialIcons = (userLogs) =>
-  SPECIAL_EVENTS.filter(e => e.check(userLogs));
+const getSpecialIcons = (userLogs, allLogs, authUser) =>
+  SPECIAL_EVENTS.filter(e => e.check(userLogs, allLogs, authUser));
 
 // icons ทั้งหมดที่ user ปลดล็อก (badge + special)
-const getAllUnlockedIcons = (totalCal, sessions, userLogs, isAdmin = false) => {
+const getAllUnlockedIcons = (totalCal, sessions, userLogs, isAdmin = false, allLogs = [], authUser = null) => {
   const badges = getBadges(totalCal, sessions, userLogs);
-  const specials = isAdmin ? SPECIAL_EVENTS : getSpecialIcons(userLogs);
+  const specials = isAdmin ? SPECIAL_EVENTS : getSpecialIcons(userLogs, allLogs, authUser);
   return [
     ...badges.map(b => ({ icon: b.icon, name: b.name, type: "badge" })),
     ...specials.map(e => ({ icon: e.icon, name: e.name, type: "special" })),
@@ -962,7 +982,7 @@ function CalorieTracker() {
     const diamondEvent = SPECIAL_EVENTS.find(e => e.id === 'diamond_777_jul2026');
     if (!diamondEvent) return;
     const userLogs = logs.filter(l => l.user === authUser.displayName);
-    if (diamondEvent.check(userLogs)) {
+    if (diamondEvent.check(userLogs, logs, authUser)) {
       setTimeout(() => setShowDiamondPopup(true), 1800);
     }
   }, [spStatus, logs.length]);
@@ -1026,6 +1046,8 @@ function CalorieTracker() {
 
 const handleAdd = async () => {
     if (!form.user.trim()) return;
+    const selectedDate = form.date || thaiDate();
+    if (selectedDate < minDate()) { toast("ไม่สามารถบันทึกย้อนหลังเกิน 7 วัน ❌"); setShowSaveConfirm(false); return; }
     const todayLogsCount = logs.filter(l => l.user === form.user && l.date === thaiDate()).length;
     if (todayLogsCount >= DAILY_LIMIT) { toast("ครบ " + DAILY_LIMIT + " ครั้งแล้ววันนี้ 🔒"); setShowSaveConfirm(false); return; }
 
@@ -1068,8 +1090,8 @@ const handleAdd = async () => {
     // ตรวจ Diamond 777 unlock
     const diamondEvent = SPECIAL_EVENTS.find(e => e.id === 'diamond_777_jul2026');
     if (diamondEvent) {
-      const wasBefore = diamondEvent.check(userLogsNow);
-      const isAfter   = diamondEvent.check(userLogsAfter);
+      const wasBefore = diamondEvent.check(userLogsNow, logs, authUser);
+      const isAfter   = diamondEvent.check(userLogsAfter, logs, authUser);
       if (!wasBefore && isAfter && !lsGet('tvohh_diamond_seen_' + (authUser?.empId || ''), false)) {
         setTimeout(() => setShowDiamondPopup(true), 1200);
       }
@@ -1496,6 +1518,8 @@ const handleRegister = async () => {
         .diamond-name{background:linear-gradient(90deg,#166534,#16A34A,#22C55E,#4ADE80,#16A34A,#166534);background-size:200% auto;-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;animation:green-flow 2s linear infinite;font-weight:700;display:inline;}
         @keyframes heart-glow{0%{background-position:0% 50%}100%{background-position:200% 50%}}
         .heart-name{background:linear-gradient(90deg,#be123c,#e11d48,#fb7185,#fecdd3,#fb7185,#e11d48,#be123c);background-size:200% auto;-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;animation:heart-glow 2s linear infinite;font-weight:700;display:inline;}
+        @keyframes blue-flow{0%{background-position:0% 50%}100%{background-position:200% 50%}}
+        .love-mom-name{background:linear-gradient(90deg,#1e3a8a,#2563eb,#60a5fa,#bfdbfe,#60a5fa,#2563eb,#1e3a8a);background-size:200% auto;-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;animation:blue-flow 2s linear infinite;font-weight:700;display:inline;}
 
         /* Like button */
         .v2-like{background:none;border:1.5px solid #E5E7EB;border-radius:999px;cursor:pointer;display:inline-flex;align-items:center;gap:4px;padding:4px 12px;font-size:12px;color:#6B7280;transition:all .2s;font-family:'Sarabun'}
@@ -2353,11 +2377,18 @@ const handleRegister = async () => {
                       <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
                         {SPECIAL_EVENTS.map(e=>{
                           const userLogsForCheck = logs.filter(l=>l.user===profileUser);
-                          const earned = isAdmin || e.check(userLogsForCheck);
+                          const earned = isAdmin || e.check(userLogsForCheck, logs, authUser);
                           // progress สำหรับ Miracle 7
                           const miracle7Data = e.id === 'diamond_777_jul2026' ? (() => {
                             const jl = userLogsForCheck.filter(l => l.date >= "2026-07-01" && l.date <= "2026-07-31");
                             return { count: jl.length, cal: jl.reduce((s,l) => s + (Number(l.calories)||0), 0) };
+                          })() : null;
+                          // progress สำหรับ Love Mom
+                          const loveMomData = e.id === 'love_mom_aug2026' ? (() => {
+                            const myMin = userLogsForCheck.filter(l => l.date === "2026-08-12").reduce((s,l) => s + (Number(l.duration)||0), 0);
+                            const myGroup = authUser?.group;
+                            const groupCount = myGroup ? new Set(logs.filter(l => l.date === "2026-08-12" && l.group === myGroup).map(l => l.empId || l.user)).size : 0;
+                            return { myMin, groupCount };
                           })() : null;
                           return (
                             <div key={e.id} className="v2-badge" style={{ opacity:earned?1:0.3, filter:earned?"none":"grayscale(1)", border:earned?"1.5px solid #C4B5FD":"1.5px solid #E5E7EB", background:earned?"#F5F3FF":"#F9FAFB" }} title={e.desc}>
@@ -2368,6 +2399,11 @@ const handleRegister = async () => {
                                 {miracle7Data !== null && !isAdmin && (
                                   <div style={{ fontSize:9.5, fontWeight:700, color:earned?"#16A34A":"#9CA3AF", marginTop:2 }}>
                                     {miracle7Data.count}/7 ครั้ง • {miracle7Data.cal}/777 kcal{earned?" ✓":""}
+                                  </div>
+                                )}
+                                {loveMomData !== null && !isAdmin && (
+                                  <div style={{ fontSize:9.5, fontWeight:700, color:earned?"#2563EB":"#9CA3AF", marginTop:2 }}>
+                                    {loveMomData.myMin}/15 นาที • {loveMomData.groupCount}/12 คน{earned?" ✓":""}
                                   </div>
                                 )}
                               </div>
