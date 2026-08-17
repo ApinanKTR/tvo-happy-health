@@ -55,7 +55,7 @@
 <div class="hdr">
   <h1>Calories Charity</h1>
   <p>ทุก 100 แคลที่เผาผลาญ = บริจาค 1 บาท สู่โรงพยาบาล</p>
-  <div class="hdr-badge">🎯 เป้าหมาย 20,000 บาท</div>
+  <div class="hdr-badge">🎯 เป้าหมาย 2,000,000 แคลอรี</div>
 </div>
 
 <div id="loader" class="loader">⏳ กำลังโหลดข้อมูล...</div>
@@ -64,7 +64,7 @@
   <div class="stats">
     <div class="card"><div class="card-lbl">🔥 แคลรวม</div><div class="card-val c-amber" id="v-cal">0</div><div class="card-unit">แคลอรี</div></div>
     <div class="card"><div class="card-lbl">💚 ยอดบริจาค</div><div class="card-val c-green" id="v-baht">0</div><div class="card-unit">บาท</div></div>
-    <div class="card"><div class="card-lbl">🏁 คงเหลือ</div><div class="card-val c-purple" id="v-remain">20,000</div><div class="card-unit">บาท</div></div>
+    <div class="card"><div class="card-lbl">🏁 คงเหลือ</div><div class="card-val c-purple" id="v-remain">2,000,000</div><div class="card-unit">แคลอรี</div></div>
   </div>
 
   <div class="prog-wrap">
@@ -337,9 +337,9 @@
       <line x1="78"  y1="517" x2="78"  y2="527" stroke="#6B7280" stroke-width="2"/>
       <line x1="822" y1="517" x2="822" y2="527" stroke="#6B7280" stroke-width="2"/>
       <line x1="450" y1="518" x2="450" y2="526" stroke="#6B7280" stroke-width="1.5"/>
-      <text x="78"  y="537" text-anchor="middle" font-size="9" fill="#6B7280" font-family="system-ui,sans-serif">0 ฿</text>
-      <text x="450" y="537" text-anchor="middle" font-size="9" fill="#6B7280" font-family="system-ui,sans-serif">5,000 ฿</text>
-      <text x="822" y="537" text-anchor="middle" font-size="9" fill="#6B7280" font-family="system-ui,sans-serif">10,000 ฿</text>
+      <text x="78"  y="537" text-anchor="middle" font-size="9" fill="#6B7280" font-family="system-ui,sans-serif">0 แคล</text>
+      <text x="450" y="537" text-anchor="middle" font-size="9" fill="#6B7280" font-family="system-ui,sans-serif">1,000,000 แคล</text>
+      <text x="822" y="537" text-anchor="middle" font-size="9" fill="#6B7280" font-family="system-ui,sans-serif">2,000,000 แคล</text>
     </g>
     <circle id="ruler-dot" cx="78" cy="522" r="6" fill="#16A34A" opacity=".9"/>
 
@@ -381,7 +381,7 @@
 const SURL = 'https://lnqtszvqglqdsdvzncbe.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxucXRzenZxZ2xxZHNkdnpuY2JlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA0NTAyODcsImV4cCI6MjA5NjAyNjI4N30.vhsbuZYK_lfnZEWbmCPmskWUk64ya1jxllRbc2_078w';
 const sb = window.supabase.createClient(SURL, SKEY);
-const GOAL = 20000;
+const GOAL_CAL = 2000000;
 
 async function loadData() {
   try {
@@ -396,8 +396,8 @@ async function loadData() {
       from += BATCH;
     }
     const totalCal = allData.reduce((s,r) => s + (Number(r.calories)||0), 0);
-    const baht = Math.floor(totalCal / 100);
-    render(totalCal, baht, Math.min(100, (baht / GOAL) * 100));
+    const baht = Math.min(20000, Math.floor(totalCal / 100));
+    render(totalCal, baht, Math.min(100, (totalCal / GOAL_CAL) * 100));
   } catch(e) {
     document.getElementById('loader').innerHTML =
       '❌ โหลดไม่สำเร็จ — <button onclick="loadData()" style="border:none;background:none;color:#16A34A;cursor:pointer;font-weight:700">ลองใหม่</button>';
@@ -420,7 +420,7 @@ function render(totalCal, baht, pct) {
   document.getElementById('main').style.display = 'block';
   count('v-cal',    totalCal,              1800, v => v.toLocaleString('th-TH'));
   count('v-baht',   baht,                  1800, v => v.toLocaleString('th-TH'));
-  count('v-remain', Math.max(0,GOAL-baht), 1800, v => v.toLocaleString('th-TH'));
+  count('v-remain', Math.max(0,GOAL_CAL-totalCal), 1800, v => v.toLocaleString('th-TH'));
   setTimeout(() => {
     document.getElementById('prog').style.width = pct.toFixed(2) + '%';
     document.getElementById('v-pct').textContent = pct.toFixed(1) + '%';
@@ -460,9 +460,9 @@ function renderMilestones(pct) {
   layer.innerHTML = '';
   const NS = 'http://www.w3.org/2000/svg';
   const defs = [
-    {frac:0.25, label:'5,000 ฿', icon:'🌱', col:'#22c55e'},
-    {frac:0.50, label:'10,000 ฿', icon:'🌿', col:'#16A34A'},
-    {frac:0.75, label:'15,000 ฿', icon:'🌳', col:'#15803D'},
+    {frac:0.25, label:'500K แคล', icon:'🌱', col:'#22c55e'},
+    {frac:0.50, label:'1M แคล',   icon:'🌿', col:'#16A34A'},
+    {frac:0.75, label:'1.5M แคล', icon:'🌳', col:'#15803D'},
   ];
   defs.forEach(m => {
     const pt = road.getPointAtLength(m.frac * total);
