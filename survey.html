@@ -86,6 +86,9 @@
     .plist-size{background:#DCFCE7;color:#15803d;font-weight:800;font-size:12px;padding:3px 9px;border-radius:99px;flex-shrink:0}
     .plist-cal{font-size:11px;color:#16A34A;font-weight:700;flex-shrink:0;white-space:nowrap;min-width:70px;text-align:right}
     .plist-date{font-size:11px;color:#9CA3AF;flex-shrink:0;white-space:nowrap;min-width:60px;text-align:right}
+    .plist-recv{flex-shrink:0;min-width:52px;text-align:center;display:flex;align-items:center;justify-content:center;gap:4px}
+    .plist-recv input[type=checkbox]{width:18px;height:18px;accent-color:#16A34A;cursor:pointer;margin:0}
+    .plist-recv input[type=checkbox]:disabled{cursor:default;opacity:.6}
 
     .toast{position:fixed;top:24px;left:50%;transform:translateX(-50%);background:#16A34A;color:#fff;padding:12px 22px;border-radius:99px;font-size:14px;font-weight:700;font-family:'Prompt',sans-serif;box-shadow:0 4px 20px rgba(22,163,74,.4);z-index:999;opacity:0;transition:opacity .3s;pointer-events:none}
     .toast.show{opacity:1}
@@ -297,8 +300,9 @@ async function saveSize() {
 async function loadSummary() {
   try {
     // fetch all 3 tables in parallel
+    const isAdmin = authUser?.role === 'admin';
     const [surveyRes, profileRes, calRes] = await Promise.all([
-      sb.from('shirt_survey').select('display_name,employee_id,size,updated_at'),
+      sb.from('shirt_survey').select('display_name,employee_id,size,updated_at,received'),
       sb.from('user_profiles').select('employee_id,display_name').limit(5000),
       (async () => {
         // pagination เพื่อให้ได้ครบทุก record
@@ -370,17 +374,36 @@ async function loadSummary() {
       const cal    = calMap[currentName] || 0;
       const calStr = cal > 0 ? cal.toLocaleString() + ' kcal' : '-';
       const elite  = cal >= 5000;
+      const recv = Number(r.received) === 1;
+      const rawName = (r.display_name || '').replace(/'/g, "\\'");
       return `<div class="plist-row">
         <div class="plist-num">${i+1}</div>
         <div class="plist-name${isMe ? ' me' : ''}" style="${elite ? 'color:#D97706;font-weight:800' : ''}">${currentName}${isMe ? ' (คุณ)' : ''}</div>
         <div class="plist-size">${r.size}</div>
         <div class="plist-cal" style="${elite ? 'color:#D97706;font-weight:800' : ''}">${calStr}</div>
         <div class="plist-date">${dateStr}</div>
+        <div class="plist-recv">
+          <input type="checkbox" ${recv ? 'checked' : ''} ${isAdmin ? `onchange="updateReceived('${rawName}',this.checked?1:0)"` : 'disabled'}
+            title="${recv ? 'รับเสื้อแล้ว' : 'ยังไม่รับ'}" style="cursor:${isAdmin ? 'pointer' : 'default'}"/>
+        </div>
       </div>`;
     }).join('');
 
   } catch(e) {
     document.getElementById('summary-card').innerHTML = '<div style="color:#DC2626;font-size:13px;text-align:center">โหลดไม่ได้</div>';
+  }
+}
+
+/* ── Update received ──────────────────────────────────── */
+async function updateReceived(displayName, val) {
+  try {
+    const { error } = await sb.from('shirt_survey')
+      .update({ received: val })
+      .eq('display_name', displayName);
+    if (error) throw error;
+    showToast(val ? '✅ บันทึก: รับเสื้อแล้ว' : '✅ บันทึก: ยังไม่รับ');
+  } catch(e) {
+    showToast('❌ บันทึกไม่สำเร็จ: ' + e.message);
   }
 }
 
