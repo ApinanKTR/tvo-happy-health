@@ -761,6 +761,24 @@ const drawCertificate = async ({ theme = 'green', name, icon, group, avatar, log
   const W = 1080, H = 1350;
   const c = document.createElement('canvas'); c.width = W; c.height = H;
   const ctx = c.getContext('2d');
+  // จัดกึ่งกลาง/ชิดขวาเอง (วัดความกว้างแล้ววาดชิดซ้าย) — แก้ปัญหาข้อความเยื้องบนมือถือ (iOS/Android)
+  if ('direction' in ctx) ctx.direction = 'ltr';
+  const _fillText = ctx.fillText.bind(ctx);
+  ctx.fillText = (t, x, y) => {
+    t = String(t); const a = ctx.textAlign;
+    if (a === 'center' || a === 'right' || a === 'end') {
+      const w = ctx.measureText(t).width;
+      ctx.textAlign = 'left'; _fillText(t, a === 'center' ? x - w / 2 : x - w, y); ctx.textAlign = a;
+    } else _fillText(t, x, y);
+  };
+  // ข้อความเว้นระยะตัวอักษร (ไม่ใช้ ctx.letterSpacing ที่บางเบราว์เซอร์มือถือทำงานเพี้ยน)
+  const spacedText = (t, x, y, sp) => {
+    const chars = [...t], ws = chars.map(ch => ctx.measureText(ch).width);
+    const total = ws.reduce((a, b) => a + b, 0) + sp * (chars.length - 1);
+    const a = ctx.textAlign; ctx.textAlign = 'left';
+    let cx0 = x - total / 2; chars.forEach((ch, i) => { _fillText(ch, cx0, y); cx0 += ws[i] + sp; });
+    ctx.textAlign = a;
+  };
   try { await Promise.all(['900 60px Prompt', '700 30px Prompt', '400 26px Sarabun', '600 26px Sarabun'].map(f => document.fonts.load(f))); } catch (_e) {}
   const [avImg, logoImg] = await Promise.all([certLoadImg(avatar), certLoadImg(CERT_LOGO)]);
   const P = "'Prompt','Sarabun',sans-serif", S = "'Sarabun','Prompt',sans-serif";
@@ -879,9 +897,7 @@ const drawCertificate = async ({ theme = 'green', name, icon, group, avatar, log
     drawMedal(px + 118, py + 112, '#FDE68A', '#F59E0B', '#B45309', GREEN,
       'Overall Rank', `#${rank}`, totalUsers ? `จาก ${totalUsers} คน` : '');
   }
-  if ('letterSpacing' in ctx) ctx.letterSpacing = '6px';
-  ctx.fillStyle = GOLD; ctx.font = `700 22px ${P}`; ctx.fillText('CERTIFICATE OF ACHIEVEMENT', cx, 276);
-  if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
+  ctx.fillStyle = GOLD; ctx.font = `700 22px ${P}`; spacedText('CERTIFICATE OF ACHIEVEMENT', cx, 276, 6);
   ctx.fillStyle = DARK; ctx.font = `700 40px ${P}`; ctx.fillText('ใบสรุปผลการออกกำลังกาย', cx, 322);
   ctx.fillStyle = '#6B7280'; ctx.font = `400 22px ${S}`; ctx.fillText('TVO Calories Challenge · TVO Happy Health 2026', cx, 354);
 
