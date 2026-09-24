@@ -996,41 +996,54 @@ const drawCertificate = async ({ theme = 'green', name, icon, group, avatar, log
 };
 
 function CertificateCard(props) {
-  const [url, setUrl] = useState(null);
+  const [img, setImg] = useState(null);      // data URL (ใช้ได้กับทุกเบราว์เซอร์มือถือ รวม Samsung Internet)
   const [blob, setBlob] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const [viewer, setViewer] = useState(false); // หน้าจอดูรูปเต็มจอ สำหรับกดค้างบันทึก
   const [theme, setTheme] = useState(() => lsGet('tvohh_cert_theme', 'green'));
-  const fname = `TVO-Certificate-${(props.name || 'me').replace(/\s+/g, '_')}-${thaiDate()}.png`;
+  // ชื่อไฟล์ต้องเป็นภาษาอังกฤษ/ตัวเลขเท่านั้น — Chrome ตัดชื่อภาษาไทยทิ้งแล้วบันทึกเป็น "download" (ไม่มี .jpg)
+  const fname = `TVO-Certificate-${String(props.empId || '').replace(/[^A-Za-z0-9_-]/g, '') || 'me'}-${thaiDate()}.jpg`;
+  const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(ua);
+  const isInApp = /Line\/|FBAN|FBAV|Instagram|MicroMessenger|; wv\)/i.test(ua); // เบราว์เซอร์ในแอป ดาวน์โหลดไม่ได้
 
   const generate = async (thm = theme) => {
     setBusy(true); setErr('');
     try {
-      const toPng = (cv) => new Promise((res, rej) => { try { cv.toBlob(b => b ? res(b) : rej(new Error('toBlob null')), 'image/png'); } catch (e) { rej(e); } });
-      let b;
-      try { b = await toPng(await drawCertificate({ ...props, theme: thm })); }
+      const toJpg = (cv) => { const d = cv.toDataURL('image/jpeg', 0.92); if (!d || d.length < 1000) throw new Error('toDataURL failed'); return d; };
+      let d;
+      try { d = toJpg(await drawCertificate({ ...props, theme: thm })); }
       catch (e1) {
         console.warn('[CERT] retry without avatar:', e1);
-        b = await toPng(await drawCertificate({ ...props, theme: thm, avatar: null }));
+        d = toJpg(await drawCertificate({ ...props, theme: thm, avatar: null }));
       }
-      setUrl(prev => { if (prev) URL.revokeObjectURL(prev); return URL.createObjectURL(b); });
-      setBlob(b);
+      setImg(d); setBlob(base64ToBlob(d));
     } catch (e) { console.error('[CERT]', e); setErr('สร้างการ์ดไม่สำเร็จ ลองใหม่อีกครั้ง'); }
     setBusy(false);
   };
   const download = () => {
-    const a = document.createElement('a'); a.href = url; a.download = fname;
-    document.body.appendChild(a); a.click(); a.remove();
+    if (!isInApp) {
+      try {
+        // ใช้ blob URL เพื่อให้ได้ชื่อไฟล์ .jpg ถูกต้อง (data URL บางเบราว์เซอร์ตั้งชื่อเป็น "download")
+        const u = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = u; a.download = fname; a.rel = 'noopener';
+        document.body.appendChild(a); a.click();
+        setTimeout(() => { a.remove(); URL.revokeObjectURL(u); }, 60000);
+      } catch (e) { console.warn('[CERT] download failed', e); }
+    }
+    // มือถือ: เปิดรูปเต็มจอเผื่อเบราว์เซอร์ไม่ดาวน์โหลดให้ → กดค้างที่รูปเพื่อบันทึก
+    if (isMobile || isInApp) setViewer(true);
   };
   const share = async () => {
     try {
-      const file = new File([blob], fname, { type: 'image/png' });
+      const file = new File([blob], fname, { type: 'image/jpeg' });
       if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: 'TVO Calories Challenge' }); return; }
     } catch (e) { if (e && e.name === 'AbortError') return; }
     download();
   };
-  const pickTheme = (id) => { setTheme(id); lsSet('tvohh_cert_theme', id); if (url) generate(id); };
-  const canShareFiles = typeof navigator !== 'undefined' && !!navigator.canShare;
+  const pickTheme = (id) => { setTheme(id); lsSet('tvohh_cert_theme', id); if (img) generate(id); };
+  const canShareFiles = typeof navigator !== 'undefined' && !!navigator.canShare && !isInApp;
 
   return (
     <div>
@@ -1046,24 +1059,35 @@ function CertificateCard(props) {
         ))}
       </div>
       <div className="v2-card" style={{ padding: 16, marginBottom: 14, textAlign: 'center' }}>
-        {url ? (
-          <img src={url} alt="certificate" style={{ width: '100%', maxWidth: 420, borderRadius: 14, boxShadow: '0 8px 24px rgba(0,0,0,0.15)' }} />
+        {img ? (
+          <img src={img} alt="certificate" onClick={() => setViewer(true)} style={{ width: '100%', maxWidth: 420, borderRadius: 14, boxShadow: '0 8px 24px rgba(0,0,0,0.15)', cursor: 'zoom-in' }} />
         ) : (
           <div style={{ padding: '28px 10px', color: '#6B7280', fontSize: 13, lineHeight: 1.7 }}>
             <div style={{ fontSize: 44, marginBottom: 6 }}>🏅</div>
             สรุปผลกิจกรรม: Cal สะสม · จำนวนครั้ง · แยกประเภทการออกกำลังกาย<br />ช่วงวันที่เข้าร่วมโครงการ ถึงวันที่ออกการ์ด
           </div>
         )}
-        {url && <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 8 }}>📱 บนมือถือ: กดค้างที่รูป แล้วเลือก "บันทึกรูปภาพ" ได้เช่นกัน</div>}
+        {img && <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 8 }}>📱 บนมือถือ: กดค้างที่รูป แล้วเลือก "ดาวน์โหลดรูปภาพ / บันทึกรูปภาพ" ได้เช่นกัน</div>}
+        {isInApp && <div style={{ fontSize: 11, color: '#B45309', marginTop: 6 }}>⚠️ กำลังเปิดในแอป (เช่น LINE/Facebook) — ถ้าบันทึกไม่ได้ ให้เปิดลิงก์ใน Chrome หรือ Samsung Internet</div>}
         {err && <div style={{ fontSize: 12, color: '#DC2626', marginTop: 8 }}>{err}</div>}
       </div>
       <div style={{ display: 'flex', gap: 9, flexWrap: 'wrap' }}>
         <button className="v2-btn-primary" onClick={() => generate()} disabled={busy} style={{ flex: 1 }}>
-          {busy ? '⏳ กำลังสร้าง...' : url ? '🔄 สร้างใหม่ (อัปเดตวันที่)' : '🎨 สร้างสรุปผลกิจกรรม'}
+          {busy ? '⏳ กำลังสร้าง...' : img ? '🔄 สร้างใหม่ (อัปเดตวันที่)' : '🎨 สร้างสรุปผลกิจกรรม'}
         </button>
-        {url && <button className="v2-btn-ghost" onClick={download} style={{ flex: 1 }}>💾 บันทึกรูป</button>}
-        {url && canShareFiles && <button className="v2-btn-ghost" onClick={share} style={{ flex: 1 }}>📤 แชร์รูป</button>}
+        {img && <button className="v2-btn-ghost" onClick={download} style={{ flex: 1 }}>💾 บันทึกรูป</button>}
+        {img && canShareFiles && <button className="v2-btn-ghost" onClick={share} style={{ flex: 1 }}>📤 แชร์รูป</button>}
       </div>
+
+      {viewer && img && (
+        <div onClick={() => setViewer(false)} style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.88)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div style={{ color: '#fff', fontFamily: "'Prompt'", fontWeight: 700, fontSize: 15, marginBottom: 10, textAlign: 'center', lineHeight: 1.5 }}>
+            👆 กดค้างที่รูป แล้วเลือก<br />"ดาวน์โหลดรูปภาพ" หรือ "บันทึกรูปภาพ"
+          </div>
+          <img src={img} alt="certificate" onClick={e => e.stopPropagation()} style={{ maxWidth: '100%', maxHeight: '75vh', borderRadius: 12, WebkitTouchCallout: 'default', userSelect: 'auto' }} />
+          <button onClick={() => setViewer(false)} style={{ marginTop: 14, padding: '10px 28px', borderRadius: 12, border: 'none', background: '#fff', color: '#111827', fontFamily: "'Prompt'", fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>✕ ปิด</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -3607,6 +3631,7 @@ const handleRegister = async () => {
             {shareSection==="cert"&&(
               <CertificateCard
                 name={authUser?.displayName}
+                empId={authUser?.empId}
                 icon={profileIconMap[authUser?.displayName]}
                 group={authUser?.group}
                 avatar={authUser?.avatar}
