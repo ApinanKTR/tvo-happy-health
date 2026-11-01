@@ -139,6 +139,9 @@ const minDate = () => {
   d.setDate(d.getDate() - 7);
   return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
 };
+// วันที่สูงสุดที่บันทึกได้
+const MAX_DATE = "2026-10-31";
+const maxDate = () => MAX_DATE < thaiDate() ? MAX_DATE : thaiDate();
 
 // --- เพิ่มฟังก์ชันแปลง Base64 และอัปโหลดไปยัง Storage ตรงนี้ ---
   const base64ToBlob = (base64Str) => {
@@ -1410,6 +1413,7 @@ const handleAdd = async () => {
     if (!form.user.trim()) return;
     const selectedDate = form.date || thaiDate();
     if (selectedDate < minDate()) { toast("ไม่สามารถบันทึกย้อนหลังเกิน 7 วัน ❌"); setShowSaveConfirm(false); return; }
+    if (selectedDate > MAX_DATE) { toast("ปิดรับบันทึกแล้ว (หลัง 31 ต.ค. 2569) ❌"); setShowSaveConfirm(false); return; }
     const todayLogsCount = logs.filter(l => l.user === form.user && l.date === thaiDate()).length;
     if (todayLogsCount >= DAILY_LIMIT) { toast("ครบ " + DAILY_LIMIT + " ครั้งแล้ววันนี้ 🔒"); setShowSaveConfirm(false); return; }
 
@@ -2046,7 +2050,7 @@ const handleRegister = async () => {
             {/* Date */}
             <div style={{ marginBottom:14 }}>
               <label style={{ fontSize:12, fontWeight:700, color:"#374151", display:"block", marginBottom:6 }}>📅 วันที่</label>
-              <input type="date" value={editLogModal.form.date} min={minDate()} max={thaiDate()}
+              <input type="date" value={editLogModal.form.date} min={minDate()} max={maxDate()}
                 onChange={e=>setEditLogModal(p=>({...p,form:{...p.form,date:e.target.value}}))}
                 style={{ width:"100%", padding:"10px 14px", borderRadius:12, border:"1.5px solid #D1FAE5", fontSize:14, color:"#15803D", fontWeight:600, outline:"none" }} />
             </div>
@@ -2493,7 +2497,7 @@ const handleRegister = async () => {
               {/* Date */}
               <div style={{ marginBottom:20 }}>
                 <label style={{ fontSize:12, color:"#374151", display:"block", marginBottom:8, fontWeight:700 }}>📅 วันที่</label>
-                <input type="date" value={form.date} min={minDate()} max={thaiDate()}
+                <input type="date" value={form.date} min={minDate()} max={maxDate()}
                   onChange={e=>setForm(p=>({...p,date:e.target.value}))}
                   style={{ width:"100%", padding:"12px 16px", borderRadius:14, fontSize:14, border:"1.5px solid #D1FAE5", color:"#15803D", fontWeight:600 }} />
               </div>
