@@ -2051,7 +2051,7 @@ const handleRegister = async () => {
             <div style={{ marginBottom:14 }}>
               <label style={{ fontSize:12, fontWeight:700, color:"#374151", display:"block", marginBottom:6 }}>📅 วันที่</label>
               <input type="date" value={editLogModal.form.date} min={minDate()} max="2026-10-31"
-                onChange={e=>setEditLogModal(p=>({...p,form:{...p.form,date:e.target.value}}))}
+                onChange={e=>{ const v=e.target.value; setEditLogModal(p=>({...p,form:{...p.form,date:v>"2026-10-31"?"2026-10-31":v}})); }}
                 style={{ width:"100%", padding:"10px 14px", borderRadius:12, border:"1.5px solid #D1FAE5", fontSize:14, color:"#15803D", fontWeight:600, outline:"none" }} />
             </div>
 
@@ -2498,7 +2498,7 @@ const handleRegister = async () => {
               <div style={{ marginBottom:20 }}>
                 <label style={{ fontSize:12, color:"#374151", display:"block", marginBottom:8, fontWeight:700 }}>📅 วันที่</label>
                 <input type="date" value={form.date} min={minDate()} max="2026-10-31"
-                  onChange={e=>setForm(p=>({...p,date:e.target.value}))}
+                  onChange={e=>{ const v=e.target.value; setForm(p=>({...p,date:v>"2026-10-31"?"2026-10-31":v})); }}
                   style={{ width:"100%", padding:"12px 16px", borderRadius:14, fontSize:14, border:"1.5px solid #D1FAE5", color:"#15803D", fontWeight:600 }} />
               </div>
 
