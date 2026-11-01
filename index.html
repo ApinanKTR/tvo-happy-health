@@ -988,11 +988,17 @@ const drawCertificate = async ({ theme = 'green', name, icon, group, avatar, log
 
   // ── ท้ายใบ: วันที่ออก ──
   const now = new Date();
-  const dStr = now.toLocaleDateString('th-TH', { timeZone: 'Asia/Bangkok', day: 'numeric', month: 'long', year: 'numeric' });
   const tStr = now.toLocaleTimeString('th-TH', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit' });
+  // วันสุดท้ายที่ส่งกิจกรรม
+  const lastLogDate = logs && logs.length > 0
+    ? new Date(logs.reduce((max, l) => l.date > max ? l.date : max, logs[0].date) + 'T00:00:00')
+    : null;
+  const lastDateStr = lastLogDate
+    ? lastLogDate.toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })
+    : '31 ตุลาคม 2569';
   ctx.strokeStyle = '#E5E7EB'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(x0, 1172); ctx.lineTo(x1, 1172); ctx.stroke();
   ctx.textAlign = 'center'; ctx.fillStyle = '#111827'; ctx.font = `600 22px ${S}`;
-  ctx.fillText(certFit(ctx, `📅 วันที่เข้าร่วมโครงการ 11 มิถุนายน 2569 - ${dStr}`, x1 - x0), cx, 1212);
+  ctx.fillText(certFit(ctx, `📅 วันที่เข้าร่วมโครงการ 11 มิถุนายน 2569 - ${lastDateStr}`, x1 - x0), cx, 1212);
   ctx.fillStyle = GREEN; ctx.font = `600 19px ${S}`;
   ctx.fillText(certFit(ctx, '💚 ขอบคุณที่ร่วมทำกิจกรรมดีๆ กับบริษัทนะจ๊ะ : HR@TVO', x1 - x0), cx, 1250);
   return c;
